@@ -14,7 +14,23 @@ buildscript {
     dependencies {
         classpath("com.android.tools.build:gradle")
         classpath("com.facebook.react:react-native-gradle-plugin")
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
+    }
+
+    // The plain classpath pin above isn't enough on its own -- Gradle's
+    // default conflict resolution picks the HIGHEST version any classpath
+    // dependency transitively asks for, and react-native-gradle-plugin (or
+    // something else in this list) is apparently asking for kotlin-gradle-
+    // plugin 2.2.10 internally, which wins over the 2.2.0 pin above despite
+    // it being more specific. force() overrides that -- whatever anything
+    // else in this classpath wants, kotlin-gradle-plugin resolves to
+    // exactly kotlinVersion, full stop. That's what actually needs to match
+    // the already-pinned KSP plugin version (2.2.0-2.0.2) elsewhere in the
+    // build.
+    configurations.classpath {
+        resolutionStrategy {
+            force "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion"
+        }
     }
 }
 

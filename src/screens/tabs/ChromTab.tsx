@@ -1,0 +1,53 @@
+// src/screens/tabs/ChromTab.tsx
+//
+// The "Chrom" tab: the CIE 1931 chromaticity diagram for the latest
+// reading -- where its (x, y) color point falls relative to the visible
+// spectrum's outline and the blackbody curve, matching the vendor app's
+// own Chrom. tab. Read-only, like Spectrum/Data/Logs.
+
+import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import ChromaticityChart from '../../components/ChromaticityChart';
+import StatCard from '../../components/StatCard';
+import { colors } from '../../theme';
+import { MeterResult } from '../../ble/parseResult';
+
+interface Props {
+  result: MeterResult | null;
+}
+
+export default function ChromTab({ result }: Props) {
+  if (!result) {
+    return (
+      <View style={styles.empty}>
+        <Text style={styles.emptyText}>Take a reading to see its chromaticity here.</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.card}>
+      <ChromaticityChart x={result.x} y={result.y} cct={result.cct} height={280} />
+      <View style={styles.statGrid}>
+        <StatCard label="x" value={result.x.toFixed(4)} />
+        <StatCard label="y" value={result.y.toFixed(4)} />
+        <StatCard label="CCT" value={result.cct.toFixed(0)} unit="K" />
+        <StatCard label="Duv" value={result.duv.toFixed(5)} />
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  empty: { paddingVertical: 40, alignItems: 'center' },
+  emptyText: { color: colors.muted, fontSize: 13 },
+
+  card: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    padding: 14,
+  },
+  statGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -6, marginTop: 10 },
+});

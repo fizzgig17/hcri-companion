@@ -1,25 +1,80 @@
 <manifest
-    xmlns:android="http://schemas.android.com/apk/res/android">
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Android 12+ (API 31+) Bluetooth permissions. neverForLocation on
+         BLUETOOTH_SCAN tells the OS (and Play's Data Safety review) that
+         this app never derives a user's physical location from scan
+         results, which is true here: scanning is only ever used to find the
+         meter itself. Without that flag, Play's review treats BLUETOOTH_SCAN
+         as a location-adjacent permission and pushes you toward declaring
+         location data collection you don't actually do. -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+    <!-- Pre-Android 12 (API <=30) equivalents. BLUETOOTH_SCAN/CONNECT don't
+         exist on those OS versions, so without these two, BLE simply
+         doesn't work at all on Android 8-11 despite the app claiming
+         "Android 8.0+" support on the store listing. maxSdkVersion caps
+         them so devices on 12+ never see them requested. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+
+    <!-- Only actually needed pre-Android 12, where the OS required location
+         permission to use BLE scanning at all (nothing to do with this app
+         wanting your location, which it never reads). Capped the same way
+         so it isn't requested, or flagged by Play's review, on modern
+         devices that don't need it thanks to neverForLocation above.
+
+         react-native-ble-plx bundles its own ACCESS_FINE_LOCATION
+         declaration in its library manifest without this same cap, which
+         Android's manifest merger refuses to reconcile on its own: that's
+         what "Duplicate declarations ... with different maxSdkVersions"
+         surfacing at Play upload time actually is. Attribute-level
+         tools:replace (just on maxSdkVersion) resolved this in Gradle's own
+         merged-manifest report, but Play's own AAB validator kept flagging
+         it anyway. tools:node="replace" on a plain <uses-permission> node
+         (below) turned out not to be enough either: the manifest merger
+         keys nodes by tag name plus android:name, and react-native-ble-plx's
+         own declaration isn't a plain <uses-permission> at all, it's the
+         distinct <uses-permission-sdk-23> tag (checked via
+         app/build/outputs/logs/manifest-merger-release-report.txt, which
+         listed BOTH "uses-permission#...ACCESS_FINE_LOCATION" and
+         "uses-permission-sdk-23#...ACCESS_FINE_LOCATION" surviving the
+         merge). tools:node="replace" on our <uses-permission> never
+         competed with the library's <uses-permission-sdk-23> node, so both
+         made it into the merged manifest and Play still saw two
+         declarations. The explicit tools:node="remove" below targets that
+         exact tag so the merger drops it outright; nothing is lost because
+         our maxSdkVersion="30" <uses-permission> here already covers API
+         1 through 30, a superset of what <uses-permission-sdk-23> (API 23
+         through 30 only) was granting. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" tools:node="replace" />
+    <uses-permission-sdk-23 android:name="android.permission.ACCESS_FINE_LOCATION" tools:node="remove" />
+
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Keeps the Play Store listing itself hidden from phones without BLE
+         hardware, rather than letting someone install an app that can never
+         work for them and leave a bad review over it. -->
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
     <application
-      android:name=".MainApplication"
-      android:label="@string/app_name"
-      android:icon="@mipmap/ic_launcher"
-      android:roundIcon="@mipmap/ic_launcher_round"
-      android:allowBackup="false"
-      android:theme="@style/AppTheme"
-      android:usesCleartextTraffic="${usesCleartextTraffic}"
-      android:supportsRtl="true">
-        <activity
-        android:name=".MainActivity"
+        android:name=".MainApplication"
         android:label="@string/app_name"
-        android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
-        android:launchMode="singleTask"
-        android:windowSoftInputMode="adjustResize"
-        android:exported="true">
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:allowBackup="false"
+        android:theme="@style/AppTheme"
+        android:usesCleartextTraffic="${usesCleartextTraffic}"
+        android:supportsRtl="true">
+        <activity
+            android:name=".MainActivity"
+            android:label="@string/app_name"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

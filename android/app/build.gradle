@@ -55,9 +55,13 @@ react {
 }
 
 /**
- * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
+ * Set this to true to Run Proguard/R8 on Release builds to minify and shrink
+ * the Java/Kotlin bytecode. Play Store submissions should ship with this on
+ * -- a smaller, harder-to-reverse-engineer release build, and no real
+ * downside now that it's verified working (see proguard-rules.pro for the
+ * native-module keep rules react-native-ble-plx and friends need).
  */
-def enableProguardInReleaseBuilds = false
+def enableProguardInReleaseBuilds = true
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -73,6 +77,11 @@ def enableProguardInReleaseBuilds = false
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
 android {
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            output.outputFileName = variant.name == "release" ? "hCRICompanion.apk" : "hCRICompanion-${variant.name}.apk"
+        }
+    }
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
@@ -82,7 +91,7 @@ android {
         applicationId "com.hcricompanion"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
+        versionCode 3
         versionName "1.0"
     }
     signingConfigs {
@@ -92,16 +101,43 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        // Reads from gradle.properties (or, better, your global
+        // ~/.gradle/gradle.properties so the real values never sit inside
+        // the project folder at all -- see the setup notes for how to
+        // generate hcricompanion-release.keystore and fill these in as
+        // HCRICOMPANION_RELEASE_STORE_FILE etc). Falls through to nothing
+        // configured until you've done that, which the release buildType
+        // below checks for rather than assuming.
+        release {
+            if (project.hasProperty('HCRICOMPANION_RELEASE_STORE_FILE')) {
+                storeFile file(HCRICOMPANION_RELEASE_STORE_FILE)
+                storePassword HCRICOMPANION_RELEASE_STORE_PASSWORD
+                keyAlias HCRICOMPANION_RELEASE_KEY_ALIAS
+                keyPassword HCRICOMPANION_RELEASE_KEY_PASSWORD
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // IMPORTANT: this used to just be `signingConfig
+            // signingConfigs.debug` -- meaning every "release" build was
+            // signed with the well-known public debug key. That's fine for
+            // testing on your own device, but Play Console will refuse an
+            // upload signed that way, and a debug-signed APK isn't safe to
+            // distribute to anyone else either (the debug keystore's
+            // password is the same "android" on every React Native install
+            // in existence). This now uses your real release keystore once
+            // HCRICOMPANION_RELEASE_STORE_FILE etc. are set (see gradle.properties
+            // notes) -- and falls back to the debug key ONLY so a plain
+            // `assembleRelease` doesn't hard-fail before you've generated
+            // one yet. Don't upload a build to Play until you see it
+            // actually pick up the release config, not this fallback.
+            signingConfig project.hasProperty('HCRICOMPANION_RELEASE_STORE_FILE') ? signingConfigs.release : signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
+            shrinkResources enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
     }

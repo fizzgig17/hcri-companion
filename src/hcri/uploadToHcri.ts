@@ -5,6 +5,8 @@
 // (React Native's networking stack), which is simpler than the ESP32's
 // hand-rolled HTTPClient multipart body.
 
+import { Buffer } from 'buffer';
+
 const HCRI_UPLOAD_URL = 'https://www.hcri.io/index.php/api/v1/upload';
 
 export interface UploadResult {

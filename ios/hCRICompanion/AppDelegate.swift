@@ -24,7 +24,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     window = UIWindow(frame: UIScreen.main.bounds)
 
     factory.startReactNative(
-      withModuleName: "HPCS330App",
+      withModuleName: "hCRI Companion",
       in: window,
       launchOptions: launchOptions
     )
