@@ -1,0 +1,74 @@
+# .github/workflows/deploy-master.yml
+#
+# Builds a release-signed APK on every push to `master` and uploads it to
+# hcri.io/companion/hCRICompanion.apk. Mirrors deploy-dev.yml (which does
+# the same for dev.hcri.io on pushes to `develop`) -- see that file for the
+# fuller explanation of the shared build steps.
+#
+# Required repo secrets (Settings -> Secrets and variables -> Actions):
+#   SPACESHIP_HOST              - same value as in the hcri.io repo
+#   SPACESHIP_PORT              - same value as in the hcri.io repo
+#   SPACESHIP_USER              - same value as in the hcri.io repo
+#   SPACESHIP_SSH_KEY           - same value as in the hcri.io repo
+#   SPACESHIP_SSH_PASSPHRASE    - same value as in the hcri.io repo
+#   SPACESHIP_PATH              - /home/dcvgnomgak/hcri.io
+#   ANDROID_KEYSTORE_BASE64     - `base64 -w0 hcricompanion-release.keystore`
+#   HCRICOMPANION_RELEASE_STORE_PASSWORD
+#   HCRICOMPANION_RELEASE_KEY_ALIAS
+#   HCRICOMPANION_RELEASE_KEY_PASSWORD
+
+name: Build and deploy APK (prod)
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch: {}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Decode release keystore
+        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/hcricompanion-release.keystore
+
+      - name: Build release APK
+        working-directory: android
+        run: |
+          ./gradlew assembleRelease \
+            -PHCRICOMPANION_RELEASE_STORE_FILE=hcricompanion-release.keystore \
+            -PHCRICOMPANION_RELEASE_STORE_PASSWORD="${{ secrets.HCRICOMPANION_RELEASE_STORE_PASSWORD }}" \
+            -PHCRICOMPANION_RELEASE_KEY_ALIAS="${{ secrets.HCRICOMPANION_RELEASE_KEY_ALIAS }}" \
+            -PHCRICOMPANION_RELEASE_KEY_PASSWORD="${{ secrets.HCRICOMPANION_RELEASE_KEY_PASSWORD }}"
+
+      - name: Remove decoded keystore
+        if: always()
+        run: rm -f android/app/hcricompanion-release.keystore
+
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk hCRICompanion.apk
+
+      - name: Upload to hcri.io
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.SPACESHIP_HOST }}
+          port: ${{ secrets.SPACESHIP_PORT }}
+          username: ${{ secrets.SPACESHIP_USER }}
+          key: ${{ secrets.SPACESHIP_SSH_KEY }}
+          passphrase: ${{ secrets.SPACESHIP_SSH_PASSPHRASE }}
+          source: hCRICompanion.apk
+          target: ${{ secrets.SPACESHIP_PATH }}/companion
+          overwrite: true
