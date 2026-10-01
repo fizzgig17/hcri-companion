@@ -47,11 +47,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: 'npm'
 
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '21'
+
+      # Caches the Gradle wrapper distribution, dependency cache, and build
+      # cache across runs (keyed off the wrapper/build.gradle files, so a
+      # dependency bump invalidates it automatically) -- cuts the Android
+      # build step from ~10-15 min down to a couple minutes on a cache hit.
+      - uses: gradle/actions/setup-gradle@v4
 
       - name: Install JS dependencies
         run: npm ci
