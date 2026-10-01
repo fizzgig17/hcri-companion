@@ -1,31 +1,45 @@
 # .github/workflows/deploy-dev.yml
 #
-# Builds a release-signed APK on every push to `develop` and uploads it to
-# dev.hcri.io/companion/hCRICompanion.apk. Mirrors deploy-master.yml (which
-# does the same for hcri.io on pushes to `master`) -- see that file for the
-# fuller explanation of the shared build steps.
+# Builds a release-signed APK on every push to `develop` and publishes it as
+# a GitHub Release asset, at a fixed, moving tag ("dev-latest") rather than
+# a new tag per build -- so the download URL never changes and dev.hcri.io's
+# companion page (hcri.io repo's companion/index.html) can link straight to
+# it without ever needing to be hand-edited. Mirrors deploy-master.yml
+# (which does the same for `master` under the tag "prod-latest") -- see
+# that file for the fuller explanation of the shared build steps.
+#
+# Used to scp the APK onto dev.hcri.io directly (see git history before
+# this change) -- moved to GitHub Releases instead so the Spaceship account
+# never has to receive the binary at all; the companion page just redirects
+# to wherever GitHub is actually hosting it.
 #
 # Required repo secrets (Settings -> Secrets and variables -> Actions):
-#   SPACESHIP_HOST              - same value as in the hcri.io repo
-#   SPACESHIP_PORT              - same value as in the hcri.io repo
-#   SPACESHIP_USER              - same value as in the hcri.io repo
-#   SPACESHIP_SSH_KEY           - same value as in the hcri.io repo
-#   SPACESHIP_SSH_PASSPHRASE    - same value as in the hcri.io repo
-#   SPACESHIP_DEV_PATH          - /home/dcvgnomgak/dev.hcri.io
 #   ANDROID_KEYSTORE_BASE64     - `base64 -w0 hcricompanion-release.keystore`
 #   HCRICOMPANION_RELEASE_STORE_PASSWORD
 #   HCRICOMPANION_RELEASE_KEY_ALIAS
 #   HCRICOMPANION_RELEASE_KEY_PASSWORD
+# No SPACESHIP_* secrets needed by this workflow any more -- those were only
+# ever used by the scp-action step this replaced.
+#
+# One-time repo setting this relies on: Settings -> Actions -> General ->
+# "Workflow permissions" must be "Read and write permissions" (not the
+# default "Read repository contents permission" in some org/repo defaults)
+# -- otherwise the release-publish step below gets a 403, since it needs to
+# create/update a release and upload an asset using the built-in
+# GITHUB_TOKEN rather than a separate PAT.
 
-name: Build and deploy APK (dev)
+name: Build and publish APK (dev)
 
 on:
   push:
     branches: [develop]
   workflow_dispatch: {}
 
+permissions:
+  contents: write
+
 jobs:
-  build-and-deploy:
+  build-and-publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -61,14 +75,24 @@ jobs:
       - name: Rename APK
         run: cp android/app/build/outputs/apk/release/app-release.apk hCRICompanion.apk
 
-      - name: Upload to dev.hcri.io
-        uses: appleboy/scp-action@v1
+      # Moves (doesn't copy) the "dev-latest" tag to this commit every run,
+      # so the release this points to is always the one just built here --
+      # same idea as the old scp-action's `overwrite: true`, just for a
+      # GitHub release instead of a server file.
+      - name: Move dev-latest tag to this commit
+        run: |
+          git tag -f dev-latest
+          git push origin -f dev-latest
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          host: ${{ secrets.SPACESHIP_HOST }}
-          port: ${{ secrets.SPACESHIP_PORT }}
-          username: ${{ secrets.SPACESHIP_USER }}
-          key: ${{ secrets.SPACESHIP_SSH_KEY }}
-          passphrase: ${{ secrets.SPACESHIP_SSH_PASSPHRASE }}
-          source: hCRICompanion.apk
-          target: ${{ secrets.SPACESHIP_DEV_PATH }}/companion
-          overwrite: true
+          tag_name: dev-latest
+          name: "Dev build (${{ github.sha }})"
+          prerelease: true
+          body: |
+            Automatically published from `develop` at ${{ github.sha }}.
+            This release is overwritten on every push to `develop` -- it's
+            not a stable version history, just a fixed place for
+            dev.hcri.io's companion page to link to.
+          files: hCRICompanion.apk
