@@ -73,8 +73,12 @@ jobs:
         if: always()
         run: rm -f android/app/hcricompanion-release.keystore
 
-      - name: Rename APK
-        run: cp android/app/build/outputs/apk/release/app-release.apk hCRICompanion.apk
+      # android/app/build.gradle already names the release output
+      # hCRICompanion.apk itself (applicationVariants.all{} outputFileName),
+      # so this just moves it up next to the workflow rather than renaming
+      # an "app-release.apk" that was never actually produced.
+      - name: Move APK
+        run: cp android/app/build/outputs/apk/release/hCRICompanion.apk hCRICompanion.apk
 
       # Moves (doesn't copy) the "dev-latest" tag to this commit every run,
       # so the release this points to is always the one just built here --
