@@ -33,7 +33,7 @@ export const SUPPORTED_DEVICES: SupportedDevice[] = [
     verifiedDate: '2026-09-26',
     notes: [
       'Shorter result layout than the 330-family models -- drops most of the PAR/PPFD block.',
-      'Does not report illuminance (lux) -- shown as "—" in this app rather than a wrong number. OPEN QUESTION as of 2026-10-01: cross-checking against an independent reference decoder (madcook1/hpcs310-ble, reverse-engineered from the vendor app itself) suggests this app may be reading lux from the wrong byte offset on this model family -- not yet resolved, pending a fresh debug-log capture with the vendor app\'s own Lx reading visible to compare against.',
+      'Does not report illuminance (lux) -- shown as "—" in this app rather than a wrong number. Confirmed 2026-10-01: a second real debug-log capture shows the only other plausible candidate offset for lux on this model (checked after a cross-check against an independent reference decoder raised the question) parses to values in the hundreds of thousands -- not a real lux reading -- so this really is unreported on the 310, not a byte-offset bug.',
       'Firmware-aware offsets added 2026-10-01: the reference decoder above shows the vendor app shifts several fields (integration time, peak/dark signal) 16 bytes later on firmware newer than 2005. Every real capture seen so far has been on that newer firmware, so this app now branches on it (FIELD_OFFSETS_310_LEGACY) -- but the older-firmware branch itself is unverified against a real device.',
     ],
   },
@@ -53,7 +53,7 @@ export const SUPPORTED_DEVICES: SupportedDevice[] = [
     verified: true,
     verifiedDate: '2026-09-27',
     notes: [
-      'Same result layout as the HPCS-310, plus an illuminance (lux) field the 310 lacks. OPEN QUESTION as of 2026-10-01: that lux offset (188) hasn\'t been independently confirmed -- an outside reference decoder suggests the real field may sit elsewhere, within a couple percent of the value this app reads, which is close enough that the current ~2% validation might have been a coincidence. Pending a fresh debug-log capture with the vendor app\'s Lx reading visible.',
+      'Same result layout as the HPCS-310, plus an illuminance (lux) field the 310 lacks. RESOLVED 2026-10-01: an outside reference decoder had raised a different candidate byte offset for lux, close enough in result (~2%) that this app\'s existing offset 188 might have been coincidentally close rather than actually correct. A fresh debug-log capture let both offsets get checked side by side against the same vendor-app Lx reading -- the alternate candidate came out nowhere close (off by 50%+), while offset 188 stayed within the same ~2% reading-to-reading noise seen elsewhere. Offset 188 is confirmed correct.',
       'A distinct model from the HPCS-330P below -- same-looking name, genuinely different byte layout. Don\'t merge these.',
       'Firmware-aware offsets added 2026-10-01: see the matching HPCS-310 note above -- same mechanism, same "not yet verified against an older-firmware unit" caveat (FIELD_OFFSETS_330_LEGACY).',
     ],

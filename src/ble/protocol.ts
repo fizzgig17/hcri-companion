@@ -306,6 +306,11 @@ export const FIELD_OFFSETS_310P = FIELD_OFFSETS_330P;
  * cause of the original "CCT/Lux wrong on the 310" bug: the old single
  * fixed-offset map was reading both from the wrong bytes entirely, because
  * everything past the shrunk preamble is shifted relative to the 330P.
+ * Checked directly (2026-10-01): offsets 184 and 188 on this capture parse
+ * to 432507 and 394624 -- wildly implausible as a lux reading (indoor/
+ * outdoor light rarely exceeds a few thousand lux), confirming this is
+ * genuinely unused/reserved space on this model rather than a real but
+ * untested lux field this app is just failing to show.
  */
 export const FIELD_OFFSETS_310 = {
   deviceName: 0,
@@ -406,11 +411,24 @@ export const FIELD_OFFSETS_310_LEGACY = {
  * than the self-normalizing colorimetric ratios (CCT/Ra/etc.), which is
  * consistent with genuine reading-to-reading noise rather than a wrong
  * offset.
+ *
+ * LUX QUESTION RESOLVED (2026-10-01): the madcook1/hpcs310-ble reference
+ * decoder's decompiled logic had raised offset 36 (labeled `par` below) as
+ * a possible alternate home for illuminanceE. A fresh debug-log capture of
+ * this exact same reading (re-sent by the user) let this get checked
+ * directly for the first time: offset 36 parses to 2527.18, nowhere near
+ * the screenshot's E(lx) 1686.34 -- not even the same order of magnitude,
+ * let alone within noise. Offset 188's 1651.7 (~2% off) is the only
+ * plausible candidate of the two, consistent with the same reading-to-
+ * reading noise already seen on peakSignal/darkSignal. illuminanceE:188
+ * stands confirmed; offset 36 is something else (unidentified -- possibly
+ * a PAR/PPFD-family metric given its scale, but not verified against the
+ * vendor app's own PAR-mode reading, so still just a guess).
  */
 export const FIELD_OFFSETS_330 = {
   deviceName: 0,
   firmwareVersion: 10,
-  // par: 36 (present but unverified/unused by this app)
+  // par: 36 (present but unverified/unused by this app -- confirmed NOT to be lux, see above)
   cct: 44,
   duv: 48,
   x: 52,
@@ -455,10 +473,13 @@ export const FIELD_OFFSETS_330 = {
  * offset in FIELD_OFFSETS_330): shifting the tail fields 16 bytes earlier
  * for this firmware branch would put `peakSignal` at that same offset 188,
  * and guessing a different slot for illuminanceE instead would be exactly
- * the kind of unverified lux change this session agreed to hold off on
- * (see the open lux-offset question on FIELD_OFFSETS_310/330). Better to
- * report lux as unavailable on this branch than silently collide with -- or
- * misreport -- peakSignal.
+ * the kind of unverified lux change this session agreed to hold off on.
+ * Note this is a DIFFERENT open question from the modern-firmware one
+ * resolved 2026-10-01 (see FIELD_OFFSETS_330's own comment) -- that one
+ * confirmed offset 188 is right for firmware > 2005; this one is about
+ * where lux would live on firmware <= 2005 instead, which still has no
+ * real capture to check against. Better to report lux as unavailable on
+ * this branch than silently collide with -- or misreport -- peakSignal.
  */
 export const FIELD_OFFSETS_330_LEGACY = {
   ...FIELD_OFFSETS_330,
