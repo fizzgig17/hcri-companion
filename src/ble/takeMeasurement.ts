@@ -24,7 +24,7 @@ import {
   STATE_TEST_END,
   getFieldOffsetsForDevice,
 } from './protocol';
-import { parseResult, MeterResult } from './parseResult';
+import { parseResult, peekFirmwareVersion, MeterResult } from './parseResult';
 
 export type LogFn = (msg: string) => void;
 
@@ -295,7 +295,13 @@ export async function takeMeasurement(
           log(`Raw result body (${msg.body.length} bytes): ${hexDump(msg.body)}`);
 
           try {
-            const offsets = getFieldOffsetsForDevice(conn.getDeviceName());
+            // Peeking firmwareVersion straight from the raw body (rather
+            // than waiting until after an offset map is already chosen)
+            // is what lets the bare-310/330 firmware split below even be
+            // possible -- see peekFirmwareVersion's own comment for why
+            // reading it this way, before picking a map, is safe.
+            const firmwareVersion = peekFirmwareVersion(msg.body);
+            const offsets = getFieldOffsetsForDevice(conn.getDeviceName(), firmwareVersion);
             const result = parseResult(msg.body, offsets);
             resolve(result);
           } catch (e) {

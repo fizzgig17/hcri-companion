@@ -5,7 +5,7 @@
 // buffer without needing real hardware.
 
 import { Buffer } from 'buffer';
-import { FIELD_OFFSETS_330P, ASSUMED_START_WAVELENGTH_NM, FieldOffsetMap } from './protocol';
+import { FIELD_OFFSETS_330P, ASSUMED_START_WAVELENGTH_NM, SPECTRUM_BLOCK_BYTES, FieldOffsetMap } from './protocol';
 
 export interface MeterResult {
   deviceName: string;
@@ -39,6 +39,24 @@ function f32(buf: Uint8Array, offset: number): number {
 function u32(buf: Uint8Array, offset: number): number {
   const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
   return view.getUint32(offset, true);
+}
+
+/**
+ * Reads the firmware version straight out of a raw result body, WITHOUT
+ * needing a FieldOffsetMap first -- deliberately for the chicken-and-egg
+ * problem of picking the right offset map (getFieldOffsetsForDevice's
+ * optional `firmwareVersion` argument) when firmware version itself is
+ * normally only readable via that same map. Safe because `firmwareVersion`
+ * sits at the same offset (10, uint32 LE) on every model this app knows
+ * about -- it's part of the fixed preamble (deviceName:0, firmwareVersion:
+ * 10) that comes before anything model- or firmware-specific diverges, on
+ * every FIELD_OFFSETS_* map in protocol.ts. Returns undefined if `body`
+ * isn't even long enough to contain it, so a caller can fall back to the
+ * modern/default offset map the same way as if firmware were simply
+ * unknown.
+ */
+export function peekFirmwareVersion(body: Uint8Array): number | undefined {
+  return body.length >= 14 ? u32(body, 10) : undefined;
 }
 
 function asciiString(buf: Uint8Array, offset: number, maxLen: number): string {
@@ -81,11 +99,17 @@ export function parseResult(body: Uint8Array, offsets: FieldOffsetMap = FIELD_OF
   // reserved range first, then trim padding off the *end* only, so a
   // legitimate zero reading in the middle of real data (a deep notch in the
   // spectrum) is never mistaken for the start of padding.
-  const spectrumBytes = body.length - o.spectrumStart;
+  // Where the spectrum block starts is derived from the body's own length,
+  // not looked up per model -- see SPECTRUM_BLOCK_BYTES's comment in
+  // protocol.ts for why that's correct (and more robust than a hardcoded
+  // per-model offset) for every model and firmware revision, not just the
+  // ones already verified against a real capture.
+  const spectrumStart = Math.max(0, body.length - SPECTRUM_BLOCK_BYTES);
+  const spectrumBytes = body.length - spectrumStart;
   let rawPointCount = Math.floor(spectrumBytes / 4);
   const rawValues: number[] = [];
   for (let i = 0; i < rawPointCount; i++) {
-    rawValues.push(f32(body, o.spectrumStart + i * 4));
+    rawValues.push(f32(body, spectrumStart + i * 4));
   }
 
   // Found by decoding real debug logs (2026-09-27): the very last two float

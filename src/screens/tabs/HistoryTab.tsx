@@ -20,11 +20,12 @@
 // selected reading's already-committed label, not whatever's sitting
 // unsaved in a field you haven't blurred yet.
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import PrimaryButton from '../../components/PrimaryButton';
 import { colors } from '../../theme';
 import { SavedReading } from '../../storage/readingHistory';
+import { analyzeSpectrum } from '../../utils/spectralAnalysis';
 
 interface Props {
   history: SavedReading[];
@@ -72,6 +73,20 @@ function HistoryRow({
 }) {
   const [text, setText] = useState(reading.label);
 
+  // Spectrum-derived CCT/Ra for the row summary below, same values
+  // Main/Spectrum/Data show -- NOT the device-reported result.cct/result.ra
+  // (see readingHistory.ts's SavedReading.analysis comment for why that
+  // distinction matters: those depend on correctly guessing which offset
+  // map the device that took this reading needed). Readings saved after
+  // this field was added already have it computed once at save time,
+  // for free; only a reading saved before then needs this fallback, and
+  // even then only once per row thanks to the memo below, not on every
+  // render of a long history list.
+  const analysis = useMemo(
+    () => reading.analysis ?? analyzeSpectrum(reading.result.spectrum),
+    [reading.analysis, reading.result.spectrum]
+  );
+
   // Keep the field in sync if this reading's label changes from elsewhere
   // (e.g. a rename that came from the upload flow itself) -- without this,
   // an upload-triggered rename would silently desync the field from what's
@@ -118,13 +133,15 @@ function HistoryRow({
         textAlignVertical="top"
       />
 
-      {/* Raw device-reported CCT/Ra, not the spectrum-derived (analyzeSpectrum)
-          numbers Main/Spectrum/Data show -- same distinction Lux already has
-          elsewhere in this app. Good enough for a quick "which reading was
-          this" glance across a long list; re-running the full analysis for
-          every row just to populate this summary isn't worth the cost. */}
+      {/* Spectrum-derived CCT/Ra (see the `analysis` memo above) -- matches
+          what Main/Spectrum/Data show for this same reading, and doesn't
+          depend on the device's own metrics-block offsets being right for
+          whatever model/firmware took it. Lux is the one number on this
+          app that's still genuinely device-reported elsewhere (no spectral
+          equivalent exists to compute it from), which is why only CCT/Ra
+          show up in this summary. */}
       <Text style={styles.rowSummary}>
-        {reading.result.cct.toFixed(0)}K · Ra {reading.result.ra.toFixed(1)}
+        {analysis.cct.toFixed(0)}K · Ra {analysis.ra.toFixed(1)}
       </Text>
 
       {!selectMode && (

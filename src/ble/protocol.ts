@@ -118,10 +118,43 @@ export const STATE_TEST_END = 0x01;
 export const RESULT_HEADER_LENGTH = 4;
 
 /**
+ * The spectrum block's own fixed size, independent of model or firmware --
+ * confirmed from the madcook1/hpcs310-ble reference tool (reverse-engineered
+ * straight from the vendor Android app, not from a hex dump): the result
+ * body always ends with exactly 671 float32 spectrum samples, followed by
+ * an 8-byte "visible range" footer (the same StartWave/EndWave float pair
+ * parseResult.ts's looksLikeRangeFooter() already detects at runtime).
+ * That means where this block STARTS is always derivable from the body's
+ * own length -- `body.length - SPECTRUM_BLOCK_BYTES` -- with no need to
+ * know which model (or firmware revision) produced it at all, because
+ * whatever varies in the metrics preamble ahead of it, this trailing block
+ * never moves relative to the end of the body.
+ *
+ * Cross-checked against every spectrumStart this file used to hardcode per
+ * model, before this constant replaced them: 310/330's old 236 == this
+ * model's real body length (2928) minus 2692; 330P/310P's old 304 == 2996
+ * minus 2692 (2996 is this app's own captured 310P body length, byte for
+ * byte); 330Pro's old 384 == 3076 minus 2692 (3076 is the exact body
+ * length its own doc comment below already recorded from a real capture).
+ * All three check out exactly, which is what makes dropping the hardcoded
+ * per-model constant (see FieldOffsetMap below) safe rather than a guess.
+ */
+export const SPECTRUM_POINT_COUNT = 671;
+export const SPECTRUM_FOOTER_BYTES = 8; // StartWave + EndWave, float32 LE each
+export const SPECTRUM_BLOCK_BYTES = SPECTRUM_POINT_COUNT * 4 + SPECTRUM_FOOTER_BYTES; // 2692
+
+/**
  * A model's result-body field map. Not every model reports every field --
  * `illuminanceE` (lux) in particular is genuinely absent from the HPCS-310's
  * layout (see FIELD_OFFSETS_310 below), so it's optional here and every
  * consumer (parseResult.ts) needs to handle it being undefined.
+ *
+ * Deliberately has NO `spectrumStart` field -- unlike every other offset
+ * here, the spectrum block's position isn't something to hardcode per
+ * model at all; parseResult.ts derives it from the actual received body's
+ * length via SPECTRUM_BLOCK_BYTES above, which is correct for every model
+ * (and every firmware revision) without needing to special-case any of
+ * them. See that constant's own comment for why this is safe.
  */
 export interface FieldOffsetMap {
   deviceName: number;
@@ -157,7 +190,6 @@ export interface FieldOffsetMap {
   compensateLevel: number;
   timestamp: number;
   timestampLength: number;
-  spectrumStart: number; // float32 array, one value per nm, to end of body
 }
 
 /**
@@ -229,7 +261,6 @@ export const FIELD_OFFSETS_330P = {
   // 284-303: 20-byte ASCII timestamp string from the device's own RTC
   timestamp: 284,
   timestampLength: 20,
-  spectrumStart: 304,
 } as const;
 
 /**
@@ -314,8 +345,35 @@ export const FIELD_OFFSETS_310 = {
   compensateLevel: 212,
   timestamp: 216,
   timestampLength: 20,
-  spectrumStart: 236,
   // illuminanceE intentionally omitted -- not present in this model's layout
+} as const;
+
+/**
+ * HPCS-310 field map for OLDER firmware (iVer <= 2005). NOT yet verified
+ * against a real capture -- every HPCS-310/330 dump seen so far (2026-09-26
+ * and 2026-09-27) matched FIELD_OFFSETS_310 above, which this session's
+ * cross-check against the madcook1/hpcs310-ble reference tool (reverse-
+ * engineered from the vendor Android app's own decompiled logic, not a hex
+ * dump) confirms corresponds to that tool's ">2005" firmware branch. That
+ * same tool's source shows the app inserts 4 extra metric fields (fEML,
+ * fEeml, fEmlRatio, fEDI_lx) for firmware > 2005, which don't exist on
+ * firmware <= 2005 -- shifting everything from integrationTimeMs onward 16
+ * bytes earlier than FIELD_OFFSETS_310. cct/duv/x/y/ra/r1-r15 (and
+ * par/illuminanceE, wherever they turn out to really live -- see the open
+ * question on FIELD_OFFSETS_310/330's own lux offset) are all BEFORE that
+ * insertion point, so none of them need a legacy variant here; only the
+ * fields below do. Exists so getFieldOffsetsForDevice can route to it once
+ * a real iVer <= 2005 debug-log capture confirms this split actually
+ * happens in practice -- until then, getFieldOffsetsForDevice only reaches
+ * this via an explicit firmware check, never by default.
+ */
+export const FIELD_OFFSETS_310_LEGACY = {
+  ...FIELD_OFFSETS_310,
+  integrationTimeMs: 184,
+  peakSignal: 188,
+  darkSignal: 192,
+  compensateLevel: 196,
+  timestamp: 200,
 } as const;
 
 /**
@@ -385,7 +443,31 @@ export const FIELD_OFFSETS_330 = {
   compensateLevel: 212,
   timestamp: 216,
   timestampLength: 20,
-  spectrumStart: 236,
+} as const;
+
+/**
+ * HPCS-330 field map for OLDER firmware (iVer <= 2005) -- same reasoning
+ * and same caveat as FIELD_OFFSETS_310_LEGACY above (not yet verified
+ * against a real capture; both HPCS-330 dumps seen so far were on firmware
+ * matching the modern/">2005" branch).
+ *
+ * `illuminanceE` is deliberately OMITTED here rather than left at 188 (its
+ * offset in FIELD_OFFSETS_330): shifting the tail fields 16 bytes earlier
+ * for this firmware branch would put `peakSignal` at that same offset 188,
+ * and guessing a different slot for illuminanceE instead would be exactly
+ * the kind of unverified lux change this session agreed to hold off on
+ * (see the open lux-offset question on FIELD_OFFSETS_310/330). Better to
+ * report lux as unavailable on this branch than silently collide with -- or
+ * misreport -- peakSignal.
+ */
+export const FIELD_OFFSETS_330_LEGACY = {
+  ...FIELD_OFFSETS_330,
+  illuminanceE: undefined,
+  integrationTimeMs: 184,
+  peakSignal: 188,
+  darkSignal: 192,
+  compensateLevel: 196,
+  timestamp: 200,
 } as const;
 
 /**
@@ -451,7 +533,6 @@ export const FIELD_OFFSETS_330PRO = {
   compensateLevel: 360,
   timestamp: 364,
   timestampLength: 20,
-  spectrumStart: 384,
   // illuminanceE intentionally omitted -- no reference value to confirm a slot for it
 } as const;
 
@@ -488,9 +569,25 @@ export const FIELD_OFFSETS_330PRO = {
  * would match "310" first and silently get the wrong (shorter, 310-family)
  * layout, the exact bug this once was: a real "HPCS-310P" debug-log capture
  * decoded against FIELD_OFFSETS_310 produced nonsense (cct 0.068, duv 2.92).
+ *
+ * `firmwareVersion` only changes anything for the bare 310/330 branches --
+ * see FIELD_OFFSETS_310_LEGACY/FIELD_OFFSETS_330_LEGACY's own comments for
+ * where this split comes from (the madcook1/hpcs310-ble reference tool's
+ * decompiled app logic, not yet independently verified against a real
+ * iVer <= 2005 capture). It's optional and defaults to the modern/">2005"
+ * maps when omitted or unknown, since every capture seen so far has been on
+ * that branch -- callers that don't have a firmware reading yet (or can't
+ * get one before they need an offset map at all) keep today's behavior
+ * unchanged.
  */
-export function getFieldOffsetsForDevice(deviceName: string | null | undefined): FieldOffsetMap {
+export const LEGACY_FIRMWARE_CUTOFF = 2005;
+
+export function getFieldOffsetsForDevice(
+  deviceName: string | null | undefined,
+  firmwareVersion?: number
+): FieldOffsetMap {
   const upper = deviceName?.toUpperCase() ?? '';
+  const isLegacyFirmware = firmwareVersion !== undefined && firmwareVersion <= LEGACY_FIRMWARE_CUTOFF;
   if (upper.includes('330PRO') || upper.includes('330 PRO')) {
     return FIELD_OFFSETS_330PRO;
   }
@@ -501,10 +598,10 @@ export function getFieldOffsetsForDevice(deviceName: string | null | undefined):
     return FIELD_OFFSETS_310P;
   }
   if (upper.includes('310')) {
-    return FIELD_OFFSETS_310;
+    return isLegacyFirmware ? FIELD_OFFSETS_310_LEGACY : FIELD_OFFSETS_310;
   }
   if (upper.includes('330')) {
-    return FIELD_OFFSETS_330;
+    return isLegacyFirmware ? FIELD_OFFSETS_330_LEGACY : FIELD_OFFSETS_330;
   }
   // Genuinely unrecognized name -- fall back to the 330P map as the best
   // guess, since it's the most-established/longest-verified layout.
