@@ -96,3 +96,11 @@ export async function deleteReading(id: string): Promise<void> {
   const existing = await loadHistory();
   await saveAll(existing.filter((r) => r.id !== id));
 }
+
+/** Deletes several readings in one go (HistoryTab's bulk/"select all" delete) -- one read-modify-write of the whole list instead of calling deleteReading in a loop, which would otherwise race itself: each call's `loadHistory()` wouldn't yet see the previous call's not-yet-finished `saveAll()`, so only the last delete in the loop would actually stick. */
+export async function deleteManyReadings(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const idSet = new Set(ids);
+  const existing = await loadHistory();
+  await saveAll(existing.filter((r) => !idSet.has(r.id)));
+}

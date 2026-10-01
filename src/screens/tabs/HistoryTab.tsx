@@ -21,7 +21,7 @@
 // unsaved in a field you haven't blurred yet.
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import PrimaryButton from '../../components/PrimaryButton';
 import { colors } from '../../theme';
 import { SavedReading } from '../../storage/readingHistory';
@@ -37,6 +37,8 @@ interface Props {
   /** Uploads several readings at once, each under its own already-saved label. */
   onUploadMany: (ids: string[]) => void;
   onDelete: (id: string) => void;
+  /** Deletes several (or, via Select All, every) reading at once -- see readingHistory.ts's deleteManyReadings. May be awaited (HomeScreen's version is async) so this tab can show "Deleting..." until the storage write actually finishes. */
+  onDeleteMany: (ids: string[]) => void | Promise<void>;
   onShareOne: (reading: SavedReading) => void;
   onShareAll: () => void;
   /** Which reading (if any) is currently mid-upload, so only ITS button shows a spinner/disables -- the others stay usable. Also used to show progress during a bulk upload, since that walks this same id through the list one at a time. */
@@ -203,6 +205,7 @@ export default function HistoryTab({
   onUploadWithLabel,
   onUploadMany,
   onDelete,
+  onDeleteMany,
   onShareOne,
   onShareAll,
   uploadingId,
@@ -210,6 +213,11 @@ export default function HistoryTab({
 }: Props) {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Local only -- onDeleteMany itself awaits nothing (HomeScreen's version
+  // does the storage write and state update together), so this just drives
+  // the button's "Deleting..." label/disabled state for the brief moment
+  // the delete is in flight, same role bulkUploading plays for uploads.
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // Dropping out of Select mode (Cancel, or after a bulk upload finishes)
   // always clears the selection too -- re-entering Select mode should
@@ -240,6 +248,32 @@ export default function HistoryTab({
     // predictably regardless of the order you happened to tap things in.
     const ids = history.filter((r) => selected.has(r.id)).map((r) => r.id);
     onUploadMany(ids);
+  };
+
+  const handleDeleteSelected = () => {
+    if (selected.size === 0) return;
+    const ids = history.filter((r) => selected.has(r.id)).map((r) => r.id);
+    const allSelected = ids.length === history.length;
+    Alert.alert(
+      allSelected ? 'Delete all readings?' : `Delete ${ids.length} reading${ids.length === 1 ? '' : 's'}?`,
+      'This only removes them from this app\'s local history -- anything already uploaded to hCRI.io is unaffected. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setBulkDeleting(true);
+            try {
+              await onDeleteMany(ids);
+              exitSelectMode();
+            } finally {
+              setBulkDeleting(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (loading) {
@@ -289,12 +323,21 @@ export default function HistoryTab({
           <TouchableOpacity onPress={selectAll} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text style={styles.selectAllText}>Select All</Text>
           </TouchableOpacity>
-          <PrimaryButton
-            title={bulkUploading ? 'Uploading…' : `Upload ${selected.size || ''} Selected`.trim()}
-            onPress={handleUploadSelected}
-            disabled={selected.size === 0 || bulkUploading}
-            style={styles.selectBarUploadButton}
-          />
+          <View style={styles.selectBarButtons}>
+            <PrimaryButton
+              title={bulkDeleting ? 'Deleting…' : 'Delete'}
+              onPress={handleDeleteSelected}
+              disabled={selected.size === 0 || bulkUploading || bulkDeleting}
+              variant="danger"
+              style={styles.selectBarButton}
+            />
+            <PrimaryButton
+              title={bulkUploading ? 'Uploading…' : `Upload ${selected.size || ''} Selected`.trim()}
+              onPress={handleUploadSelected}
+              disabled={selected.size === 0 || bulkUploading || bulkDeleting}
+              style={styles.selectBarButton}
+            />
+          </View>
         </View>
       )}
 
@@ -339,11 +382,12 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   selectAllText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
+  selectBarButtons: { flexDirection: 'row' },
   // Overrides PrimaryButton's default marginTop:8 (meant for a full-width
   // button stacked below other content) -- here it sits inline next to
   // "Select All" text, so that top margin would push it visibly lower than
   // its sibling instead of centering with it.
-  selectBarUploadButton: { marginTop: 0 },
+  selectBarButton: { marginTop: 0, marginLeft: 8 },
 
   row: {
     backgroundColor: colors.card,
