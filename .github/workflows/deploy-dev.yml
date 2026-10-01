@@ -72,11 +72,16 @@ jobs:
       - name: Decode release keystore
         run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/hcricompanion-release.keystore
 
-      - name: Build release APK
+      # Builds both the APK (for direct/sideload download off the companion
+      # page) and the AAB (Android App Bundle -- not directly installable,
+      # but what Play Console requires for a future Play Store submission).
+      # One combined gradlew invocation so dependency resolution/config only
+      # happens once for both tasks instead of twice.
+      - name: Build release APK and AAB
         working-directory: android
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleRelease \
+          ./gradlew assembleRelease bundleRelease \
             -PHCRICOMPANION_RELEASE_STORE_FILE=hcricompanion-release.keystore \
             -PHCRICOMPANION_RELEASE_STORE_PASSWORD="${{ secrets.HCRICOMPANION_RELEASE_STORE_PASSWORD }}" \
             -PHCRICOMPANION_RELEASE_KEY_ALIAS="${{ secrets.HCRICOMPANION_RELEASE_KEY_ALIAS }}" \
@@ -86,12 +91,17 @@ jobs:
         if: always()
         run: rm -f android/app/hcricompanion-release.keystore
 
-      # android/app/build.gradle already names the release output
+      # android/app/build.gradle already names the release APK output
       # hCRICompanion.apk itself (applicationVariants.all{} outputFileName),
       # so this just moves it up next to the workflow rather than renaming
-      # an "app-release.apk" that was never actually produced.
-      - name: Move APK
-        run: cp android/app/build/outputs/apk/release/hCRICompanion.apk hCRICompanion.apk
+      # an "app-release.apk" that was never actually produced. The AAB isn't
+      # covered by that same renaming hook (it only applies to APK variant
+      # outputs), so bundleRelease's default "app-release.aab" is renamed
+      # here instead.
+      - name: Move APK and AAB
+        run: |
+          cp android/app/build/outputs/apk/release/hCRICompanion.apk hCRICompanion.apk
+          cp android/app/build/outputs/bundle/release/app-release.aab hCRICompanion.aab
 
       # Moves (doesn't copy) the "dev-latest" tag to this commit every run,
       # so the release this points to is always the one just built here --
@@ -113,4 +123,10 @@ jobs:
             This release is overwritten on every push to `develop` -- it's
             not a stable version history, just a fixed place for
             dev.hcri.io's companion page to link to.
-          files: hCRICompanion.apk
+
+            Includes both the installable APK (hCRICompanion.apk) and the
+            Android App Bundle (hCRICompanion.aab) for future Play Console
+            use -- the AAB itself isn't directly installable on a device.
+          files: |
+            hCRICompanion.apk
+            hCRICompanion.aab
