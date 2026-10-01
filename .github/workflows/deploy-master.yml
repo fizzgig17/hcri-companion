@@ -1,31 +1,45 @@
 # .github/workflows/deploy-master.yml
 #
-# Builds a release-signed APK on every push to `master` and uploads it to
-# hcri.io/companion/hCRICompanion.apk. Mirrors deploy-dev.yml (which does
-# the same for dev.hcri.io on pushes to `develop`) -- see that file for the
-# fuller explanation of the shared build steps.
+# Builds a release-signed APK on every push to `master` and publishes it as
+# a GitHub Release asset, at a fixed, moving tag ("prod-latest") rather than
+# a new tag per build -- so the download URL never changes and hcri.io's
+# companion page (hcri.io repo's companion/index.html) can link straight to
+# it without ever needing to be hand-edited. Mirrors deploy-dev.yml (which
+# does the same for `develop` under the tag "dev-latest") -- see that file
+# for the fuller explanation of the shared build steps.
+#
+# Used to scp the APK onto hcri.io directly (see git history before this
+# change) -- moved to GitHub Releases instead so the Spaceship account never
+# has to receive the binary at all; the companion page just redirects to
+# wherever GitHub is actually hosting it.
 #
 # Required repo secrets (Settings -> Secrets and variables -> Actions):
-#   SPACESHIP_HOST              - same value as in the hcri.io repo
-#   SPACESHIP_PORT              - same value as in the hcri.io repo
-#   SPACESHIP_USER              - same value as in the hcri.io repo
-#   SPACESHIP_SSH_KEY           - same value as in the hcri.io repo
-#   SPACESHIP_SSH_PASSPHRASE    - same value as in the hcri.io repo
-#   SPACESHIP_PATH              - /home/dcvgnomgak/hcri.io
 #   ANDROID_KEYSTORE_BASE64     - `base64 -w0 hcricompanion-release.keystore`
 #   HCRICOMPANION_RELEASE_STORE_PASSWORD
 #   HCRICOMPANION_RELEASE_KEY_ALIAS
 #   HCRICOMPANION_RELEASE_KEY_PASSWORD
+# No SPACESHIP_* secrets needed by this workflow any more -- those were only
+# ever used by the scp-action step this replaced.
+#
+# One-time repo setting this relies on: Settings -> Actions -> General ->
+# "Workflow permissions" must be "Read and write permissions" (not the
+# default "Read repository contents permission" in some org/repo defaults)
+# -- otherwise the release-publish step below gets a 403, since it needs to
+# create/update a release and upload an asset using the built-in
+# GITHUB_TOKEN rather than a separate PAT.
 
-name: Build and deploy APK (prod)
+name: Build and publish APK (prod)
 
 on:
   push:
     branches: [master]
   workflow_dispatch: {}
 
+permissions:
+  contents: write
+
 jobs:
-  build-and-deploy:
+  build-and-publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,22 +47,42 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: 'npm'
 
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '21'
 
+      # Caches the Gradle wrapper distribution, dependency cache, and build
+      # cache across runs (keyed off the wrapper/build.gradle files, so a
+      # dependency bump invalidates it automatically) -- cuts the Android
+      # build step from ~10-15 min down to a couple minutes on a cache hit.
+      - uses: gradle/actions/setup-gradle@v4
+
       - name: Install JS dependencies
         run: npm ci
+
+      # Explicitly (re)assert the production API, rather than relying on
+      # whatever happens to be checked into src/hcri/apiConfig.ts -- keeps
+      # this workflow correct even if that committed default ever changes.
+      # See src/hcri/apiConfig.ts for the full story.
+      - name: Point build at www.hcri.io
+        run: echo "export const HCRI_API_BASE = 'https://www.hcri.io';" > src/hcri/apiConfig.ts
 
       - name: Decode release keystore
         run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/hcricompanion-release.keystore
 
-      - name: Build release APK
+      # Builds both the APK (for direct/sideload download off the companion
+      # page) and the AAB (Android App Bundle -- not directly installable,
+      # but what Play Console requires for a future Play Store submission).
+      # One combined gradlew invocation so dependency resolution/config only
+      # happens once for both tasks instead of twice.
+      - name: Build release APK and AAB
         working-directory: android
         run: |
-          ./gradlew assembleRelease \
+          chmod +x ./gradlew
+          ./gradlew assembleRelease bundleRelease \
             -PHCRICOMPANION_RELEASE_STORE_FILE=hcricompanion-release.keystore \
             -PHCRICOMPANION_RELEASE_STORE_PASSWORD="${{ secrets.HCRICOMPANION_RELEASE_STORE_PASSWORD }}" \
             -PHCRICOMPANION_RELEASE_KEY_ALIAS="${{ secrets.HCRICOMPANION_RELEASE_KEY_ALIAS }}" \
@@ -58,17 +92,43 @@ jobs:
         if: always()
         run: rm -f android/app/hcricompanion-release.keystore
 
-      - name: Rename APK
-        run: cp android/app/build/outputs/apk/release/app-release.apk hCRICompanion.apk
+      # android/app/build.gradle already names the release APK output
+      # hCRICompanion.apk itself (applicationVariants.all{} outputFileName),
+      # so this just moves it up next to the workflow rather than renaming
+      # an "app-release.apk" that was never actually produced. The AAB isn't
+      # covered by that same renaming hook (it only applies to APK variant
+      # outputs), so bundleRelease's default "app-release.aab" is renamed
+      # here instead.
+      - name: Move APK and AAB
+        run: |
+          cp android/app/build/outputs/apk/release/hCRICompanion.apk hCRICompanion.apk
+          cp android/app/build/outputs/bundle/release/app-release.aab hCRICompanion.aab
 
-      - name: Upload to hcri.io
-        uses: appleboy/scp-action@v1
+      # Moves (doesn't copy) the "prod-latest" tag to this commit every run,
+      # so the release this points to is always the one just built here --
+      # same idea as the old scp-action's `overwrite: true`, just for a
+      # GitHub release instead of a server file.
+      - name: Move prod-latest tag to this commit
+        run: |
+          git tag -f prod-latest
+          git push origin -f prod-latest
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          host: ${{ secrets.SPACESHIP_HOST }}
-          port: ${{ secrets.SPACESHIP_PORT }}
-          username: ${{ secrets.SPACESHIP_USER }}
-          key: ${{ secrets.SPACESHIP_SSH_KEY }}
-          passphrase: ${{ secrets.SPACESHIP_SSH_PASSPHRASE }}
-          source: hCRICompanion.apk
-          target: ${{ secrets.SPACESHIP_PATH }}/companion
-          overwrite: true
+          tag_name: prod-latest
+          name: "Production build (${{ github.sha }})"
+          prerelease: false
+          make_latest: true
+          body: |
+            Automatically published from `master` at ${{ github.sha }}.
+            This release is overwritten on every push to `master` -- it's
+            not a stable version history, just a fixed place for hcri.io's
+            companion page to link to.
+
+            Includes both the installable APK (hCRICompanion.apk) and the
+            Android App Bundle (hCRICompanion.aab) for future Play Console
+            use -- the AAB itself isn't directly installable on a device.
+          files: |
+            hCRICompanion.apk
+            hCRICompanion.aab

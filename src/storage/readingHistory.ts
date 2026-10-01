@@ -16,6 +16,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MeterResult } from '../ble/parseResult';
+import { analyzeSpectrum, SpectralAnalysis } from '../utils/spectralAnalysis';
 
 const STORAGE_KEY = 'hcri.io.readingHistory.v1';
 
@@ -34,6 +35,23 @@ export interface SavedReading {
   /** Epoch ms when this reading was taken/saved -- NOT updated by a later rename, so it stays a true "when was this actually measured" timestamp. */
   savedAt: number;
   result: MeterResult;
+  /**
+   * Spectrum-derived CCT/Duv/Ra/R9/R1-R15/x/y for this reading, computed
+   * ONCE here (via analyzeSpectrum()) at save time rather than re-run on
+   * every History row render -- see HistoryTab.tsx's row summary, which
+   * used to read the device-reported result.cct/result.ra directly instead
+   * specifically to avoid that recompute cost. Storing it here gets the
+   * same cheap-to-display property without depending on the device's own
+   * metrics-block offsets being correct for whatever model/firmware took
+   * this reading -- it's the exact same analysis object Main/Spectrum/Data
+   * show, just persisted instead of only ever living in HomeScreen's
+   * in-memory useMemo.
+   *
+   * Optional because readings saved before this field existed won't have
+   * it -- HistoryTab falls back to computing it on the fly for those older
+   * rows rather than treating a missing field as corrupted data.
+   */
+  analysis?: SpectralAnalysis;
 }
 
 function makeId(): string {
@@ -57,9 +75,10 @@ async function saveAll(readings: SavedReading[]): Promise<void> {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(readings));
 }
 
-/** Call once per completed measurement -- adds it to the front of history (most recent first) and returns the saved entry (including its new id). */
+/** Call once per completed measurement -- adds it to the front of history (most recent first) and returns the saved entry (including its new id). Computes `analysis` here, once, from `result.spectrum` -- see SavedReading's own comment on that field for why. */
 export async function addReading(result: MeterResult, label: string): Promise<SavedReading> {
-  const entry: SavedReading = { id: makeId(), label, savedAt: Date.now(), result };
+  const analysis = analyzeSpectrum(result.spectrum);
+  const entry: SavedReading = { id: makeId(), label, savedAt: Date.now(), result, analysis };
   const existing = await loadHistory();
   const next = [entry, ...existing].slice(0, MAX_HISTORY);
   await saveAll(next);
@@ -76,4 +95,12 @@ export async function renameReading(id: string, label: string): Promise<void> {
 export async function deleteReading(id: string): Promise<void> {
   const existing = await loadHistory();
   await saveAll(existing.filter((r) => r.id !== id));
+}
+
+/** Deletes several readings in one go (HistoryTab's bulk/"select all" delete) -- one read-modify-write of the whole list instead of calling deleteReading in a loop, which would otherwise race itself: each call's `loadHistory()` wouldn't yet see the previous call's not-yet-finished `saveAll()`, so only the last delete in the loop would actually stick. */
+export async function deleteManyReadings(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const idSet = new Set(ids);
+  const existing = await loadHistory();
+  await saveAll(existing.filter((r) => !idSet.has(r.id)));
 }

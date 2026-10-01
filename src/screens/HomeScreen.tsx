@@ -18,7 +18,14 @@ import { buildCsv, defaultLabel } from '../hcri/buildCsv';
 import { uploadToHcri } from '../hcri/uploadToHcri';
 import { loadHcriCredentials } from '../storage/secureStorage';
 import { loadKeepAwakePreference } from '../storage/preferences';
-import { loadHistory, addReading, renameReading, deleteReading, SavedReading } from '../storage/readingHistory';
+import {
+  loadHistory,
+  addReading,
+  renameReading,
+  deleteReading,
+  deleteManyReadings,
+  SavedReading,
+} from '../storage/readingHistory';
 import { METER_NAME_PREFIXES } from '../ble/protocol';
 import { shareDebugLog } from '../utils/shareLog';
 import { shareSingleReadingCsv, shareAllReadingsCsv } from '../utils/shareCsv';
@@ -128,6 +135,11 @@ export default function HomeScreen({ navigation }: any) {
     // screen-mirror or copy text off the phone itself.
     console.log(`[meter] ${msg}`);
     setLog((prev) => [...prev.slice(-99), msg]);
+  }, []);
+
+  /** Clears the in-memory debug log shown on the Logs tab -- this log was never persisted (see the `log`/`setLog` state above), so this just empties what's currently on screen; it doesn't affect history or anything already shared via "Share Debug Log". */
+  const clearLog = useCallback(() => {
+    setLog([]);
   }, []);
 
   // Reuse a single MeterConnection (and the native BleManager it owns)
@@ -394,6 +406,13 @@ export default function HomeScreen({ navigation }: any) {
     setHistory((prev) => prev.filter((r) => r.id !== id));
   }, []);
 
+  /** Bulk/"delete all" version of deleteFromHistory, for HistoryTab's Select mode -- one storage write for the whole batch (see deleteManyReadings) instead of one deleteReading call per id. */
+  const deleteManyFromHistory = useCallback(async (ids: string[]) => {
+    await deleteManyReadings(ids);
+    const idSet = new Set(ids);
+    setHistory((prev) => prev.filter((r) => !idSet.has(r.id)));
+  }, []);
+
   /**
    * Uploads a past reading from History under whatever label is passed in
    * (which may be freshly edited, not yet committed to storage). The label
@@ -587,6 +606,7 @@ export default function HomeScreen({ navigation }: any) {
             onUploadWithLabel={uploadFromHistory}
             onUploadMany={uploadManyFromHistory}
             onDelete={deleteFromHistory}
+            onDeleteMany={deleteManyFromHistory}
             onShareOne={shareOneFromHistory}
             onShareAll={shareAllFromHistory}
             uploadingId={historyUploadingId}
@@ -594,7 +614,7 @@ export default function HomeScreen({ navigation }: any) {
           />
         )}
         {activeTab === 'about' && <AboutTab />}
-        {activeTab === 'logs' && <LogsTab log={log} onShare={() => shareDebugLog(log)} />}
+        {activeTab === 'logs' && <LogsTab log={log} onShare={() => shareDebugLog(log)} onClear={clearLog} />}
       </ScrollView>
     </SafeAreaView>
   );
