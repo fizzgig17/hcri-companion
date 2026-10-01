@@ -62,6 +62,7 @@ jobs:
       - name: Build release APK
         working-directory: android
         run: |
+          chmod +x ./gradlew
           ./gradlew assembleRelease \
             -PHCRICOMPANION_RELEASE_STORE_FILE=hcricompanion-release.keystore \
             -PHCRICOMPANION_RELEASE_STORE_PASSWORD="${{ secrets.HCRICOMPANION_RELEASE_STORE_PASSWORD }}" \
