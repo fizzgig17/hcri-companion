@@ -6,8 +6,9 @@
 // hand-rolled HTTPClient multipart body.
 
 import { Buffer } from 'buffer';
+import { HCRI_API_BASE } from './apiConfig';
 
-const HCRI_UPLOAD_URL = 'https://www.hcri.io/index.php/api/v1/upload';
+const HCRI_UPLOAD_URL = `${HCRI_API_BASE}/index.php/api/v1/upload`;
 
 export interface UploadResult {
   success: boolean;

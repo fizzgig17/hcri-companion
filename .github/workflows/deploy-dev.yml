@@ -63,6 +63,12 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
 
+      # Point this build at dev.hcri.io instead of the production API, so
+      # anything uploaded from a dev-built APK can never land in production
+      # data by accident. See src/hcri/apiConfig.ts for the full story.
+      - name: Point build at dev.hcri.io
+        run: echo "export const HCRI_API_BASE = 'https://dev.hcri.io';" > src/hcri/apiConfig.ts
+
       - name: Decode release keystore
         run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/hcricompanion-release.keystore
 

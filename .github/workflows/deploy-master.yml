@@ -63,6 +63,13 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
 
+      # Explicitly (re)assert the production API, rather than relying on
+      # whatever happens to be checked into src/hcri/apiConfig.ts -- keeps
+      # this workflow correct even if that committed default ever changes.
+      # See src/hcri/apiConfig.ts for the full story.
+      - name: Point build at www.hcri.io
+        run: echo "export const HCRI_API_BASE = 'https://www.hcri.io';" > src/hcri/apiConfig.ts
+
       - name: Decode release keystore
         run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/hcricompanion-release.keystore
 
