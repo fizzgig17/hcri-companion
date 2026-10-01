@@ -28,12 +28,22 @@ export interface SupportedDevice {
 export const SUPPORTED_DEVICES: SupportedDevice[] = [
   {
     model: 'HPCS-310',
-    matchedBy: 'Advertised name contains "310"',
+    matchedBy: 'Advertised name contains "310", but not "310P"',
     verified: true,
     verifiedDate: '2026-09-26',
     notes: [
       'Shorter result layout than the 330-family models -- drops most of the PAR/PPFD block.',
       'Does not report illuminance (lux) -- shown as "—" in this app rather than a wrong number.',
+    ],
+  },
+  {
+    model: 'HPCS-310P',
+    matchedBy: 'Advertised name contains "310P"',
+    verified: true,
+    verifiedDate: '2026-10-01',
+    notes: [
+      'Despite the "310" in its name, byte-for-byte identical layout to the HPCS-330P, not the shorter plain-310 layout -- reuses FIELD_OFFSETS_330P.',
+      'Was briefly broken (like 330/330P before it): its name matching the bare "310" pattern too made it get misidentified as a plain HPCS-310 and read with the wrong (shorter) offsets, producing nonsense values. Fixed by checking "310P" before the bare "310" check.',
     ],
   },
   {

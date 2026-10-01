@@ -233,6 +233,31 @@ export const FIELD_OFFSETS_330P = {
 } as const;
 
 /**
+ * HPCS-310P field map -- despite the "310" in its name, this is NOT a
+ * shorter-layout model like the plain HPCS-310 below. It's byte-for-byte
+ * IDENTICAL to the HPCS-330P layout above. Derived from a real captured
+ * debug-log hex dump (device "HPCS-310P", firmware 2008, 2996-byte result
+ * body -- same body length as a 330P capture) and confirmed three
+ * independent ways against FIELD_OFFSETS_330P's offsets:
+ *   - rRatio(236) + gRatio(240) + bRatio(244) = 71.565 + 23.986 + 4.448 =
+ *     100.00 (an identity that only holds if those three offsets are right)
+ *   - u'(128) == u(120) exactly, and v'(132) == 1.5 * v(124) exactly
+ *   - integrationTimeMs(268) read 60.0, matching this same debug log's own
+ *     "Integration time stable at 60000us" line word-for-word
+ * CCT/Ra/Duv/peakWavelength came out close to but not identical to the
+ * vendor-app screenshot reading (1941.8K vs 1972K, Ra 90.05 vs 90.9, Duv
+ * -0.00633 vs -0.00601, peak 637.0 vs 639.1nm) -- the same reading-to-
+ * reading noise seen on the other models, not a sign of a wrong offset;
+ * the debug log shows this particular capture settled at a different
+ * integration time (60ms) than whatever the screenshot's reading used.
+ * Kept as its own named export (rather than just routing to
+ * FIELD_OFFSETS_330P from getFieldOffsetsForDevice) so a future dump that
+ * reveals a real difference between the two models has somewhere to go
+ * without disturbing the 330P map.
+ */
+export const FIELD_OFFSETS_310P = FIELD_OFFSETS_330P;
+
+/**
  * HPCS-310 field map -- this model's result body is noticeably shorter than
  * the 330P's: it drops most of the PAR/PPFD/photosynthesis-metric block
  * (17 fields shrink down to just 2: par, ppfd) and drops "ee" (a PAR
@@ -458,7 +483,11 @@ export const FIELD_OFFSETS_330PRO = {
  * Check order matters throughout: "330PRO" has to be checked before "330P"
  * (which is itself a substring of "330PRO"), and both have to be checked
  * before the bare "330" check, or a more specific model always loses to a
- * less specific one that happens to overlap it as a substring.
+ * less specific one that happens to overlap it as a substring. Same reason
+ * "310P" is checked before the bare "310" below -- otherwise an HPCS-310P
+ * would match "310" first and silently get the wrong (shorter, 310-family)
+ * layout, the exact bug this once was: a real "HPCS-310P" debug-log capture
+ * decoded against FIELD_OFFSETS_310 produced nonsense (cct 0.068, duv 2.92).
  */
 export function getFieldOffsetsForDevice(deviceName: string | null | undefined): FieldOffsetMap {
   const upper = deviceName?.toUpperCase() ?? '';
@@ -467,6 +496,9 @@ export function getFieldOffsetsForDevice(deviceName: string | null | undefined):
   }
   if (upper.includes('330P')) {
     return FIELD_OFFSETS_330P;
+  }
+  if (upper.includes('310P')) {
+    return FIELD_OFFSETS_310P;
   }
   if (upper.includes('310')) {
     return FIELD_OFFSETS_310;
