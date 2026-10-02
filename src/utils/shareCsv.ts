@@ -1,19 +1,30 @@
 // src/utils/shareCsv.ts
 //
-// Shares CSV content through the OS share sheet -- same approach as
-// shareLog.ts (Share.share with plain text), not a real .csv FILE
-// attachment. React Native's built-in Share API only supports attaching an
-// actual file via a `url` on iOS; Android only gets `message` (plain text)
-// through this same API, so keeping both platforms consistent means
-// sharing the CSV as text rather than a binary attachment. That's enough
-// for pasting into Drive/Notes/email/Messages, which covers the common
-// "get this off my phone" case -- if you want a literal downloadable .csv
-// file (so a Drive share shows up as an actual spreadsheet file object,
-// not a text snippet), that needs a new native dependency
-// (react-native-share, plus writing to the filesystem first) -- ask if you
-// want it upgraded to that.
+// Shares CSV content as a real .csv FILE through the OS share sheet, via
+// react-native-share + react-native-fs.
+//
+// Used to share as plain text (Share.share({ message })) instead -- simpler
+// (no extra native deps), but that routes the entire CSV through the share
+// Intent's extras on Android, which hits the Binder transaction size limit
+// (~1MB, shared across everything in that transaction, so it bites well
+// before 1MB of actual text). Past that limit the OS just fails to launch
+// the chooser -- no JS exception, no native crash visible to the user,
+// Share.share's promise never rejects -- it just silently does nothing.
+// That's exactly what "Share All as CSV" hit once history had enough
+// readings in it (single-reading shares stayed small enough to not usually
+// trip it, but could in principle too). Writing to a temp file and sharing
+// *that* sidesteps the limit entirely -- the share Intent only ever carries
+// a content:// URI, never the payload itself -- and as a bonus actually
+// produces a real downloadable/saveable .csv file instead of a pasted text
+// blob.
+//
+// react-native-fs needs native linking (autolinked on RN >= 0.60, but a
+// fresh `npm install` here still means: run `pod install` under ios/ before
+// the next iOS build; Android just needs a rebuild, no extra step).
 
-import { Share, Alert } from 'react-native';
+import { Alert } from 'react-native';
+import RNFS from 'react-native-fs';
+import RNShare from 'react-native-share';
 import { MeterResult } from '../ble/parseResult';
 import { buildCsv, buildCombinedCsv } from '../hcri/buildCsv';
 
@@ -21,24 +32,51 @@ function sanitizeFilename(label: string): string {
   return label.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 80) || 'reading';
 }
 
-async function shareCsvText(csv: string, filenameHint: string): Promise<void> {
-  const header = `(Suggested filename: ${filenameHint})\n\n`;
+// Paths written by a previous call, cleaned up at the START of the next
+// call rather than right after sharing. RNShare.open's promise resolves as
+// soon as the share sheet Intent is launched on Android, NOT once the
+// receiving app (Gmail, Drive, whatever the person picks) has actually
+// finished reading the file -- deleting it in a `finally` right after that
+// resolve raced the receiving app and could hand it a file that's already
+// gone. Deleting it just before the NEXT export instead guarantees whatever
+// app the person shared to already had plenty of time to read it.
+const pendingCleanup = new Set<string>();
+
+async function shareCsvFile(csv: string, filename: string): Promise<void> {
+  for (const stale of pendingCleanup) {
+    RNFS.unlink(stale).catch(() => {});
+  }
+  pendingCleanup.clear();
+
+  // RNFS.CachesDirectoryPath, not DocumentDirectoryPath -- this is a
+  // throwaway export file, not app data worth backing up or keeping around;
+  // the OS is free to clear it under storage pressure.
+  const path = `${RNFS.CachesDirectoryPath}/${filename}`;
   try {
-    await Share.share(
-      { title: filenameHint, message: header + csv },
-      {
-        // iOS-only: pre-fills the subject line for mail apps that pick it up
-        // from the share sheet. No effect on Android, harmless to include.
-        subject: filenameHint,
-      }
-    );
+    await RNFS.writeFile(path, csv, 'utf8');
+    await RNShare.open({
+      url: `file://${path}`, // react-native-share accepts a file:// path on both platforms
+      type: 'text/csv',
+      filename, // iOS-only hint; Android derives the name from the file:// path itself
+      failOnCancel: false, // user dismissing the share sheet isn't an error
+    });
+    pendingCleanup.add(path);
   } catch (e: any) {
-    Alert.alert('Could not share CSV', e.message ?? String(e));
+    // RNShare.open rejects when the user cancels too (unless failOnCancel
+    // suppresses that specific case, which it does above) -- anything that
+    // still reaches here is a real failure (e.g. couldn't write the temp
+    // file), so it's worth surfacing.
+    if (e?.message && !/cancel/i.test(e.message)) {
+      Alert.alert('Could not share CSV', e.message ?? String(e));
+    }
+    // Still clean up this attempt's file -- nothing could have read it if
+    // we got here.
+    RNFS.unlink(path).catch(() => {});
   }
 }
 
 export async function shareSingleReadingCsv(result: MeterResult, label: string): Promise<void> {
-  await shareCsvText(buildCsv(result), `${sanitizeFilename(label)}.csv`);
+  await shareCsvFile(buildCsv(result), `${sanitizeFilename(label)}.csv`);
 }
 
 export async function shareAllReadingsCsv(
@@ -48,5 +86,5 @@ export async function shareAllReadingsCsv(
     Alert.alert('No saved readings', 'Take a reading first -- it gets added to History automatically.');
     return;
   }
-  await shareCsvText(buildCombinedCsv(readings), `hCRICompanion_history_${readings.length}readings.csv`);
+  await shareCsvFile(buildCombinedCsv(readings), `hCRICompanion_history_${readings.length}readings.csv`);
 }

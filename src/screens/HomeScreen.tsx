@@ -392,6 +392,17 @@ export default function HomeScreen({ navigation }: any) {
   // person just chose to do, the moment they switch back to the app.
   const autoDisconnectedRef = useRef(false);
 
+  // Set while a share sheet (or anything else that briefly hands control to
+  // the OS) is up -- see withBackgroundDisconnectSuppressed() below. Sharing
+  // a CSV (shareCsv.ts's RNShare.open) puts up the native share sheet,
+  // which iOS reports as the app going 'inactive' -- the exact same
+  // AppState transition as the app switcher or an incoming call, which is
+  // genuinely supposed to disconnect per the comment above. Without this,
+  // every single CSV share disconnected the meter, which isn't "the person
+  // switched away from the app" at all -- they're still looking at it,
+  // just with a system sheet over it.
+  const suppressAutoDisconnectRef = useRef(false);
+
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
@@ -407,7 +418,12 @@ export default function HomeScreen({ navigation }: any) {
       // 'background' and 'inactive' both mean "not what the person is
       // currently looking at" (iOS also passes through 'inactive' briefly
       // for things like the app switcher or an incoming call, which should
-      // disconnect same as a real background).
+      // disconnect same as a real background) -- EXCEPT when it's our own
+      // share sheet doing that, which isn't the person leaving the app.
+      if (suppressAutoDisconnectRef.current) {
+        appendLog(`App moved to ${nextAppState} during a share -- not disconnecting.`);
+        return;
+      }
       if (statusRef.current !== 'disconnected') {
         appendLog(`App moved to ${nextAppState} -- disconnecting meter.`);
         autoDisconnectedRef.current = true;
@@ -416,6 +432,20 @@ export default function HomeScreen({ navigation }: any) {
     });
     return () => subscription.remove();
   }, [appendLog, connect, disconnect]);
+
+  /** Wraps an async action (sharing a CSV, so far) that's expected to
+   * briefly take the app out of the foreground on its own -- presenting a
+   * native share sheet, say -- so the AppState listener above doesn't treat
+   * that as the person switching away and disconnect the meter out from
+   * under them. */
+  const withBackgroundDisconnectSuppressed = useCallback(async (action: () => Promise<void>) => {
+    suppressAutoDisconnectRef.current = true;
+    try {
+      await action();
+    } finally {
+      suppressAutoDisconnectRef.current = false;
+    }
+  }, []);
 
   const upload = useCallback(async () => {
     if (!result) return;
@@ -579,16 +609,20 @@ export default function HomeScreen({ navigation }: any) {
     // Same label the current reading would upload under, so "share" and
     // "upload" always agree on what this reading is called.
     const label = uploadTitle.trim() || defaultLabel(cachedUsername, result.deviceName);
-    shareSingleReadingCsv(result, label);
-  }, [result, uploadTitle, cachedUsername]);
+    withBackgroundDisconnectSuppressed(() => shareSingleReadingCsv(result, label));
+  }, [result, uploadTitle, cachedUsername, withBackgroundDisconnectSuppressed]);
 
   const shareOneFromHistory = useCallback((reading: SavedReading) => {
-    shareSingleReadingCsv(reading.result, reading.label);
-  }, []);
+    withBackgroundDisconnectSuppressed(() => shareSingleReadingCsv(reading.result, reading.label));
+  }, [withBackgroundDisconnectSuppressed]);
 
   const shareAllFromHistory = useCallback(() => {
-    shareAllReadingsCsv(history);
-  }, [history]);
+    withBackgroundDisconnectSuppressed(() => shareAllReadingsCsv(history));
+  }, [history, withBackgroundDisconnectSuppressed]);
+
+  const shareLog = useCallback(() => {
+    withBackgroundDisconnectSuppressed(() => shareDebugLog(log));
+  }, [log, withBackgroundDisconnectSuppressed]);
 
   const isBusy = status === 'connecting' || status === 'measuring' || status === 'uploading';
 
@@ -646,8 +680,6 @@ export default function HomeScreen({ navigation }: any) {
             uploadTitle={uploadTitle}
             onUploadTitleChange={setUploadTitle}
             onShareCsv={shareCurrentCsv}
-            onShareAllCsv={shareAllFromHistory}
-            historyCount={history.length}
             cachedUsername={cachedUsername}
           />
         )}
@@ -667,7 +699,7 @@ export default function HomeScreen({ navigation }: any) {
           />
         )}
         {activeTab === 'about' && <AboutTab />}
-        {activeTab === 'logs' && <LogsTab log={log} onShare={() => shareDebugLog(log)} onClear={clearLog} />}
+        {activeTab === 'logs' && <LogsTab log={log} onShare={shareLog} onClear={clearLog} />}
       </ScrollView>
     </SafeAreaView>
   );

@@ -17,17 +17,21 @@
 // app's spectrum (see parseResult.ts) is already effectively 1nm-spaced,
 // so the hires path is the correct match, not a downgrade.
 //
-// Deliberately NOT ported: calc_rf_rg (TM-30 Rf/Rg + the CVG wheel) --
-// that needs a 99-sample CES reflectance set (ces_data.php) and a full
-// CIECAM02 -> CAM02-UCS pipeline the app has no display for yet. Nothing
-// here currently calls it; add it the same way (port verbatim, don't
-// re-derive) if Rf/Rg ever need to show up in the UI.
+// Rf/Rg (TM-30 fidelity/gamut) are ported too, but live in their own module
+// (rfRg.ts + hcri/cesData.ts) rather than inline here -- they need a
+// 99-sample CES reflectance set and a full CIECAM02 -> CAM02-UCS pipeline
+// that nothing else in this file touches. The per-bin/per-sample detail
+// arrays calc_rf_rg also returns (for hCRI.io's drill-down view and CVG
+// wheel) aren't ported -- this app has no UI for those yet; port them the
+// same way (verbatim from spd.php) if that changes.
 //
 // Every exported numeric result the app displays should flow through
 // analyzeSpectrum() below -- that's the single entry point, computed once
 // per reading (see HomeScreen.tsx) and threaded down to every tab that
 // shows a colorimetric value, so there is exactly one code path producing
-// CCT/Duv/Ra/R9/x/y anywhere in the app.
+// CCT/Duv/Ra/R9/Rf/Rg/x/y anywhere in the app.
+
+import { calcRfRg, interpolateSpd5nm } from './rfRg';
 
 /**
  * The real CIE 1931 2-degree spectral locus -- xy chromaticity of each pure
@@ -65,6 +69,10 @@ export interface SpectralAnalysis {
   r9: number;
   /** R1..R15, in order (index 0 = R1). */
   ri: number[];
+  /** TM-30-18 fidelity index -- see rfRg.ts. */
+  rf: number;
+  /** TM-30-18 gamut index -- see rfRg.ts. */
+  rg: number;
 }
 
 // ── CIE 1931 2-degree standard observer, exact tabulated values, 5nm steps,
@@ -419,7 +427,7 @@ function calcCriHires(wls: number[], vals: number[], cct: number): { ra: number;
  */
 export function analyzeSpectrum(spectrum: { nm: number; value: number }[]): SpectralAnalysis {
   if (spectrum.length === 0) {
-    return { x: 0.3333, y: 0.3333, cct: 0, duv: 0, ra: 0, r9: 0, ri: new Array(15).fill(0) };
+    return { x: 0.3333, y: 0.3333, cct: 0, duv: 0, ra: 0, r9: 0, ri: new Array(15).fill(0), rf: 0, rg: 0 };
   }
 
   const wls = spectrum.map((p) => p.nm);
@@ -433,6 +441,13 @@ export function analyzeSpectrum(spectrum: { nm: number; value: number }[]): Spec
 
   const cd = calcCctDuvHires(wls, vals);
   const cri = calcCriHires(wls, vals, cd.cct);
+  // calc_rf_rg operates on the 81-point, 5nm-step array (see rfRg.ts's own
+  // header) -- NOT the same spdInterpAt()-based 1nm resampling the CRI/CCT
+  // path above uses, matching spd.php's analyze_spd() calling
+  // interpolate_spd() (zero-padded outside the measured range) separately
+  // from the hires CRI/CCT functions.
+  const spd5nm = interpolateSpd5nm(wls, vals);
+  const rfRg = calcRfRg(spd5nm, cd.cct);
 
-  return { x: cd.x, y: cd.y, cct: cd.cct, duv: cd.duv, ra: cri.ra, r9: cri.r9, ri: cri.ri };
+  return { x: cd.x, y: cd.y, cct: cd.cct, duv: cd.duv, ra: cri.ra, r9: cri.r9, ri: cri.ri, rf: rfRg.rf, rg: rfRg.rg };
 }
