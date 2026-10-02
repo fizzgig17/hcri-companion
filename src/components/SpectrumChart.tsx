@@ -13,7 +13,7 @@
 // the Android Studio Run button) is needed after installing it.
 
 import React, { useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Dimensions } from 'react-native';
 import Svg, { Path, Line, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { colors } from '../theme';
 
@@ -74,7 +74,24 @@ export default function SpectrumChart({ spectrum, height = 200 }: Props) {
   // SVG needs a concrete pixel width, but this component doesn't know its
   // own width until React Native lays it out -- onLayout gives us that on
   // first render, and every render after just reuses it.
-  const [width, setWidth] = useState(0);
+  //
+  // Confirmed 2026-10-02: starting this at 0 and waiting purely on onLayout
+  // meant nothing drew at all until that native layout round-trip actually
+  // completed through the bridge. This component only ever MOUNTS fresh
+  // once -- the very first time a reading lands and MainTab's/SpectrumTab's
+  // `result && ...` goes from false to true for the first time in a
+  // session; every later reading just re-renders this same already-mounted
+  // instance, reusing its already-resolved width. Right at that first-
+  // mount moment the JS thread is also busy (addReading() writing to
+  // AsyncStorage, the success haptic, several screens re-rendering off the
+  // new `result`), which can delay onLayout's delivery long enough that the
+  // chart area sat visibly blank for that one reading -- exactly the "the
+  // graph doesn't show" report, and only ever on the first reading of a
+  // session. Seeding this with the window's own width as a same-screen
+  // estimate means a chart is drawn immediately on mount; onLayout still
+  // corrects it to the exact measured value the moment it arrives, same as
+  // before.
+  const [width, setWidth] = useState(() => Dimensions.get('window').width);
 
   if (spectrum.length < 2) {
     return <View style={{ height }} onLayout={(e) => setWidth(e.nativeEvent.layout.width)} />;

@@ -18,6 +18,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import HomeScreen from './screens/HomeScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import ErrorBoundary from './components/ErrorBoundary';
+import DevBuildBanner from './components/DevBuildBanner';
 
 const Stack = createNativeStackNavigator();
 
@@ -35,6 +36,11 @@ export default function App() {
           this instead of taking the whole app down. See
           components/ErrorBoundary.tsx for why. */}
       <ErrorBoundary>
+        {/* Sits above the navigator (every screen, not just Home) so it's
+            impossible to be on ANY screen of a dev-targeted build without
+            seeing it -- a no-op view in a production build, see
+            components/DevBuildBanner.tsx. */}
+        <DevBuildBanner />
         <NavigationContainer>
           <Stack.Navigator screenOptions={{ headerStyle: { backgroundColor: '#111' }, headerTintColor: '#eee' }}>
             <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />

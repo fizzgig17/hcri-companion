@@ -12,22 +12,31 @@ import {
   clearHcriCredentials,
 } from '../storage/secureStorage';
 import { loadKeepAwakePreference, saveKeepAwakePreference } from '../storage/preferences';
+import { maskSecret } from '../utils/maskSecret';
 import { colors } from '../theme';
 
 export default function SettingsScreen() {
   const [username, setUsername] = useState('');
   const [token, setToken] = useState('');
   const [hasSaved, setHasSaved] = useState(false);
+  // What's actually loaded right now, shown read-only (see maskedToken
+  // below) -- separate from `token` above, which is only ever the NEW
+  // value being typed in to replace it (see the hasSaved-gated fields
+  // below: the two are never shown/editable at the same time).
+  const [loadedToken, setLoadedToken] = useState('');
   const [keepAwake, setKeepAwake] = useState(false);
 
   useEffect(() => {
     loadHcriCredentials().then((creds) => {
       if (creds) {
         setUsername(creds.username);
+        setLoadedToken(creds.token);
         setHasSaved(true);
-        // Token is intentionally not pre-filled in the field -- same
+        // The token field itself is intentionally not pre-filled -- same
         // masking spirit as the ESP32 provisioning page, which only showed
         // the last few characters of a saved token, never the full value.
+        // (The masked first10...last10 below is the "which key is this"
+        // check that replaces needing to see the full value.)
       }
     });
     loadKeepAwakePreference().then(setKeepAwake);
@@ -51,7 +60,16 @@ export default function SettingsScreen() {
       Alert.alert('Both fields are required');
       return;
     }
-    await saveHcriCredentials({ username: username.trim(), token: token.trim() });
+    const trimmedToken = token.trim();
+    await saveHcriCredentials({ username: username.trim(), token: trimmedToken });
+    // loadedToken (what the locked view's maskSecret() reads) was only
+    // ever set by the mount-time loadHcriCredentials() effect -- never
+    // here, so right after a fresh Save it was still '', and maskSecret('')
+    // returns '' (nothing renders). Only leaving Settings and coming back
+    // re-ran that effect and actually populated it. Setting it directly
+    // from what was just saved fixes the immediate case without waiting on
+    // a round trip back through storage.
+    setLoadedToken(trimmedToken);
     setToken('');
     setHasSaved(true);
     Alert.alert('Saved');
@@ -61,36 +79,68 @@ export default function SettingsScreen() {
     await clearHcriCredentials();
     setUsername('');
     setToken('');
+    setLoadedToken('');
     setHasSaved(false);
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>hCRI.io Username</Text>
-      <TextInput
-        style={styles.input}
-        value={username}
-        onChangeText={setUsername}
-        autoCapitalize="none"
-        placeholder="username"
-        placeholderTextColor="#666"
-      />
+      {hasSaved ? (
+        // Locked view: credentials are already saved, so the fields are
+        // read-only and there's no Save button here at all -- "Forget
+        // Credentials" is the only way back to an editable form. Without
+        // this, it was possible to fat-finger a character in the token
+        // field and silently overwrite a working key with a broken one
+        // (no confirmation, no way to tell beforehand), with no record of
+        // what the old value even was. Forcing a deliberate clear first
+        // makes replacing a key a two-step, harder-to-do-by-accident
+        // action, same spirit as the ESP32 provisioning flow.
+        <>
+          <Text style={styles.label}>hCRI.io Username</Text>
+          <View style={styles.lockedField}>
+            <Text style={styles.lockedFieldText}>{username}</Text>
+          </View>
 
-      <Text style={styles.label}>hCRI.io API Token</Text>
-      <TextInput
-        style={styles.input}
-        value={token}
-        onChangeText={setToken}
-        autoCapitalize="none"
-        secureTextEntry
-        placeholder={hasSaved ? 'Saved -- enter new value to replace' : 'hcri_...'}
-        placeholderTextColor="#666"
-      />
+          <Text style={styles.label}>hCRI.io API Token (currently loaded)</Text>
+          <View style={styles.lockedField}>
+            <Text style={styles.lockedFieldText}>{maskSecret(loadedToken)}</Text>
+          </View>
+          <Text style={styles.hint}>
+            To use a different account or key, forget the current credentials first.
+          </Text>
 
-      <View style={styles.saveButtonWrap}>
-        <PrimaryButton title="Save" onPress={save} style={styles.noTopMargin} />
-      </View>
-      {hasSaved && <PrimaryButton title="Forget Credentials" onPress={forget} variant="danger" />}
+          <View style={styles.saveButtonWrap}>
+            <PrimaryButton title="Forget Credentials" onPress={forget} variant="danger" style={styles.noTopMargin} />
+          </View>
+        </>
+      ) : (
+        <>
+          <Text style={styles.label}>hCRI.io Username</Text>
+          <TextInput
+            style={styles.input}
+            value={username}
+            onChangeText={setUsername}
+            autoCapitalize="none"
+            placeholder="username"
+            placeholderTextColor="#666"
+          />
+
+          <Text style={styles.label}>hCRI.io API Token</Text>
+          <TextInput
+            style={styles.input}
+            value={token}
+            onChangeText={setToken}
+            autoCapitalize="none"
+            secureTextEntry
+            placeholder="hcri_..."
+            placeholderTextColor="#666"
+          />
+
+          <View style={styles.saveButtonWrap}>
+            <PrimaryButton title="Save" onPress={save} style={styles.noTopMargin} />
+          </View>
+        </>
+      )}
 
       <View style={styles.toggleRow}>
         <View style={styles.toggleTextWrap}>
@@ -116,6 +166,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#333',
   },
+  // Visually distinct from `input` (no editable-looking border/background)
+  // so it reads as "locked display", not just a disabled text field.
+  lockedField: {
+    backgroundColor: '#161618',
+    padding: 11,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#2a2a2e',
+  },
+  // Matches `input`'s own text color (#eee) rather than a dimmer gray --
+  // '#bbb' on this box's near-black background read as "I can't see the
+  // key, maybe it's too dark" in practice, even though it technically had
+  // enough contrast on paper.
+  lockedFieldText: { color: '#eee', fontFamily: 'monospace', fontSize: 14 },
+  hint: { color: '#777', fontSize: 12, marginTop: 10, lineHeight: 16 },
   // Provides the gap above the Save button; noTopMargin below cancels out
   // PrimaryButton's own default marginTop so it doesn't stack on top of this.
   saveButtonWrap: { marginTop: 18 },

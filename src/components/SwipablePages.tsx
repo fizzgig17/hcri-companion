@@ -12,7 +12,15 @@
 // adding one more for something this simple.
 
 import React, { useRef, useState } from 'react';
-import { View, ScrollView, NativeSyntheticEvent, NativeScrollEvent, StyleSheet, TouchableOpacity } from 'react-native';
+import {
+  View,
+  ScrollView,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
+  StyleSheet,
+  TouchableOpacity,
+  Dimensions,
+} from 'react-native';
 import { colors } from '../theme';
 
 export interface Page {
@@ -26,7 +34,14 @@ interface Props {
 }
 
 export default function SwipablePages({ pages }: Props) {
-  const [width, setWidth] = useState(0);
+  // Same reasoning as SpectrumChart's own width state: gating page content
+  // entirely behind `width > 0` meant the Spectrum tab's pages (including
+  // its SpectrumChart) didn't even get constructed, let alone laid out,
+  // until THIS onLayout fired too -- stacking a second native round-trip on
+  // top of SpectrumChart's own and doubling the window for a delayed first
+  // reading to show nothing. Seeding from the window's width means pages
+  // mount immediately; onLayout still corrects it once it arrives.
+  const [width, setWidth] = useState(() => Dimensions.get('window').width);
   const [activeIndex, setActiveIndex] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
 

@@ -8,7 +8,7 @@
 // of whatever the last reading and log happen to be.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MeterConnection } from '../ble/MeterConnection';
 import { initializeMeter, takeMeasurement } from '../ble/takeMeasurement';
@@ -364,6 +364,59 @@ export default function HomeScreen({ navigation }: any) {
     setDeviceName(null);
   }, [appendLog]);
 
+  // Disconnects the meter the moment the app leaves the foreground
+  // (minimized, switched away from, screen locked) -- matches the stock
+  // Hopoocolor app, which drops the BLE link on close/minimize; this app
+  // previously stayed connected indefinitely in the background instead.
+  // Left connected, a backgrounded app keeps the meter's BLE radio awake
+  // (draining its battery for no reason once nobody's looking at it) and,
+  // on Android in particular, risks the exact stale-connection state
+  // resetStaleConnection()/resetConnection() above exist to clean up.
+  //
+  // Reads live status off a ref rather than depending on `status` directly,
+  // so this effect subscribes to AppState exactly once for the component's
+  // lifetime instead of tearing down and re-adding the listener on every
+  // status change.
+  const statusRef = useRef(status);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  // Set only by the backgrounding branch below, and only when there was
+  // actually something connected to drop -- distinguishes "disconnected
+  // because the app just backgrounded itself" from "already disconnected
+  // for some other reason (never connected, meter dropped the link on its
+  // own, person tapped Disconnect manually)". The foreground branch uses
+  // this to reconnect automatically ONLY in the first case: reconnecting
+  // after a deliberate manual disconnect would silently undo the thing the
+  // person just chose to do, the moment they switch back to the app.
+  const autoDisconnectedRef = useRef(false);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        // Coming back to the foreground -- reconnect if (and only if) we're
+        // the ones who disconnected on the way out.
+        if (autoDisconnectedRef.current) {
+          autoDisconnectedRef.current = false;
+          appendLog('App back in foreground -- reconnecting to meter...');
+          connect();
+        }
+        return;
+      }
+      // 'background' and 'inactive' both mean "not what the person is
+      // currently looking at" (iOS also passes through 'inactive' briefly
+      // for things like the app switcher or an incoming call, which should
+      // disconnect same as a real background).
+      if (statusRef.current !== 'disconnected') {
+        appendLog(`App moved to ${nextAppState} -- disconnecting meter.`);
+        autoDisconnectedRef.current = true;
+        disconnect();
+      }
+    });
+    return () => subscription.remove();
+  }, [appendLog, connect, disconnect]);
+
   const upload = useCallback(async () => {
     if (!result) return;
     const creds = await loadHcriCredentials();
@@ -382,7 +435,7 @@ export default function HomeScreen({ navigation }: any) {
     // the field's genuinely empty, rather than silently ignoring a typed
     // title.
     const label = uploadTitle.trim() || defaultLabel(creds.username, result.deviceName);
-    const res = await uploadToHcri(csv, label, creds.token);
+    const res = await uploadToHcri(csv, label, creds.token, appendLog);
     // The raw server response (res.message -- hCRI.io's API returns JSON)
     // still goes to Logs for anyone actually debugging an upload; the
     // popup itself just says what happened, same plain-language style as
@@ -442,7 +495,7 @@ export default function HomeScreen({ navigation }: any) {
       setHistoryUploadingId(id);
       try {
         const csv = buildCsv(entry.result);
-        const res = await uploadToHcri(csv, label, creds.token);
+        const res = await uploadToHcri(csv, label, creds.token, appendLog);
         appendLog(res.message);
         Alert.alert(
           res.success ? 'Uploaded' : 'Upload failed',
@@ -494,7 +547,7 @@ export default function HomeScreen({ navigation }: any) {
           setHistoryUploadingId(id);
           try {
             const csv = buildCsv(entry.result);
-            const res = await uploadToHcri(csv, entry.label, creds.token);
+            const res = await uploadToHcri(csv, entry.label, creds.token, appendLog);
             appendLog(res.message);
             if (res.success) {
               okCount += 1;
