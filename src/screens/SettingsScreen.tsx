@@ -166,7 +166,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#2a2a2e',
   },
-  lockedFieldText: { color: '#bbb', fontFamily: 'monospace' },
+  // Matches `input`'s own text color (#eee) rather than a dimmer gray --
+  // '#bbb' on this box's near-black background read as "I can't see the
+  // key, maybe it's too dark" in practice, even though it technically had
+  // enough contrast on paper.
+  lockedFieldText: { color: '#eee', fontFamily: 'monospace', fontSize: 14 },
   hint: { color: '#777', fontSize: 12, marginTop: 10, lineHeight: 16 },
   // Provides the gap above the Save button; noTopMargin below cancels out
   // PrimaryButton's own default marginTop so it doesn't stack on top of this.
