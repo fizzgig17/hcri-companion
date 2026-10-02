@@ -620,6 +620,10 @@ export default function HomeScreen({ navigation }: any) {
     withBackgroundDisconnectSuppressed(() => shareAllReadingsCsv(history));
   }, [history, withBackgroundDisconnectSuppressed]);
 
+  const shareLog = useCallback(() => {
+    withBackgroundDisconnectSuppressed(() => shareDebugLog(log));
+  }, [log, withBackgroundDisconnectSuppressed]);
+
   const isBusy = status === 'connecting' || status === 'measuring' || status === 'uploading';
 
   return (
@@ -695,7 +699,7 @@ export default function HomeScreen({ navigation }: any) {
           />
         )}
         {activeTab === 'about' && <AboutTab />}
-        {activeTab === 'logs' && <LogsTab log={log} onShare={() => shareDebugLog(log)} onClear={clearLog} />}
+        {activeTab === 'logs' && <LogsTab log={log} onShare={shareLog} onClear={clearLog} />}
       </ScrollView>
     </SafeAreaView>
   );
