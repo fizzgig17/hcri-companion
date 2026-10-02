@@ -147,6 +147,26 @@ export async function takeMeasurement(
         clearTimeout(resultRetryTimer);
         resultRetryTimer = null;
       }
+      // Confirmed 2026-10-02 (a debug-report capture from a "no chart"
+      // report): a retry here used to leave MeterConnection's reassembly
+      // state exactly as the dead previous attempt left it. If that
+      // previous attempt's 8C 13 reply never fully arrived (collecting
+      // still true, buffer sitting at some partial length < the declared
+      // total -- which is WHY it never resolved and this retry is firing
+      // at all), the resend's brand-new reply then got appended onto that
+      // stale partial buffer instead of starting fresh, since
+      // handleNotification's "is this the start of a new response"
+      // branch only runs when `collecting` is false. Once the combined
+      // length happened to reach the declared total, it got emitted as
+      // if it were one genuine reply -- a splice of the old attempt's
+      // leftover bytes followed by the new attempt's reply (including
+      // that reply's own 4-byte echo+length header, never stripped,
+      // misread as body data). Every field offset past the splice point
+      // is garbage. Clearing reassembly state before EVERY request
+      // (first send and every retry alike), not just once at the top of
+      // takeMeasurement(), means a resend always starts a clean
+      // collection and can never be glued onto a dead one.
+      conn.resetReassemblyState();
       conn.sendCommand(CMD_READ_RESULT).catch((e) => {
         if (!settled) {
           settled = true;
