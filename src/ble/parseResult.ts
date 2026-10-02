@@ -83,6 +83,28 @@ function asciiString(buf: Uint8Array, offset: number, maxLen: number): string {
 export function parseResult(body: Uint8Array, offsets: FieldOffsetMap = FIELD_OFFSETS_330P): MeterResult {
   const o = offsets;
 
+  // SPECTRUM_BLOCK_BYTES (671 points + the 8-byte footer, 2692 bytes) is a
+  // fixed, model-independent tail of every GENUINE result body -- see its
+  // own comment in protocol.ts. A body shorter than that was never a real,
+  // fully-written result in the first place (most plausibly: the result
+  // was read before the meter had actually finished the exposure and
+  // written it -- see takeMeasurement.ts's completion-detection comments),
+  // and letting it through used to fall into spectrumStart's defensive
+  // `Math.max(0, ...)` clamp below, which silently produced a tiny/empty
+  // `spectrum` array -- the "graph doesn't show, Spectrum tab has no data"
+  // symptom reported 2026-10-02, with no indication anything had actually
+  // gone wrong. Reject it here instead, with the one number (how short it
+  // actually was) needed to tell this apart from a genuine parsing bug if
+  // it happens again -- the caller (takeMeasurement.ts) already surfaces a
+  // thrown error here as a normal "Measurement failed" result, same as a
+  // timeout.
+  if (body.length < SPECTRUM_BLOCK_BYTES) {
+    throw new Error(
+      `Result body too short (${body.length}B, need at least ${SPECTRUM_BLOCK_BYTES}B for the spectrum block) -- ` +
+        `the meter likely hadn't finished writing the result yet. Try the reading again.`
+    );
+  }
+
   const rIndices: number[] = [];
   for (let i = 1; i <= 15; i++) {
     rIndices.push(f32(body, (o as any)[`r${i}`]));
