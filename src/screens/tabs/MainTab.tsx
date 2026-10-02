@@ -16,6 +16,7 @@ import SpectrumChart from '../../components/SpectrumChart';
 import { colors, statusColors, statusLabels } from '../../theme';
 import { MeterResult } from '../../ble/parseResult';
 import { SpectralAnalysis } from '../../utils/spectralAnalysis';
+import { HCRI_BRAND_HOST } from '../../hcri/buildTarget';
 
 export type Status = 'disconnected' | 'connecting' | 'connected' | 'measuring' | 'uploading';
 
@@ -114,7 +115,7 @@ export default function MainTab({
           </View>
           {result.spectrum.length > 0 && <SpectrumChart spectrum={result.spectrum} />}
           <PrimaryButton
-            title="Upload to hCRI.io"
+            title={`Upload to ${HCRI_BRAND_HOST}`}
             onPress={onUpload}
             disabled={uploading}
             variant="muted"

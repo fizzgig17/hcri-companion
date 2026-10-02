@@ -2,11 +2,13 @@
 //
 // Thin colored strip at the very top of the app, above the navigator (see
 // App.tsx), so it's visible on every screen rather than just Home. Only
-// renders anything for a non-production build -- IS_DEV_BUILD is derived
-// from HCRI_API_BASE (see hcri/apiConfig.ts), which deploy-dev.yml
-// overwrites right before bundling, so this needs no setup/flag of its
-// own and can't drift out of sync with which server a build actually
-// uploads to.
+// renders anything for a non-production build -- IS_DEV_BUILD/HCRI_API_HOST
+// come from hcri/buildTarget.ts, NOT apiConfig.ts directly (see that
+// file's own comment for why: deploy-dev.yml/deploy-master.yml replace
+// apiConfig.ts's entire contents, not just HCRI_API_BASE's value, so
+// anything else exported from THAT file specifically never survives into
+// the built APK -- this needs no setup/flag of its own and can't drift out
+// of sync with which server a build actually uploads to).
 //
 // Exists so a dev-built APK (sideloaded for testing, sitting on a phone
 // next to the real app) is never mistaken for production at a glance --
@@ -15,7 +17,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { HCRI_API_BASE, IS_DEV_BUILD } from '../hcri/apiConfig';
+import { IS_DEV_BUILD, HCRI_API_HOST } from '../hcri/buildTarget';
 
 export default function DevBuildBanner() {
   if (!IS_DEV_BUILD) return null;
@@ -28,7 +30,7 @@ export default function DevBuildBanner() {
     <SafeAreaView edges={['top']} style={styles.safeArea}>
       <View style={styles.bar}>
         <Text style={styles.text} numberOfLines={1}>
-          DEV BUILD — {HCRI_API_BASE.replace(/^https?:\/\//, '')}
+          DEV BUILD — {HCRI_API_HOST}
         </Text>
       </View>
     </SafeAreaView>

@@ -11,11 +11,11 @@
 
 export const HCRI_API_BASE = 'https://www.hcri.io';
 
-// Derived, not a separate flag to remember to flip: deploy-dev.yml/
-// deploy-master.yml overwrite HCRI_API_BASE above, nothing else, so
-// whether this build is "dev" is entirely a function of that one value.
-// Deliberately an exact match against the known production value rather
-// than e.g. `.includes('dev')` -- a typo'd or new non-prod host should
-// still read as "not production" (and get the banner), not silently pass
-// as prod because it didn't happen to contain that substring.
-export const IS_DEV_BUILD = HCRI_API_BASE !== 'https://www.hcri.io';
+// IS_DEV_BUILD, derived from the line above, deliberately does NOT live in
+// this file -- deploy-dev.yml/deploy-master.yml each replace this file's
+// ENTIRE CONTENTS with a single `echo "export const HCRI_API_BASE = ...;"
+// > src/hcri/apiConfig.ts`, not just that one line, so anything else
+// checked in here (a second export, these very comments) is silently gone
+// from the built APK. See buildTarget.ts, which only *imports*
+// HCRI_API_BASE from here -- that survives the overwrite fine, since the
+// overwritten file still exports exactly that one name.

@@ -13,6 +13,7 @@ import { colors } from '../../theme';
 import { MeterResult } from '../../ble/parseResult';
 import { SpectralAnalysis } from '../../utils/spectralAnalysis';
 import { buildCsv, defaultLabel } from '../../hcri/buildCsv';
+import { HCRI_BRAND_HOST } from '../../hcri/buildTarget';
 
 interface Props {
   result: MeterResult | null;
@@ -114,7 +115,7 @@ export default function DataTab({
           </Text>
         </CollapsibleSection>
 
-        <PrimaryButton title="Upload to hCRI.io" onPress={onUpload} disabled={uploading} variant="muted" />
+        <PrimaryButton title={`Upload to ${HCRI_BRAND_HOST}`} onPress={onUpload} disabled={uploading} variant="muted" />
         <PrimaryButton title="Share CSV" onPress={onShareCsv} variant="muted" />
         <PrimaryButton
           title={`Share All as CSV (${historyCount})`}

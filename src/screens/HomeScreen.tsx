@@ -382,19 +382,40 @@ export default function HomeScreen({ navigation }: any) {
     statusRef.current = status;
   }, [status]);
 
+  // Set only by the backgrounding branch below, and only when there was
+  // actually something connected to drop -- distinguishes "disconnected
+  // because the app just backgrounded itself" from "already disconnected
+  // for some other reason (never connected, meter dropped the link on its
+  // own, person tapped Disconnect manually)". The foreground branch uses
+  // this to reconnect automatically ONLY in the first case: reconnecting
+  // after a deliberate manual disconnect would silently undo the thing the
+  // person just chose to do, the moment they switch back to the app.
+  const autoDisconnectedRef = useRef(false);
+
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
-      // 'active' is foregrounded; 'background' and 'inactive' both mean
-      // "not what the person is currently looking at" (iOS also passes
-      // through 'inactive' briefly for things like the app switcher or an
-      // incoming call, which should disconnect same as a real background).
-      if (nextAppState !== 'active' && statusRef.current !== 'disconnected') {
+      if (nextAppState === 'active') {
+        // Coming back to the foreground -- reconnect if (and only if) we're
+        // the ones who disconnected on the way out.
+        if (autoDisconnectedRef.current) {
+          autoDisconnectedRef.current = false;
+          appendLog('App back in foreground -- reconnecting to meter...');
+          connect();
+        }
+        return;
+      }
+      // 'background' and 'inactive' both mean "not what the person is
+      // currently looking at" (iOS also passes through 'inactive' briefly
+      // for things like the app switcher or an incoming call, which should
+      // disconnect same as a real background).
+      if (statusRef.current !== 'disconnected') {
         appendLog(`App moved to ${nextAppState} -- disconnecting meter.`);
+        autoDisconnectedRef.current = true;
         disconnect();
       }
     });
     return () => subscription.remove();
-  }, [appendLog, disconnect]);
+  }, [appendLog, connect, disconnect]);
 
   const upload = useCallback(async () => {
     if (!result) return;
