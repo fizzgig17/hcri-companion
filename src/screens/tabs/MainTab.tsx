@@ -87,7 +87,13 @@ export default function MainTab({
           </TouchableOpacity>
         </>
       )}
-      {status === 'connected' && (
+      {/* Take Reading/Disconnect render here, at the top, only while there's
+          no reading yet to put them "under" -- right after connecting, for
+          instance. Once a result exists, the same two buttons render below
+          the result card instead (see after resultCard), so the
+          measurements are the first thing you see rather than having to
+          scroll past the buttons to get to them. */}
+      {status === 'connected' && !(result && analysis) && (
         <>
           <PrimaryButton title="Take Reading" onPress={measure} />
           <PrimaryButton title="Disconnect" onPress={disconnect} variant="muted" />
@@ -100,18 +106,21 @@ export default function MainTab({
       {result && analysis && (
         <View style={styles.resultCard}>
           <View style={styles.statGrid}>
-            {/* CCT/Ra/R9/Duv here are all spectrum-derived (analyzeSpectrum,
-                hCRI.io's own ported algorithm) -- never the device's onboard
-                fields. Lux is the one exception: hCRI.io's own math has no
-                illuminance output to port (it isn't a CIE 13.3/CCT quantity),
-                so this is still whatever the device itself reported, same as
-                before -- null on models that don't report it (see the 330Pro
-                offset map in protocol.ts). */}
+            {/* CCT/Ra/R9/Duv/Rf/Rg here are all spectrum-derived
+                (analyzeSpectrum, hCRI.io's own ported algorithm) -- never
+                the device's onboard fields. Lux is the one exception:
+                hCRI.io's own math has no illuminance output to port (it
+                isn't a CIE 13.3/CCT quantity), so this is still whatever
+                the device itself reported, same as before -- null on
+                models that don't report it (see the 330Pro offset map in
+                protocol.ts). */}
             <StatCard label="CCT" value={analysis.cct.toFixed(0)} unit="K" />
             <StatCard label="Ra (CRI)" value={analysis.ra.toFixed(1)} />
             <StatCard label="Lux" value={result.lux !== null ? result.lux.toFixed(0) : '—'} />
             <StatCard label="R9" value={analysis.r9.toFixed(1)} />
             <StatCard label="Duv" value={analysis.duv.toFixed(5)} />
+            <StatCard label="Rf" value={analysis.rf.toFixed(0)} />
+            <StatCard label="Rg" value={analysis.rg.toFixed(0)} />
           </View>
           {result.spectrum.length > 0 && <SpectrumChart spectrum={result.spectrum} />}
           <PrimaryButton
@@ -120,6 +129,12 @@ export default function MainTab({
             disabled={uploading}
             variant="muted"
           />
+          {status === 'connected' && (
+            <>
+              <PrimaryButton title="Take Reading" onPress={measure} />
+              <PrimaryButton title="Disconnect" onPress={disconnect} variant="muted" />
+            </>
+          )}
         </View>
       )}
 
