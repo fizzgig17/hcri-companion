@@ -32,9 +32,6 @@ interface Props {
   uploadTitle: string;
   onUploadTitleChange: (title: string) => void;
   onShareCsv: () => void;
-  /** Shares every reading in History as one combined CSV -- same action HistoryTab's own "Share All as CSV" triggers, just also reachable from here per your request to have it on both tabs. */
-  onShareAllCsv: () => void;
-  historyCount: number;
   /** hCRI.io username, cached in HomeScreen from secureStorage -- purely for
    * showing what the default title WOULD be (defaultLabel()) before you've
    * typed anything of your own. null if no account is set up yet, in which
@@ -51,8 +48,6 @@ export default function DataTab({
   uploadTitle,
   onUploadTitleChange,
   onShareCsv,
-  onShareAllCsv,
-  historyCount,
   cachedUsername,
 }: Props) {
   if (!result || !analysis) {
@@ -117,11 +112,6 @@ export default function DataTab({
 
         <PrimaryButton title={`Upload to ${HCRI_BRAND_HOST}`} onPress={onUpload} disabled={uploading} variant="muted" />
         <PrimaryButton title="Share CSV" onPress={onShareCsv} variant="muted" />
-        <PrimaryButton
-          title={`Share All as CSV (${historyCount})`}
-          onPress={onShareAllCsv}
-          variant="muted"
-        />
       </View>
 
       <CollapsibleSection title="R1–R15" count={analysis.ri.length}>

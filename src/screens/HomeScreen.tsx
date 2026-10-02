@@ -646,8 +646,6 @@ export default function HomeScreen({ navigation }: any) {
             uploadTitle={uploadTitle}
             onUploadTitleChange={setUploadTitle}
             onShareCsv={shareCurrentCsv}
-            onShareAllCsv={shareAllFromHistory}
-            historyCount={history.length}
             cachedUsername={cachedUsername}
           />
         )}
