@@ -7,6 +7,7 @@
 
 import { Buffer } from 'buffer';
 import { HCRI_API_BASE } from './apiConfig';
+import { maskSecret } from '../utils/maskSecret';
 
 const HCRI_UPLOAD_URL = `${HCRI_API_BASE}/index.php/api/v1/upload`;
 
@@ -18,8 +19,18 @@ export interface UploadResult {
 export async function uploadToHcri(
   csv: string,
   label: string,
-  token: string
+  token: string,
+  log?: (msg: string) => void
 ): Promise<UploadResult> {
+  // Deliberately logs the server + endpoint + label + a masked form of the
+  // key actually used -- never `csv` (that's the full wavelength/value
+  // data, hundreds of lines per reading) and never the raw `token`. This
+  // is what makes "which server did this go to, and under which key"
+  // answerable from the Logs tab without reproducing/guessing it, while
+  // keeping the log itself small enough to be useful (and shareable via
+  // shareDebugLog) rather than dominated by spectral data dumps.
+  log?.(`POST ${HCRI_UPLOAD_URL} label="${label}" key=${maskSecret(token)}`);
+
   const form = new FormData();
   // React Native's FormData accepts this Blob-like shape for file fields.
   form.append('file', {
