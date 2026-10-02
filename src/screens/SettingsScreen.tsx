@@ -60,7 +60,16 @@ export default function SettingsScreen() {
       Alert.alert('Both fields are required');
       return;
     }
-    await saveHcriCredentials({ username: username.trim(), token: token.trim() });
+    const trimmedToken = token.trim();
+    await saveHcriCredentials({ username: username.trim(), token: trimmedToken });
+    // loadedToken (what the locked view's maskSecret() reads) was only
+    // ever set by the mount-time loadHcriCredentials() effect -- never
+    // here, so right after a fresh Save it was still '', and maskSecret('')
+    // returns '' (nothing renders). Only leaving Settings and coming back
+    // re-ran that effect and actually populated it. Setting it directly
+    // from what was just saved fixes the immediate case without waiting on
+    // a round trip back through storage.
+    setLoadedToken(trimmedToken);
     setToken('');
     setHasSaved(true);
     Alert.alert('Saved');
