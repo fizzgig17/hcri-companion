@@ -26,6 +26,7 @@ import { MeterResult } from '../../ble/parseResult';
 import { SpectralAnalysis } from '../../utils/spectralAnalysis';
 import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
 import { HCRI_BRAND_HOST } from '../../hcri/buildTarget';
+import { EMPTY_METER_RESULT, EMPTY_SPECTRAL_ANALYSIS } from '../../utils/placeholderReading';
 
 export type Status = 'disconnected' | 'connecting' | 'connected' | 'measuring' | 'uploading';
 
@@ -61,6 +62,14 @@ interface Props {
    * typed one); to change the title, that's still done on the Data tab. */
   onUpload: () => void;
   uploading: boolean;
+  /** Whether the most recent upload attempt (for the CURRENT reading)
+   * succeeded -- true shows a small inline checkmark next to the Upload
+   * button instead of a confirmation popup; a failed attempt still raises
+   * an Alert (see HomeScreen.tsx's upload()), so there's nothing to show
+   * inline for that case. Reset to false the moment a new reading comes
+   * in, so the checkmark from a previous reading's upload never lingers
+   * next to a result it doesn't actually describe. */
+  uploadSucceeded: boolean;
   /** Which measurements to show in the result card, and in what order --
    * the person's own customization from Settings (see
    * storage/statDisplayPrefs.ts), already resolved down to just the
@@ -89,11 +98,19 @@ export default function MainTab({
   onDismissDevicePicker,
   onUpload,
   uploading,
+  uploadSucceeded,
   statIds,
   connectedDeviceName,
 }: Props) {
   const { colors, statusColors } = useTheme();
   const canSwitchMeters = status === 'connected' && (devicePickerDevices?.length ?? 0) > 1;
+  const hasReading = !!(result && analysis);
+  // Falls back to an all-zero reading/analysis so the stat grid and
+  // Spectrum/Chrom/R-Values charts below always render in their final
+  // layout -- see placeholderReading.ts's own comment for why this is
+  // what actually keeps the Take Reading button from jumping position.
+  const displayResult = result ?? EMPTY_METER_RESULT;
+  const displayAnalysis = analysis ?? EMPTY_SPECTRAL_ANALYSIS;
 
   const styles = StyleSheet.create({
     statusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
@@ -117,6 +134,11 @@ export default function MainTab({
     },
     statGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -5, marginBottom: 2 },
     customizeHint: { color: colors.mutedFaint, fontSize: 10.5, marginBottom: 10, textAlign: 'center' },
+    uploadRow: { flexDirection: 'row', alignItems: 'center' },
+    uploadButton: { flex: 1 },
+    // Green, same as the "connected" status dot/accent buttons -- reads as
+    // a quiet, positive confirmation rather than another popup to dismiss.
+    uploadCheck: { color: colors.accent, fontSize: 20, fontWeight: '700', marginLeft: 10, marginTop: 8 },
 
     modalBackdrop: {
       flex: 1,
@@ -173,85 +195,91 @@ export default function MainTab({
         )}
       </View>
 
-      {status === 'disconnected' && (
-        <>
-          <PrimaryButton title="Connect to Meter" onPress={connect} />
-          {/* Troubleshooting for "meter won't reconnect after I reloaded the
-              app without disconnecting it first" -- normally required a
-              power cycle. connect() already tries this automatically, but a
-              visible manual retry is worth having when it doesn't help on
-              the first try. */}
-          <TouchableOpacity onPress={resetConnection} style={styles.resetLink}>
-            <Text style={styles.resetLinkText}>Meter won't connect? Reset connection</Text>
-          </TouchableOpacity>
-        </>
-      )}
-      {/* Take Reading/Disconnect render here, at the top, only while there's
-          no reading yet to put them "under" -- right after connecting, for
-          instance. Once a result exists, the same two buttons render below
-          the result card instead (see after resultCard), so the
-          measurements are the first thing you see rather than having to
-          scroll past the buttons to get to them. */}
-      {status === 'connected' && !(result && analysis) && (
-        <>
-          <PrimaryButton title="Take Reading" onPress={measure} />
-          <PrimaryButton title="Disconnect" onPress={disconnect} variant="muted" />
-        </>
-      )}
-      {(status === 'connecting' || status === 'measuring') && (
-        <PrimaryButton title={status === 'connecting' ? 'Connecting…' : 'Measuring…'} onPress={() => {}} disabled />
-      )}
+      {/* Always rendered, whether or not a reading (or even a connection)
+          exists yet -- using an all-zero placeholder result/analysis when
+          there's no real one (see placeholderReading.ts). That's what
+          keeps everything below -- the stat grid, the three swipeable
+          charts, and the action button right under them -- in the exact
+          same layout from the very first time this tab is shown, rather
+          than the shorter pre-reading layout that used to put Take
+          Reading/Disconnect ABOVE this card and then move them below it
+          (in a second copy) the moment a result came in. */}
+      <View style={styles.resultCard}>
+        <View style={styles.statGrid}>
+          {/* Which measurements show here, and in what order, is the
+              person's own choice from Settings (statIds, already
+              resolved to just the enabled ids in display order -- see
+              storage/statDisplayPrefs.ts). CCT/Ra/R9/Duv/Rf/Rg/x/y/R1-15
+              are all spectrum-derived (analyzeSpectrum, hCRI.io's own
+              ported algorithm) -- never the device's onboard fields.
+              Lux is the one exception: hCRI.io's own math has no
+              illuminance output to port (it isn't a CIE 13.3/CCT
+              quantity), so it's still whatever the device itself
+              reported -- format() returns null on models that don't
+              report it (see the 330Pro offset map in protocol.ts),
+              which is why a tile is skipped rather than shown as a
+              dash: the person asked to see it, there's just nothing to
+              show for this particular meter. displayResult/displayAnalysis
+              are 0 for every field until a real reading exists, so every
+              tile just reads "0" until then. */}
+          {statIds.map((id) => {
+            const metric = STAT_METRIC_BY_ID[id];
+            if (!metric) return null;
+            const out = metric.format(displayResult, displayAnalysis);
+            if (!out) return null;
+            return <StatCard key={id} label={metric.label} value={out.value} unit={out.unit} compact />;
+          })}
+        </View>
+        <Text style={styles.customizeHint}>
+          Tap ⚙ Settings to customize which measurements show here, and in what order.
+        </Text>
+        {/* resultCard (below) wraps this in its own padding: 14 each
+            side -- SpectrumTab/SwipablePages/the charts all otherwise
+            only know about the screen's own 16-each-side scroll
+            padding, which used to make every chart on THIS tab render
+            28px wider than the real room resultCard leaves for it --
+            see SpectrumTab.tsx's extraHorizontalChrome comment. */}
+        <SpectrumTab result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={28} />
 
-      {result && analysis && (
-        <View style={styles.resultCard}>
-          <View style={styles.statGrid}>
-            {/* Which measurements show here, and in what order, is the
-                person's own choice from Settings (statIds, already
-                resolved to just the enabled ids in display order -- see
-                storage/statDisplayPrefs.ts). CCT/Ra/R9/Duv/Rf/Rg/x/y/R1-15
-                are all spectrum-derived (analyzeSpectrum, hCRI.io's own
-                ported algorithm) -- never the device's onboard fields.
-                Lux is the one exception: hCRI.io's own math has no
-                illuminance output to port (it isn't a CIE 13.3/CCT
-                quantity), so it's still whatever the device itself
-                reported -- format() returns null on models that don't
-                report it (see the 330Pro offset map in protocol.ts),
-                which is why a tile is skipped rather than shown as a
-                dash: the person asked to see it, there's just nothing to
-                show for this particular meter. */}
-            {statIds.map((id) => {
-              const metric = STAT_METRIC_BY_ID[id];
-              if (!metric) return null;
-              const out = metric.format(result, analysis);
-              if (!out) return null;
-              return <StatCard key={id} label={metric.label} value={out.value} unit={out.unit} compact />;
-            })}
-          </View>
-          <Text style={styles.customizeHint}>
-            Tap ⚙ Settings to customize which measurements show here, and in what order.
-          </Text>
-          {/* resultCard (below) wraps this in its own padding: 14 each
-              side -- SpectrumTab/SwipablePages/the charts all otherwise
-              only know about the screen's own 16-each-side scroll
-              padding, which used to make every chart on THIS tab render
-              28px wider than the real room resultCard leaves for it --
-              see SpectrumTab.tsx's extraHorizontalChrome comment. */}
-          {result.spectrum.length > 0 && (
-            <SpectrumTab result={result} analysis={analysis} extraHorizontalChrome={28} />
-          )}
-          {/* Take Reading (the green/accent button) comes first here --
-              Upload sits right below it rather than above, since taking
-              another reading is the more likely next action right after
-              looking at this one. */}
-          {status === 'connected' && <PrimaryButton title="Take Reading" onPress={measure} />}
+        {/* The single action-button slot -- exactly one of these renders,
+            picked by `status`, and it's always in this same spot in the
+            card (right under the charts) whether or not a reading has
+            happened yet. That's the actual fix for "the green button
+            should stay in the same place": it was never really about the
+            button itself moving, it was about there being two different
+            layouts (pre-reading vs. post-reading) with the button in a
+            different spot in each. There's only one layout now. */}
+        {status === 'disconnected' && <PrimaryButton title="Connect to Meter" onPress={connect} />}
+        {status === 'connecting' && <PrimaryButton title="Connecting…" onPress={() => {}} disabled />}
+        {status === 'connected' && <PrimaryButton title="Take Reading" onPress={measure} />}
+        {status === 'measuring' && <PrimaryButton title="Measuring…" onPress={() => {}} disabled />}
+
+        <View style={styles.uploadRow}>
           <PrimaryButton
             title={`Upload to ${HCRI_BRAND_HOST}`}
             onPress={onUpload}
-            disabled={uploading}
+            disabled={uploading || !hasReading}
             variant="muted"
+            style={styles.uploadButton}
           />
-          {status === 'connected' && <PrimaryButton title="Disconnect" onPress={disconnect} variant="muted" />}
+          {/* Replaces the old "Uploaded"/"Upload failed" Alert on success --
+              a failed attempt still raises a real Alert (see HomeScreen.tsx's
+              upload()), since that's the one outcome actually worth
+              interrupting for. */}
+          {uploadSucceeded && <Text style={styles.uploadCheck}>✓</Text>}
         </View>
+        {status === 'connected' && <PrimaryButton title="Disconnect" onPress={disconnect} variant="muted" />}
+      </View>
+
+      {status === 'disconnected' && (
+        /* Troubleshooting for "meter won't reconnect after I reloaded the
+           app without disconnecting it first" -- normally required a
+           power cycle. connect() already tries this automatically, but a
+           visible manual retry is worth having when it doesn't help on
+           the first try. */
+        <TouchableOpacity onPress={resetConnection} style={styles.resetLink}>
+          <Text style={styles.resetLinkText}>Meter won't connect? Reset connection</Text>
+        </TouchableOpacity>
       )}
 
       {/* Opens right after connect()'s scan finds more than one matching

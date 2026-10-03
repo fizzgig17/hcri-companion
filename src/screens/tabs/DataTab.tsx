@@ -38,6 +38,10 @@ interface Props {
   analysis: SpectralAnalysis | null;
   onUpload: () => void;
   uploading: boolean;
+  /** Same uploadSucceeded flag MainTab shows a checkmark for -- see
+   * HomeScreen.tsx's own comment on it. Shown here too since this tab has
+   * its own copy of the Upload button. */
+  uploadSucceeded: boolean;
   /** Upload title/label -- lifted up to HomeScreen so it survives switching
    * tabs and taking multiple readings; only resets when the app itself
    * restarts. See the long comment on this state in HomeScreen.tsx. */
@@ -57,6 +61,7 @@ export default function DataTab({
   analysis,
   onUpload,
   uploading,
+  uploadSucceeded,
   uploadTitle,
   onUploadTitleChange,
   onShareCsv,
@@ -109,6 +114,10 @@ export default function DataTab({
       lineHeight: 14,
       fontFamily: 'monospace',
     },
+
+    uploadRow: { flexDirection: 'row', alignItems: 'center' },
+    uploadButton: { flex: 1 },
+    uploadCheck: { color: colors.accent, fontSize: 20, fontWeight: '700', marginLeft: 10, marginTop: 8 },
 
     fieldLabel: { color: colors.muted, fontSize: 11, marginBottom: 4 },
     // Background/border live on the wrapper, not the TextInput itself, so the
@@ -211,7 +220,18 @@ export default function DataTab({
           </Text>
         </CollapsibleSection>
 
-        <PrimaryButton title={`Upload to ${HCRI_BRAND_HOST}`} onPress={onUpload} disabled={uploading} variant="muted" />
+        <View style={styles.uploadRow}>
+          <PrimaryButton
+            title={`Upload to ${HCRI_BRAND_HOST}`}
+            onPress={onUpload}
+            disabled={uploading}
+            variant="muted"
+            style={styles.uploadButton}
+          />
+          {/* Same inline checkmark MainTab shows instead of a confirmation
+              popup -- see HomeScreen.tsx's upload() for why. */}
+          {uploadSucceeded && <Text style={styles.uploadCheck}>✓</Text>}
+        </View>
         <PrimaryButton title="Share CSV" onPress={onShareCsv} variant="muted" />
       </View>
 
