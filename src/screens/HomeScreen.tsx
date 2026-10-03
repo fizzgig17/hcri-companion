@@ -18,6 +18,7 @@ import { buildCsv, defaultLabel } from '../hcri/buildCsv';
 import { uploadToHcri } from '../hcri/uploadToHcri';
 import { loadHcriCredentials } from '../storage/secureStorage';
 import { loadKeepAwakePreference } from '../storage/preferences';
+import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
 import {
   loadHistory,
   addReading,
@@ -72,6 +73,12 @@ export default function HomeScreen({ navigation }: any) {
   // mount and again every time this screen regains focus (e.g. coming
   // back from Settings after adding/changing an account).
   const [cachedUsername, setCachedUsername] = useState<string | null>(null);
+  // Which measurements MainTab's result card shows, and in what order --
+  // the person's own customization from Settings. Starts from the
+  // built-in default (defaultStatDisplayPrefs()) so the very first render
+  // (before AsyncStorage resolves) shows the same stats it always has,
+  // rather than an empty grid for one frame.
+  const [statIds, setStatIds] = useState<string[]>(() => visibleStatIds(defaultStatDisplayPrefs()));
   const connRef = useRef<MeterConnection | null>(null);
 
   // Every completed measurement, persisted locally (see
@@ -114,6 +121,22 @@ export default function HomeScreen({ navigation }: any) {
     // none at all) in the Upload Title default until the app fully
     // restarted, since this only ever ran once on mount before.
     const unsubscribe = navigation.addListener('focus', loadCachedUsername);
+    return unsubscribe;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigation]);
+
+  useEffect(() => {
+    const loadStatIds = () => {
+      loadStatDisplayPrefs()
+        .then((prefs) => setStatIds(visibleStatIds(prefs)))
+        .catch(() => {});
+    };
+    loadStatIds();
+    // Refresh on focus, same reasoning as cachedUsername above -- this
+    // screen needs to pick up whatever the person just changed in
+    // Settings (reordered/toggled measurements) the moment they come
+    // back, not only on the next app launch.
+    const unsubscribe = navigation.addListener('focus', loadStatIds);
     return unsubscribe;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigation]);
@@ -668,6 +691,7 @@ export default function HomeScreen({ navigation }: any) {
             connectToFoundDevice={connectToFoundDevice}
             onUpload={upload}
             uploading={status === 'uploading'}
+            statIds={statIds}
           />
         )}
         {activeTab === 'spectrum' && <SpectrumTab result={result} analysis={analysis} />}

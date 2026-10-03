@@ -16,6 +16,7 @@ import SpectrumChart from '../../components/SpectrumChart';
 import { colors, statusColors, statusLabels } from '../../theme';
 import { MeterResult } from '../../ble/parseResult';
 import { SpectralAnalysis } from '../../utils/spectralAnalysis';
+import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
 import { HCRI_BRAND_HOST } from '../../hcri/buildTarget';
 
 export type Status = 'disconnected' | 'connecting' | 'connected' | 'measuring' | 'uploading';
@@ -48,6 +49,11 @@ interface Props {
    * typed one); to change the title, that's still done on the Data tab. */
   onUpload: () => void;
   uploading: boolean;
+  /** Which measurements to show in the result card, and in what order --
+   * the person's own customization from Settings (see
+   * storage/statDisplayPrefs.ts), already resolved down to just the
+   * enabled ids by HomeScreen. */
+  statIds: string[];
 }
 
 export default function MainTab({
@@ -65,6 +71,7 @@ export default function MainTab({
   connectToFoundDevice,
   onUpload,
   uploading,
+  statIds,
 }: Props) {
   return (
     <View>
@@ -106,22 +113,31 @@ export default function MainTab({
       {result && analysis && (
         <View style={styles.resultCard}>
           <View style={styles.statGrid}>
-            {/* CCT/Ra/R9/Duv/Rf/Rg here are all spectrum-derived
-                (analyzeSpectrum, hCRI.io's own ported algorithm) -- never
-                the device's onboard fields. Lux is the one exception:
-                hCRI.io's own math has no illuminance output to port (it
-                isn't a CIE 13.3/CCT quantity), so this is still whatever
-                the device itself reported, same as before -- null on
-                models that don't report it (see the 330Pro offset map in
-                protocol.ts). */}
-            <StatCard label="CCT" value={analysis.cct.toFixed(0)} unit="K" />
-            <StatCard label="Ra (CRI)" value={analysis.ra.toFixed(1)} />
-            <StatCard label="Lux" value={result.lux !== null ? result.lux.toFixed(0) : '—'} />
-            <StatCard label="R9" value={analysis.r9.toFixed(1)} />
-            <StatCard label="Duv" value={analysis.duv.toFixed(5)} />
-            <StatCard label="Rf" value={analysis.rf.toFixed(0)} />
-            <StatCard label="Rg" value={analysis.rg.toFixed(0)} />
+            {/* Which measurements show here, and in what order, is the
+                person's own choice from Settings (statIds, already
+                resolved to just the enabled ids in display order -- see
+                storage/statDisplayPrefs.ts). CCT/Ra/R9/Duv/Rf/Rg/x/y/R1-15
+                are all spectrum-derived (analyzeSpectrum, hCRI.io's own
+                ported algorithm) -- never the device's onboard fields.
+                Lux is the one exception: hCRI.io's own math has no
+                illuminance output to port (it isn't a CIE 13.3/CCT
+                quantity), so it's still whatever the device itself
+                reported -- format() returns null on models that don't
+                report it (see the 330Pro offset map in protocol.ts),
+                which is why a tile is skipped rather than shown as a
+                dash: the person asked to see it, there's just nothing to
+                show for this particular meter. */}
+            {statIds.map((id) => {
+              const metric = STAT_METRIC_BY_ID[id];
+              if (!metric) return null;
+              const out = metric.format(result, analysis);
+              if (!out) return null;
+              return <StatCard key={id} label={metric.label} value={out.value} unit={out.unit} compact />;
+            })}
           </View>
+          <Text style={styles.customizeHint}>
+            Tap ⚙ Settings to customize which measurements show here, and in what order.
+          </Text>
           {result.spectrum.length > 0 && <SpectrumChart spectrum={result.spectrum} />}
           <PrimaryButton
             title={`Upload to ${HCRI_BRAND_HOST}`}
@@ -194,7 +210,8 @@ const styles = StyleSheet.create({
     padding: 14,
     marginTop: 16,
   },
-  statGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -6, marginBottom: 4 },
+  statGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -5, marginBottom: 2 },
+  customizeHint: { color: colors.mutedFaint, fontSize: 10.5, marginBottom: 10, textAlign: 'center' },
 
   scanCard: {
     backgroundColor: colors.card,

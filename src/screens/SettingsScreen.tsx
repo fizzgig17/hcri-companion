@@ -4,14 +4,22 @@
 // Keychain), not plaintext -- unlike the ESP32 firmware's NVS storage.
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, Switch, StyleSheet, Alert } from 'react-native';
+import { ScrollView, View, Text, TextInput, Switch, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import PrimaryButton from '../components/PrimaryButton';
+import DraggableStatList from '../components/DraggableStatList';
 import {
   loadHcriCredentials,
   saveHcriCredentials,
   clearHcriCredentials,
 } from '../storage/secureStorage';
 import { loadKeepAwakePreference, saveKeepAwakePreference } from '../storage/preferences';
+import {
+  StatDisplayPrefs,
+  loadStatDisplayPrefs,
+  saveStatDisplayPrefs,
+  defaultStatDisplayPrefs,
+} from '../storage/statDisplayPrefs';
+import { STAT_METRIC_BY_ID } from '../utils/statMetrics';
 import { maskSecret } from '../utils/maskSecret';
 import { colors } from '../theme';
 
@@ -25,6 +33,10 @@ export default function SettingsScreen() {
   // below: the two are never shown/editable at the same time).
   const [loadedToken, setLoadedToken] = useState('');
   const [keepAwake, setKeepAwake] = useState(false);
+  // Which measurements show on the Main tab's result card, and in what
+  // order -- starts from the built-in default so the list renders
+  // immediately (not empty) while loadStatDisplayPrefs() resolves.
+  const [statPrefs, setStatPrefs] = useState<StatDisplayPrefs>(defaultStatDisplayPrefs());
 
   useEffect(() => {
     loadHcriCredentials().then((creds) => {
@@ -40,9 +52,40 @@ export default function SettingsScreen() {
       }
     });
     loadKeepAwakePreference().then(setKeepAwake);
+    loadStatDisplayPrefs().then(setStatPrefs);
     // Intentionally run once on mount only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Both handlers use the functional setState form and persist from the
+  // freshly-computed `next` value, rather than closing over the
+  // `statPrefs` variable above -- that would be a stale read if, say, a
+  // fast double-tap on two different checkboxes both fired from the same
+  // render's closure.
+  const handleReorder = (newOrder: string[]) => {
+    setStatPrefs((prev) => {
+      const next: StatDisplayPrefs = { order: newOrder, enabled: prev.enabled };
+      saveStatDisplayPrefs(next).catch(() => {});
+      return next;
+    });
+  };
+
+  const handleToggleStat = (id: string) => {
+    setStatPrefs((prev) => {
+      const enabled = new Set(prev.enabled);
+      if (enabled.has(id)) enabled.delete(id);
+      else enabled.add(id);
+      const next: StatDisplayPrefs = { order: prev.order, enabled };
+      saveStatDisplayPrefs(next).catch(() => {});
+      return next;
+    });
+  };
+
+  const resetStatsToDefault = () => {
+    const next = defaultStatDisplayPrefs();
+    setStatPrefs(next);
+    saveStatDisplayPrefs(next).catch(() => {});
+  };
 
   const toggleKeepAwake = async (value: boolean) => {
     // Update the toggle immediately rather than waiting on the write to
@@ -84,7 +127,7 @@ export default function SettingsScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       {hasSaved ? (
         // Locked view: credentials are already saved, so the fields are
         // read-only and there's no Save button here at all -- "Forget
@@ -151,12 +194,36 @@ export default function SettingsScreen() {
         </View>
         <Switch value={keepAwake} onValueChange={toggleKeepAwake} trackColor={{ true: colors.accent }} />
       </View>
-    </View>
+
+      <View style={styles.statsSection}>
+        <View style={styles.statsHeaderRow}>
+          <Text style={styles.statsTitle}>Main Screen Measurements</Text>
+          <TouchableOpacity onPress={resetStatsToDefault}>
+            <Text style={styles.statsResetLink}>Reset to Default</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.statsHint}>
+          Check which measurements show on the Main tab after a reading. Hold the ⠿ handle and drag a row to
+          reorder it.
+        </Text>
+        <DraggableStatList
+          order={statPrefs.order}
+          enabled={statPrefs.enabled}
+          labelFor={(id) => STAT_METRIC_BY_ID[id]?.label ?? id}
+          onReorder={handleReorder}
+          onToggle={handleToggleStat}
+        />
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#111', padding: 16 },
+  container: { flex: 1, backgroundColor: '#111' },
+  // Padding lives here (the scrollable content) rather than on the
+  // ScrollView's own `style` -- padding on the outer style can clip the
+  // last bit of content at the bottom of a scroll on some platforms.
+  contentContainer: { padding: 16, paddingBottom: 32 },
   label: { color: '#999', marginTop: 14, marginBottom: 6 },
   input: {
     backgroundColor: '#1c1c1c',
@@ -196,4 +263,15 @@ const styles = StyleSheet.create({
   toggleTextWrap: { flex: 1, marginRight: 12 },
   toggleLabel: { color: '#eee', fontSize: 14, fontWeight: '600', marginBottom: 4 },
   toggleHint: { color: '#999', fontSize: 12, lineHeight: 16 },
+
+  statsSection: {
+    marginTop: 28,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#2a2a2e',
+  },
+  statsHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  statsTitle: { color: '#eee', fontSize: 14, fontWeight: '600' },
+  statsResetLink: { color: colors.info, fontSize: 12.5 },
+  statsHint: { color: '#999', fontSize: 12, lineHeight: 16, marginTop: 4, marginBottom: 14 },
 });
