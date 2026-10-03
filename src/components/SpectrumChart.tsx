@@ -196,8 +196,29 @@ export default function SpectrumChart({ spectrum, height = 200, width }: Props) 
           // the nearest point -- onResponderMove (not just Grant) is what
           // makes this a drag rather than a tap-only control, matching the
           // vendor app's own touch/drag behavior on its Spec. tab.
+          //
+          // This chart normally sits inside TWO other things fighting for
+          // the same gesture: SwipablePages' own horizontal, paged
+          // ScrollView (Spectrum/Chrom/R-Values) wrapping it directly, and
+          // the screen's outer vertical ScrollView above that. Only
+          // claiming the responder on *Start (what the original version of
+          // this did) loses a negotiation against either one the moment
+          // the finger actually moves -- a native ScrollView's own pan
+          // gesture recognizer can still steal an in-progress touch from a
+          // plain JS responder, which is exactly what made dragging the
+          // crosshair feel like it "doesn't move very easily" (every
+          // other drag was being read as a page-swipe or a scroll
+          // instead). The *Capture variants claim it in the capture phase,
+          // before either ancestor's bubble-phase handler gets a look, and
+          // onResponderTerminationRequest refusing to yield keeps it
+          // claimed for the rest of this one gesture -- so a finger that's
+          // down on this chart only ever moves this line, never the page
+          // or the scroll position, until it lifts.
           onStartShouldSetResponder={() => true}
           onMoveShouldSetResponder={() => true}
+          onStartShouldSetResponderCapture={() => true}
+          onMoveShouldSetResponderCapture={() => true}
+          onResponderTerminationRequest={() => false}
           onResponderGrant={handleTouch}
           onResponderMove={handleTouch}
         >

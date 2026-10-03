@@ -128,30 +128,6 @@ export default function HomeScreen({ navigation }: any) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigation]);
 
-  // Whether backgrounding the app should leave the meter connected (the
-  // default) or disconnect it -- the Settings toggle backing
-  // preferences.ts's loadStayConnectedInBackgroundPreference(). Read into
-  // a ref, not state: the AppState effect further down subscribes exactly
-  // once for this component's lifetime (see its own comment, same
-  // reasoning as statusRef below), so whatever that closure reads needs to
-  // live somewhere it can check fresh on every background event without
-  // re-subscribing every time the preference changes.
-  const stayConnectedInBackgroundRef = useRef(true);
-  useEffect(() => {
-    const loadPref = () => {
-      loadStayConnectedInBackgroundPreference().then((enabled) => {
-        stayConnectedInBackgroundRef.current = enabled;
-      });
-    };
-    loadPref();
-    // Refresh on focus, same reasoning as cachedUsername/statIds above --
-    // picks up a toggle flipped in Settings without needing an app
-    // restart or a fresh background/foreground cycle first.
-    const unsubscribe = navigation.addListener('focus', loadPref);
-    return unsubscribe;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navigation]);
-
   // Whether to keep the verbose-only log lines (BLE hex dumps, the raw
   // result body -- see MeterConnection.ts/takeMeasurement.ts's `verbose`
   // flag) when they reach appendLog -- the preference itself now lives in
@@ -533,12 +509,31 @@ export default function HomeScreen({ navigation }: any) {
       // Settings toggle off restores the original always-disconnect
       // behavior (and its battery savings) for anyone who'd rather have
       // that instead.
-      if (stayConnectedInBackgroundRef.current) {
-        appendLog(`App moved to ${nextAppState} -- staying connected (see Settings to change this).`);
-        return;
-      }
-      appendLog(`App moved to ${nextAppState} -- disconnecting meter.`);
-      disconnect();
+      //
+      // Read fresh from storage right here, rather than off a ref kept in
+      // sync by this screen's own focus events -- this screen can easily
+      // still be mounted-but-not-focused (the bottom tab bar keeps every
+      // tab's screen alive) when the person flips this in Settings and
+      // then backgrounds the app straight from there, never revisiting
+      // Main first. A focus-refreshed ref would stay stale through
+      // exactly that path, which is what made the toggle look like it
+      // wasn't being respected.
+      loadStayConnectedInBackgroundPreference().then((stayConnected) => {
+        // Re-check what's actually true by the time this resolves (still
+        // backgrounded, still connected, not mid-share) rather than acting
+        // on whatever was true when the AppState event first fired --
+        // this is an async gap, however short, and the app could have
+        // come back to the foreground or started a share in the meantime.
+        if (AppState.currentState === 'active') return;
+        if (isBackgroundDisconnectSuppressed()) return;
+        if (statusRef.current === 'disconnected') return;
+        if (stayConnected) {
+          appendLog(`App moved to ${nextAppState} -- staying connected (see Settings to change this).`);
+          return;
+        }
+        appendLog(`App moved to ${nextAppState} -- disconnecting meter.`);
+        disconnect();
+      });
     });
     return () => subscription.remove();
   }, [appendLog, connect, disconnect]);
