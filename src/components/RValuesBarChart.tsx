@@ -21,8 +21,8 @@
 // `ri` is analysis.ri from spectralAnalysis.ts -- index 0 is R1, index 14
 // is R15, exactly like every other place in this app that reads R-values.
 
-import React, { useState } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import React from 'react';
+import { View, StyleSheet, useWindowDimensions } from 'react-native';
 import Svg, { Rect, Line, Text as SvgText } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -30,6 +30,10 @@ interface Props {
   ri: number[];
   height?: number;
 }
+
+// Horizontal chrome this chart always sits inside -- same chartCard and
+// screen padding as SpectrumChart.tsx (see its matching constant).
+const HORIZONTAL_CHROME = 52;
 
 // Copied verbatim from hcri.io's ReportView.jsx (TCS_COLORS) -- one fixed
 // color per TCS sample (1-15), not derived from the value itself, so Ri's
@@ -67,27 +71,15 @@ function readableTextOn(hex: string): string {
 
 export default function RValuesBarChart({ ri, height }: Props) {
   const { colors } = useTheme();
-  // Seeded as an estimate of the real width rather than 0, for the same
-  // reason as SpectrumChart.tsx's own width state (see its longer
-  // comment): this mounts at the same moment as the other two
-  // SpectrumTab pages (SwipablePages mounts all three pages together,
-  // not lazily per swipe), so it's exposed to the same first-reading
-  // JS-thread congestion that can delay onLayout -- seeding at 0 here
-  // would risk the same "blank on the first reading" bug, even though
-  // this particular page usually isn't the one on screen yet.
-  //
-  // Like SpectrumChart, seeded as window width minus 52 rather than the
-  // raw window width: this chart sits inside the exact same chartCard
-  // (padding: 10 each side) inside the same screen scroll content
-  // (paddingHorizontal: 16 each side), so the real width is always ~52px
-  // narrower than the window. Using the raw window width overshot by
-  // that much and then snapped narrower the instant onLayout corrected
-  // it -- the "starts wide then narrows" glitch, repeating on every
-  // remount (swiping to this page, then away and back to the tab above
-  // it). Subtracting the known 52px gets the first paint close enough
-  // that the correction isn't visible, without losing the no-blank-chart
-  // guarantee a 0 seed would give up.
-  const [width, setWidth] = useState(() => Dimensions.get('window').width - 52);
+  // Computed directly, not measured -- see SpectrumChart.tsx's longer
+  // comment on the same change. This chart sits inside the exact same
+  // chrome (chartCard padding + screen padding), so its width is a known
+  // function of the window width rather than something onLayout needs to
+  // discover and then correct -- which removes both the old risk of a
+  // blank chart while onLayout was pending AND the "wide then narrow"
+  // shift a corrected estimate still caused.
+  const { width: windowWidth } = useWindowDimensions();
+  const width = windowWidth - HORIZONTAL_CHROME;
 
   const items = ri
     .map((v, i) => ({ i: i + 1, v }))
@@ -97,7 +89,7 @@ export default function RValuesBarChart({ ri, height }: Props) {
   const chartHeight = height ?? Math.max(220, rowCount * 22 + 28);
 
   if (items.length === 0) {
-    return <View style={{ height: chartHeight }} onLayout={(e) => setWidth(e.nativeEvent.layout.width)} />;
+    return <View style={{ height: chartHeight }} />;
   }
 
   const lo = Math.min(0, ...items.map((d) => d.v));
@@ -122,7 +114,7 @@ export default function RValuesBarChart({ ri, height }: Props) {
   });
 
   return (
-    <View style={styles.container} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+    <View style={styles.container}>
       {width > 0 && (
         <Svg width={width} height={chartHeight}>
           {/* Gridlines every 20, with the tick value labeled above the plot area. */}
