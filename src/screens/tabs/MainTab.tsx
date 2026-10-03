@@ -233,13 +233,20 @@ export default function MainTab({
         <Text style={styles.customizeHint}>
           Tap ⚙ Settings to customize which measurements show here, and in what order.
         </Text>
-        {/* resultCard (below) wraps this in its own padding: 14 each
-            side -- SpectrumTab/SwipablePages/the charts all otherwise
-            only know about the screen's own 16-each-side scroll
-            padding, which used to make every chart on THIS tab render
-            28px wider than the real room resultCard leaves for it --
-            see SpectrumTab.tsx's extraHorizontalChrome comment. */}
-        <SpectrumTab result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={28} />
+        {/* resultCard (below) wraps this in its own padding: 14 AND
+            borderWidth: 1 each side (30px combined) -- SpectrumTab/
+            SwipablePages/the charts all otherwise only know about the
+            screen's own 16-each-side scroll padding, which used to make
+            every chart on THIS tab render wider than the real room
+            resultCard leaves for it. Confirmed 2026-10-03: this was
+            passing 28 (padding only) for a long time, which undercounts
+            resultCard's own 1px border by 2px combined -- a smaller
+            version of the exact bug SpectrumTab.tsx's CARD_PADDING had
+            for its own chartCard/chromCard, just one level further out,
+            and the reason charts still looked clipped on the right after
+            CARD_PADDING alone was fixed. See SpectrumTab.tsx's
+            extraHorizontalChrome comment. */}
+        <SpectrumTab result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} />
 
         {/* The single action-button slot -- exactly one of these renders,
             picked by `status`, and it's always in this same spot in the

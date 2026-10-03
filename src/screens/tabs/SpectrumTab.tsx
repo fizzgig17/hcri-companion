@@ -43,16 +43,20 @@ interface Props {
    * chrome there'd ever be. ReadingDetailScreen really does render
    * SpectrumTab directly inside its own padded scroll content, so 0
    * (the default) is correct there. MainTab, though, additionally wraps
-   * it in its own `resultCard` (padding: 14 each side, 28px total) --
+   * it in its own `resultCard` (padding: 14 AND borderWidth: 1 each
+   * side -- 30px combined, not just the 28px of padding alone) --
    * confirmed 2026-10-03 as the actual cause of "the box around the
    * chart is too big for the viewport, missing left or right lines":
    * every chart was computing its width as if only the screen's 32px
    * padding existed, so on Main every chart (and the swipeable pager
-   * itself) rendered 28px wider than the real room left inside
-   * resultCard, pushing their right edge (and the pager's forced page
-   * width, which every chart's own container stretches to fill) out
-   * past the card's visible border. MainTab now passes its real 28px
-   * here instead.
+   * itself) rendered wider than the real room left inside resultCard,
+   * pushing their right edge (and the pager's forced page width, which
+   * every chart's own container stretches to fill) out past the card's
+   * visible border. First fixed by passing 28 here (resultCard's padding
+   * alone), which turned out to still be 2px short -- resultCard's own
+   * 1px border on each side was never counted either, the same mistake
+   * CARD_PADDING below made one level in for chartCard/chromCard's own
+   * border. MainTab now passes its real 30px here instead.
    */
   extraHorizontalChrome?: number;
 }
