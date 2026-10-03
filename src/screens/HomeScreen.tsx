@@ -17,7 +17,7 @@ import { analyzeSpectrum } from '../utils/spectralAnalysis';
 import { buildCsv, defaultLabel } from '../hcri/buildCsv';
 import { uploadToHcri } from '../hcri/uploadToHcri';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
-import { loadKeepAwakePreference } from '../storage/preferences';
+import { loadKeepAwakePreference, loadStayConnectedInBackgroundPreference } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
 import { addReading } from '../storage/readingHistory';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
@@ -69,6 +69,16 @@ export default function HomeScreen({ navigation }: any) {
   // restarts (a fresh useState initializer) -- exactly "persist during a
   // session that isn't reset."
   const [uploadTitle, setUploadTitle] = useState('');
+  // Whether the most recent upload attempt for the CURRENT reading
+  // succeeded -- drives the small inline checkmark MainTab/DataTab show
+  // next to their Upload button instead of a confirmation popup on every
+  // single upload. Reset to false the moment a new reading comes in (see
+  // measure() below), so a stale checkmark from a previous reading's
+  // upload never sits next to a result it doesn't actually describe. A
+  // failed attempt doesn't set this at all -- that still raises a real
+  // Alert (see upload() below), which is the one outcome worth
+  // interrupting for.
+  const [uploadSucceeded, setUploadSucceeded] = useState(false);
   // Cached just for building default labels/previews (defaultLabel()) --
   // the actual upload/measure() paths each load fresh credentials from
   // secureStorage right before they need them, so a stale value here can
@@ -346,6 +356,10 @@ export default function HomeScreen({ navigation }: any) {
     try {
       const r = await takeMeasurement(connRef.current, appendLog);
       setResult(r);
+      // A fresh reading hasn't been uploaded yet -- clears any checkmark
+      // left over from the PREVIOUS reading's upload, which would
+      // otherwise keep showing next to a result it no longer describes.
+      setUploadSucceeded(false);
       setStatus('connected');
       hapticSuccess();
 
@@ -486,10 +500,40 @@ export default function HomeScreen({ navigation }: any) {
         appendLog(`App moved to ${nextAppState} during a share -- not disconnecting.`);
         return;
       }
-      if (statusRef.current !== 'disconnected') {
+      if (statusRef.current === 'disconnected') return;
+      // Stay-connected is the default (see preferences.ts) -- most trips to
+      // the background are brief (checking something else, a screen lock,
+      // an incoming call) and not actually "done with this session," so
+      // dropping the BLE link on every single one of those used to mean a
+      // full re-scan/re-handshake on every return trip. Flipping the
+      // Settings toggle off restores the original always-disconnect
+      // behavior (and its battery savings) for anyone who'd rather have
+      // that instead.
+      //
+      // Read fresh from storage right here, rather than off a ref kept in
+      // sync by this screen's own focus events -- this screen can easily
+      // still be mounted-but-not-focused (the bottom tab bar keeps every
+      // tab's screen alive) when the person flips this in Settings and
+      // then backgrounds the app straight from there, never revisiting
+      // Main first. A focus-refreshed ref would stay stale through
+      // exactly that path, which is what made the toggle look like it
+      // wasn't being respected.
+      loadStayConnectedInBackgroundPreference().then((stayConnected) => {
+        // Re-check what's actually true by the time this resolves (still
+        // backgrounded, still connected, not mid-share) rather than acting
+        // on whatever was true when the AppState event first fired --
+        // this is an async gap, however short, and the app could have
+        // come back to the foreground or started a share in the meantime.
+        if (AppState.currentState === 'active') return;
+        if (isBackgroundDisconnectSuppressed()) return;
+        if (statusRef.current === 'disconnected') return;
+        if (stayConnected) {
+          appendLog(`App moved to ${nextAppState} -- staying connected (see Settings to change this).`);
+          return;
+        }
         appendLog(`App moved to ${nextAppState} -- disconnecting meter.`);
         disconnect();
-      }
+      });
     });
     return () => subscription.remove();
   }, [appendLog, connect, disconnect]);
@@ -506,6 +550,10 @@ export default function HomeScreen({ navigation }: any) {
     }
 
     setStatus('uploading');
+    // Clears any checkmark left over from a previous attempt on this same
+    // reading while this one is in flight, rather than leaving a stale
+    // "succeeded" showing during a retry.
+    setUploadSucceeded(false);
     const csv = buildCsv(result);
     // Use whatever the person typed as the upload title if there's anything
     // there; fall back to the generated username+timestamp label only when
@@ -514,14 +562,18 @@ export default function HomeScreen({ navigation }: any) {
     const label = uploadTitle.trim() || defaultLabel(creds.username, result.deviceName);
     const res = await uploadToHcri(csv, label, creds.token, appendLog);
     // The raw server response (res.message -- hCRI.io's API returns JSON)
-    // still goes to Logs for anyone actually debugging an upload; the
-    // popup itself just says what happened, same plain-language style as
-    // HistoryScreen's own bulk-upload summary.
+    // still goes to Logs for anyone actually debugging an upload either way.
     appendLog(res.message);
-    Alert.alert(
-      res.success ? 'Uploaded' : 'Upload failed',
-      res.success ? `Uploaded "${label}".` : `Could not upload "${label}". Check Logs for details.`
-    );
+    if (res.success) {
+      // No confirmation popup on success any more -- MainTab/DataTab show
+      // a small inline checkmark next to the Upload button instead, so a
+      // routine upload doesn't need a tap-to-dismiss modal every time.
+      setUploadSucceeded(true);
+    } else {
+      // A failure is still worth interrupting for -- this is the one
+      // outcome that keeps the real Alert.
+      Alert.alert('Upload failed', `Could not upload "${label}". Check Logs for details.`);
+    }
     setStatus('connected');
   }, [result, navigation, appendLog, uploadTitle]);
 
@@ -619,6 +671,7 @@ export default function HomeScreen({ navigation }: any) {
             onDismissDevicePicker={dismissDevicePicker}
             onUpload={upload}
             uploading={status === 'uploading'}
+            uploadSucceeded={uploadSucceeded}
             statIds={statIds}
             connectedDeviceName={deviceName}
           />
@@ -629,6 +682,7 @@ export default function HomeScreen({ navigation }: any) {
             analysis={analysis}
             onUpload={upload}
             uploading={status === 'uploading'}
+            uploadSucceeded={uploadSucceeded}
             uploadTitle={uploadTitle}
             onUploadTitleChange={setUploadTitle}
             onShareCsv={shareCurrentCsv}

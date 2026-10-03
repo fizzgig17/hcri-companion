@@ -45,6 +45,31 @@ export async function saveVerboseLoggingPreference(enabled: boolean): Promise<vo
   await AsyncStorage.setItem(VERBOSE_LOGGING_KEY, enabled ? 'true' : 'false');
 }
 
+// Default ON ("stay connected") -- a backgrounded app (switching briefly
+// to check something else, a screen lock, an incoming call) used to always
+// drop the BLE link, which meant a full re-scan/re-handshake on every
+// single return trip even for a few-second trip away. Most of the time
+// that's not actually "the person is done with this session," so staying
+// connected is the better default; flipping this off in Settings restores
+// the original disconnect-on-background behavior (and its battery
+// savings) for anyone who'd rather have that. See HomeScreen.tsx's
+// AppState effect for where this is actually read.
+const STAY_CONNECTED_IN_BACKGROUND_KEY = 'hcri.io.pref.stayConnectedInBackground';
+
+export async function loadStayConnectedInBackgroundPreference(): Promise<boolean> {
+  const raw = await AsyncStorage.getItem(STAY_CONNECTED_IN_BACKGROUND_KEY);
+  // No stored value yet (fresh install, or a build from before this
+  // setting existed) -- default true, not the usual "missing means off"
+  // reading the other preferences in this file use, since true is the
+  // behavior this setting is supposed to default to (see the comment
+  // above).
+  return raw === null ? true : raw === 'true';
+}
+
+export async function saveStayConnectedInBackgroundPreference(enabled: boolean): Promise<void> {
+  await AsyncStorage.setItem(STAY_CONNECTED_IN_BACKGROUND_KEY, enabled ? 'true' : 'false');
+}
+
 // Defaults to 'system' -- a fresh install should follow the phone's own
 // light/dark setting rather than forcing dark (this app's original, only
 // look) on someone whose phone is set to light mode. Light and Dark are

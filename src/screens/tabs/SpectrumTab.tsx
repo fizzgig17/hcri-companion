@@ -43,16 +43,20 @@ interface Props {
    * chrome there'd ever be. ReadingDetailScreen really does render
    * SpectrumTab directly inside its own padded scroll content, so 0
    * (the default) is correct there. MainTab, though, additionally wraps
-   * it in its own `resultCard` (padding: 14 each side, 28px total) --
+   * it in its own `resultCard` (padding: 14 AND borderWidth: 1 each
+   * side -- 30px combined, not just the 28px of padding alone) --
    * confirmed 2026-10-03 as the actual cause of "the box around the
    * chart is too big for the viewport, missing left or right lines":
    * every chart was computing its width as if only the screen's 32px
    * padding existed, so on Main every chart (and the swipeable pager
-   * itself) rendered 28px wider than the real room left inside
-   * resultCard, pushing their right edge (and the pager's forced page
-   * width, which every chart's own container stretches to fill) out
-   * past the card's visible border. MainTab now passes its real 28px
-   * here instead.
+   * itself) rendered wider than the real room left inside resultCard,
+   * pushing their right edge (and the pager's forced page width, which
+   * every chart's own container stretches to fill) out past the card's
+   * visible border. First fixed by passing 28 here (resultCard's padding
+   * alone), which turned out to still be 2px short -- resultCard's own
+   * 1px border on each side was never counted either, the same mistake
+   * CARD_PADDING below made one level in for chartCard/chromCard's own
+   * border. MainTab now passes its real 30px here instead.
    */
   extraHorizontalChrome?: number;
 }
@@ -62,8 +66,19 @@ interface Props {
 // / padding: 16 -- 16px each side) -- true for every host of this
 // component regardless of extraHorizontalChrome above.
 const SCREEN_PADDING = 32;
-// Each chart's own chartCard, below, has padding: 10 each side.
-const CARD_PADDING = 20;
+// Each chart's own chartCard/chromCard, below, has padding: 10 AND
+// borderWidth: 1 each side -- 22px of combined horizontal inset, not just
+// the 20px of padding alone. Confirmed 2026-10-03 as the actual "right
+// side is cut off, charts are slightly too big for where they are" bug:
+// this constant used to only subtract the padding, so every chart's own
+// SVG was drawn 2px wider than the room the card's border really left
+// for it. That 2px used to just quietly overlap the card's own border
+// line; once chartCard/chromCard picked up overflow: 'hidden' (to stop
+// content spilling past the Chrom page's rounded corner), those same 2px
+// started getting hard-clipped off the right edge instead -- visible
+// now, when it was only ever cosmetically overlapping the border line
+// before.
+const CARD_PADDING = 22;
 
 export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 0 }: Props) {
   const { colors } = useTheme();
@@ -84,6 +99,13 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
     empty: { paddingVertical: 40, alignItems: 'center' },
     emptyText: { color: colors.muted, fontSize: 13 },
 
+    // overflow: 'hidden' on both of these -- confirmed 2026-10-03: without
+    // it, a child that draws right up to its own edge (the Chrom page's
+    // CCT label column in particular, see ChromaticityChart.tsx) can
+    // visibly spill a few px past this card's rounded corner instead of
+    // being clipped to it, since a plain View doesn't clip its children
+    // to its own border-radius by default. Harmless on the other two
+    // pages, which don't draw anything that close to their own edge.
     chartCard: {
       backgroundColor: colors.card,
       borderRadius: 12,
@@ -91,6 +113,29 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
       borderColor: colors.cardBorder,
       padding: 10,
       marginBottom: 12,
+      overflow: 'hidden',
+    },
+    // Same card as chartCard above (identical radius/border/padding, so
+    // the border reads as the same shape swiping from either neighboring
+    // page) but with a guaranteed white background instead of the
+    // theme's card color -- the CIE diagram's colors (and the reference
+    // image it matches) assume a plain white backdrop regardless of
+    // light/dark mode, same reasoning ChromaticityChart's own plot-box
+    // Polygon fill has always used. Only the chart's background color
+    // differs between these two styles; keeping the radius/border
+    // identical is what actually fixes "the border doesn't line up
+    // between tabs" -- the Chrom page used to nest a SECOND, differently-
+    // rounded white box (ChromaticityChart's own `container` style)
+    // inside this one, which is what made its border look different from
+    // Spectrum/R-Values' as you swiped between them.
+    chromCard: {
+      backgroundColor: '#ffffff',
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      padding: 10,
+      marginBottom: 12,
+      overflow: 'hidden',
     },
     spectrumRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3 },
     spectrumNm: { color: colors.muted, fontSize: 12, fontFamily: 'monospace' },
@@ -135,7 +180,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
           key: 'chrom',
           label: 'Chrom',
           content: (
-            <View style={styles.chartCard}>
+            <View style={styles.chromCard}>
               {/* Shorter than the original 280 -- trimmed because this
                   page (plus the measurement grid and docked tab bar above
                   it) was running long on Main. The diagram's X/Y domain

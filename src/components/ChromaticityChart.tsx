@@ -6,6 +6,12 @@
 // values in the right margin with no leader lines, and wavelength numbers
 // along the locus border in their own hue).
 //
+// The white background is drawn by the plot-box Polygon below for the
+// chart itself, but the white backdrop behind the title/margins (outside
+// that polygon -- the "CIE 1931" title, the CCT label column, the x/y
+// annotation) is supplied by SpectrumTab's own chromCard wrapper now, not
+// by this component -- see this file's styles for why.
+//
 // The x/y/CCT/Duv this chart is handed come from analyzeSpectrum() in
 // ../utils/spectralAnalysis.ts -- a line-for-line port of hCRI.io's own
 // production algorithm (spd.php), computed once per reading in
@@ -364,6 +370,15 @@ export default function ChromaticityChart({ x, y, cct, height = 300, width }: Pr
 }
 
 const styles = StyleSheet.create({
-  container: { width: '100%', backgroundColor: '#ffffff', borderRadius: 8, paddingTop: 6 },
+  // No background/borderRadius of its own any more -- see this file's own
+  // top comment. SpectrumTab now supplies the white backdrop (via its
+  // chromCard style) at the SAME radius as the other two swipeable pages'
+  // chartCard, so there's exactly one rounded border per page instead of
+  // this chart nesting a second one (its own 8px radius) a few px inside
+  // chartCard's 12px one -- confirmed 2026-10-03 as what actually made
+  // the Chrom page's border look different from Spectrum/R-Values' when
+  // swiping between them, and let this chart's own right-margin content
+  // (the CCT label column) sit right at an edge nothing was clipping to.
+  container: { width: '100%', paddingTop: 6 },
   title: { textAlign: 'center', color: '#1a3d7c', fontSize: 14, fontWeight: '700', marginBottom: 2 },
 });

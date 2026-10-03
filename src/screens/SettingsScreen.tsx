@@ -17,6 +17,8 @@ import {
   saveKeepAwakePreference,
   loadVerboseLoggingPreference,
   saveVerboseLoggingPreference,
+  loadStayConnectedInBackgroundPreference,
+  saveStayConnectedInBackgroundPreference,
 } from '../storage/preferences';
 import {
   StatDisplayPrefs,
@@ -50,6 +52,10 @@ export default function SettingsScreen() {
   // below: the two are never shown/editable at the same time).
   const [loadedToken, setLoadedToken] = useState('');
   const [keepAwake, setKeepAwake] = useState(false);
+  // Default true ("stay connected") -- matches loadStayConnectedInBackground
+  // Preference()'s own default, so this starts on the right value even
+  // before that first load resolves rather than flashing "off" for a frame.
+  const [stayConnectedInBackground, setStayConnectedInBackground] = useState(true);
   // Default OFF -- see preferences.ts's loadVerboseLoggingPreference/
   // HomeScreen.tsx's appendLog for what this actually gates (the BLE hex
   // dumps and full raw-result-body dump, not the ordinary connect/measure
@@ -74,6 +80,7 @@ export default function SettingsScreen() {
       }
     });
     loadKeepAwakePreference().then(setKeepAwake);
+    loadStayConnectedInBackgroundPreference().then(setStayConnectedInBackground);
     loadVerboseLoggingPreference().then(setVerboseLogging);
     loadStatDisplayPrefs().then(setStatPrefs);
     // Intentionally run once on mount only.
@@ -119,6 +126,15 @@ export default function SettingsScreen() {
     // be told about this change directly.
     setKeepAwake(value);
     await saveKeepAwakePreference(value);
+  };
+
+  const toggleStayConnectedInBackground = async (value: boolean) => {
+    // Same "feel instant" reasoning as toggleKeepAwake above. HomeScreen
+    // reads this preference itself (via a ref refreshed on focus, not from
+    // this component's state) the next time the app is backgrounded, so it
+    // doesn't need to be told about this change directly either.
+    setStayConnectedInBackground(value);
+    await saveStayConnectedInBackgroundPreference(value);
   };
 
   const toggleVerboseLogging = async (value: boolean) => {
@@ -362,6 +378,22 @@ export default function SettingsScreen() {
           </Text>
         </View>
         <Switch value={keepAwake} onValueChange={toggleKeepAwake} trackColor={{ true: colors.accent }} />
+      </View>
+
+      <View style={styles.toggleRow}>
+        <View style={styles.toggleTextWrap}>
+          <Text style={styles.toggleLabel}>Stay connected in background</Text>
+          <Text style={styles.toggleHint}>
+            Keeps the meter connected when you switch away from the app or lock the screen, so coming back
+            doesn't need a fresh reconnect. Turn off to disconnect the meter whenever the app isn't in the
+            foreground instead (saves the meter's battery, at the cost of reconnecting every time).
+          </Text>
+        </View>
+        <Switch
+          value={stayConnectedInBackground}
+          onValueChange={toggleStayConnectedInBackground}
+          trackColor={{ true: colors.accent }}
+        />
       </View>
 
       <View style={styles.toggleRow}>
