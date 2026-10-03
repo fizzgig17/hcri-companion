@@ -256,7 +256,12 @@ const styles = StyleSheet.create({
   // Padding lives here (the scrollable content) rather than on the
   // ScrollView's own `style` -- padding on the outer style can clip the
   // last bit of content at the bottom of a scroll on some platforms.
-  contentContainer: { padding: 16, paddingBottom: 32 },
+  // paddingBottom is generous, not just enough to clear the content itself
+  // -- this screen has no SafeAreaView of its own, so nothing else is
+  // reserving room for the home indicator/nav bar below the last field,
+  // and the draggable measurement list (DraggableStatList) can run long
+  // enough that a tighter value left it crowding the bottom of the screen.
+  contentContainer: { padding: 16, paddingBottom: 56 },
   label: { color: '#999', marginTop: 14, marginBottom: 6 },
   input: {
     backgroundColor: '#1c1c1c',

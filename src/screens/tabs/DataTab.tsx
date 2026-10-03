@@ -17,6 +17,15 @@ import { MeterResult } from '../../ble/parseResult';
 import { SpectralAnalysis } from '../../utils/spectralAnalysis';
 import { buildCsv, defaultLabel } from '../../hcri/buildCsv';
 import { HCRI_BRAND_HOST } from '../../hcri/buildTarget';
+import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
+
+// The core colorimetric numbers (CCT/Ra/Duv/Lux/Rf/R9/Rg), still worth
+// having right here rather than only on Main -- but as a compact, plain
+// text summary line rather than the big StatCard tiles this tab used to
+// show, which just duplicated Main's own (customizable) result card.
+// Pulled from the same statMetrics.ts registry Main uses, so the
+// formatting (decimal places, units) always matches exactly.
+const SUMMARY_METRIC_IDS = ['cct', 'ra', 'duv', 'lux', 'rf', 'r9', 'rg'];
 
 interface Props {
   result: MeterResult | null;
@@ -64,6 +73,23 @@ export default function DataTab({
   return (
     <View>
       <View style={styles.card}>
+        <View style={styles.summaryRow}>
+          {SUMMARY_METRIC_IDS.map((id) => {
+            const metric = STAT_METRIC_BY_ID[id];
+            const out = metric?.format(result, analysis);
+            if (!out) return null;
+            return (
+              <View key={id} style={styles.summaryItem}>
+                <Text style={styles.summaryValue}>
+                  {out.value}
+                  {out.unit ? <Text style={styles.summaryUnit}> {out.unit}</Text> : null}
+                </Text>
+                <Text style={styles.summaryLabel}>{metric.label}</Text>
+              </View>
+            );
+          })}
+        </View>
+
         <Text style={styles.fieldLabel}>Upload Title</Text>
         {/* The default (username + date + time + timezone + device -- long
             enough to need wrapping) is rendered as a plain overlaid <Text>
@@ -172,6 +198,23 @@ const styles = StyleSheet.create({
   },
   rowLabel: { color: colors.muted, fontSize: 12 },
   rowValue: { color: colors.text, fontSize: 12, fontFamily: 'monospace' },
+
+  // Compact, plain-text summary of the core colorimetric numbers -- small
+  // and unboxed on purpose (no tile background/border like StatCard),
+  // since this is just a quick-reference recap of what Main's result card
+  // already showed prominently, not a second place to feature them.
+  summaryRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingBottom: 10,
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.cardBorder,
+  },
+  summaryItem: { width: '33.33%', marginBottom: 6 },
+  summaryValue: { color: colors.text, fontSize: 13, fontWeight: '600', fontFamily: 'monospace' },
+  summaryUnit: { color: colors.muted, fontSize: 10, fontWeight: '400' },
+  summaryLabel: { color: colors.muted, fontSize: 10 },
 
   csvPreview: {
     color: colors.text,

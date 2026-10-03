@@ -809,7 +809,13 @@ export default function HomeScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: 16, paddingBottom: 40 },
+  // paddingBottom is extra-generous (not just enough to clear the home
+  // indicator/nav bar) because this ScrollView is shared by every tab --
+  // Data's and History's own content (collapsible sections expanded,
+  // a long reading list) can run considerably taller than Main's, and
+  // this is the one padding value that has to leave room for all of them
+  // without the bottom-most content ever crowding the edge of the screen.
+  content: { padding: 16, paddingBottom: 56 },
 
   headerRow: {
     flexDirection: 'row',
