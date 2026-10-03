@@ -349,18 +349,18 @@ export default function ChromaticityChart({ x, y, cct, height = 300 }: Props) {
           {Number.isFinite(x) && Number.isFinite(y) && (
             <>
               <Rect
-                x={PADDING.left + 4}
-                y={PADDING.top + 4}
+                x={PADDING.left + 2}
+                y={PADDING.top - 2}
                 width={64}
-                height={30}
+                height={26}
                 rx={4}
                 fill="#ffffff"
                 opacity={0.85}
               />
-              <SvgText x={PADDING.left + 9} y={PADDING.top + 16} fontSize={10} fill="#333" fontFamily="monospace">
+              <SvgText x={PADDING.left + 7} y={PADDING.top + 8} fontSize={10} fill="#333" fontFamily="monospace">
                 x {x.toFixed(4)}
               </SvgText>
-              <SvgText x={PADDING.left + 9} y={PADDING.top + 28} fontSize={10} fill="#333" fontFamily="monospace">
+              <SvgText x={PADDING.left + 7} y={PADDING.top + 20} fontSize={10} fill="#333" fontFamily="monospace">
                 y {y.toFixed(4)}
               </SvgText>
             </>

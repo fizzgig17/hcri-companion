@@ -1,12 +1,15 @@
 // src/screens/tabs/DataTab.tsx
 //
-// The "Data" tab: the numeric stat grid (CCT, Ra, Lux, R9, Duv), the full
-// R1-R15 breakdown, chromaticity coordinates, device info -- and the
-// Upload to hCRI.io button, since that acts on this same result data.
+// The "Data" tab: the Upload Title editor, a preview of exactly what will
+// be uploaded, the full R1-R15 breakdown, chromaticity coordinates, and
+// device info -- plus the Upload to hCRI.io and Share CSV buttons, since
+// those act on this same result data. No longer leads with a stat grid
+// (CCT/Ra/Lux/R9/Duv) -- Main's own result card already shows those,
+// customizable, right where the reading is taken; repeating them here
+// was just the same numbers twice.
 
 import React from 'react';
 import { View, Text, TextInput, StyleSheet } from 'react-native';
-import StatCard from '../../components/StatCard';
 import PrimaryButton from '../../components/PrimaryButton';
 import CollapsibleSection from '../../components/CollapsibleSection';
 import { colors } from '../../theme';
@@ -61,14 +64,6 @@ export default function DataTab({
   return (
     <View>
       <View style={styles.card}>
-        <View style={styles.statGrid}>
-          <StatCard label="CCT" value={analysis.cct.toFixed(0)} unit="K" />
-          <StatCard label="Ra (CRI)" value={analysis.ra.toFixed(1)} />
-          <StatCard label="Lux" value={result.lux !== null ? result.lux.toFixed(0) : '—'} />
-          <StatCard label="R9" value={analysis.r9.toFixed(1)} />
-          <StatCard label="Duv" value={analysis.duv.toFixed(5)} />
-        </View>
-
         <Text style={styles.fieldLabel}>Upload Title</Text>
         {/* The default (username + date + time + timezone + device -- long
             enough to need wrapping) is rendered as a plain overlaid <Text>
@@ -168,8 +163,6 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 12,
   },
-  statGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -6 },
-
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -187,7 +180,7 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
   },
 
-  fieldLabel: { color: colors.muted, fontSize: 11, marginTop: 10, marginBottom: 4 },
+  fieldLabel: { color: colors.muted, fontSize: 11, marginBottom: 4 },
   // Background/border live on the wrapper, not the TextInput itself, so the
   // overlaid default-text <Text> (titleInputOverlay) and the real input
   // share the exact same padding box and line up pixel-for-pixel.
