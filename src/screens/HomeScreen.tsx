@@ -536,13 +536,22 @@ export default function HomeScreen({ navigation }: any) {
     // that has to leave room for that without the bottom-most content ever
     // crowding the edge of the screen.
     //
-    // paddingTop is deliberately much smaller than the horizontal/bottom
-    // padding -- this used to be the gap under the "hCRI Companion"
-    // title/gear header, sized for that, not for the empty safe-area inset
-    // it backs onto now that the header's gone (SafeAreaView's top edge
-    // already reserves room for the status bar/notch on its own).
-    content: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 56 },
-    tabBarWrap: { marginBottom: 16 },
+    // paddingTop isn't needed any more at all -- it used to be the gap
+    // under the "hCRI Companion" title/gear header, then (once that was
+    // dropped) the gap under the safe-area inset; now tabBarWrap below
+    // supplies its own bottom padding as the gap between the docked tab
+    // bar and the first bit of scrolling content, so this would just be a
+    // second gap stacked on top of that one.
+    content: { paddingHorizontal: 16, paddingBottom: 56 },
+    // The docked header sitting above the ScrollView -- NOT inside its
+    // contentContainerStyle any more (see the TabBar render below): a
+    // sibling View here can't scroll away with the rest of the content,
+    // which is the whole point of docking it (made it possible to jump to
+    // Logs/Data without scrolling back to the top of a long tab first).
+    // Carries the horizontal padding content's contentContainerStyle also
+    // has, since this View is now a sibling of the ScrollView rather than
+    // living inside its padded content area.
+    tabBarWrap: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
   });
 
   return (
@@ -558,25 +567,23 @@ export default function HomeScreen({ navigation }: any) {
     // builds. Production builds have no banner, so 'top' is still needed
     // there to clear the status bar/notch directly.
     <SafeAreaView style={styles.container} edges={IS_DEV_BUILD ? ['left', 'right'] : ['top', 'left', 'right']}>
+      {/* Docked -- a sibling of the ScrollView below, not inside it, so it
+          stays on screen no matter how far down a long Data tab you've
+          scrolled. No title/gear header any more -- "hCRI Companion" was
+          just branding, not information, and Settings is now its own
+          bottom tab rather than a button here (see App.tsx). */}
+      <View style={styles.tabBarWrap}>
+        <TabBar
+          tabs={[
+            { key: 'main', label: 'Main' },
+            { key: 'data', label: 'Data' },
+            { key: 'logs', label: 'Logs' },
+          ]}
+          active={activeTab}
+          onChange={setActiveTab}
+        />
+      </View>
       <ScrollView contentContainerStyle={styles.content}>
-        {/* No title/gear header any more -- "hCRI Companion" was just
-            branding, not information, and Settings is now its own bottom
-            tab rather than a button here (see App.tsx). MainTab's own
-            status row (the dot + "Connected"/"Disconnected" text) is the
-            first thing on screen now -- one less row of chrome before the
-            actual reading. */}
-        <View style={styles.tabBarWrap}>
-          <TabBar
-            tabs={[
-              { key: 'main', label: 'Main' },
-              { key: 'data', label: 'Data' },
-              { key: 'logs', label: 'Logs' },
-            ]}
-            active={activeTab}
-            onChange={setActiveTab}
-          />
-        </View>
-
         {activeTab === 'main' && (
           <MainTab
             status={status}

@@ -95,7 +95,14 @@ export default function SpectrumTab({ result, analysis }: Props) {
           label: 'Chrom',
           content: (
             <View style={styles.chartCard}>
-              <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} height={280} />
+              {/* Shorter than the original 280 -- trimmed because this
+                  page (plus the measurement grid and docked tab bar above
+                  it) was running long on Main. The diagram's X/Y domain
+                  (0.8 x 0.9, see ChromaticityChart.tsx) was already a bit
+                  wider than tall at 280, so this compresses the horseshoe
+                  a little further rather than clipping anything -- still
+                  fully legible, just slightly flatter-looking. */}
+              <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} height={230} />
             </View>
           ),
         },
@@ -106,10 +113,13 @@ export default function SpectrumTab({ result, analysis }: Props) {
             <View style={styles.chartCard}>
               <Text style={styles.rvaluesTitle}>CRI R1-R15</Text>
               {/* Explicit height, same as the Chrom page's chart just
-                  below -- left to its own default (rowCount*22+28, ~360px
+                  above -- left to its own default (rowCount*22+28, ~360px
                   for all 15 R-values) this was noticeably taller than the
-                  other two swipeable pages. */}
-              <RValuesBarChart ri={analysis.ri} height={280} />
+                  other two swipeable pages. Trimmed from 280 for the same
+                  "running long on Main" reason as Chrom's -- still room
+                  enough per row (~14px) for all 15 R# labels and bars to
+                  stay legible without crowding. */}
+              <RValuesBarChart ri={analysis.ri} height={230} />
             </View>
           ),
         },
