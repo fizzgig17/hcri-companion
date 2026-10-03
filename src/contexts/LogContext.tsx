@@ -25,6 +25,24 @@ interface LogContextValue {
 
 const LogContext = createContext<LogContextValue | null>(null);
 
+/**
+ * Same shape as adb logcat's own timestamp (MM-DD HH:mm:ss.SSS), not just
+ * "a" timestamp -- deliberately, so a line in this log can be matched
+ * straight across to a logcat capture covering the same moment (exactly
+ * what the "flash open then crash" investigation needed, lining up this
+ * log against a crash-buffer dump) without translating between two
+ * different formats first. Uses `Date`'s own local getters, same as
+ * logcat does, so this reads in the phone's own timezone -- not
+ * toISOString()'s UTC.
+ */
+function timestampPrefix(): string {
+  const d = new Date();
+  const pad = (n: number, len = 2) => String(n).padStart(len, '0');
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(
+    d.getSeconds()
+  )}.${pad(d.getMilliseconds(), 3)}`;
+}
+
 export function LogProvider({ children }: { children: React.ReactNode }) {
   const [log, setLog] = useState<string[]>([]);
   // A ref, not state: appendLog is called at BLE wire-traffic frequency and
@@ -59,7 +77,12 @@ export function LogProvider({ children }: { children: React.ReactNode }) {
     // only gets added here, and so only shows up on-screen or in a shared
     // report, once that setting is on. Off by default (see preferences.ts).
     if (verbose && !verboseLoggingRef.current) return;
-    setLog((prev) => [...prev.slice(-99), msg]);
+    // Timestamped here, not by each caller -- one place stamps every line
+    // that ever lands in this log (connect/disconnect, measure, upload,
+    // the AppState foreground/background transitions, CrashReporter's own
+    // folded-in record, everything), so nothing can land untimestamped by
+    // a caller forgetting to.
+    setLog((prev) => [...prev.slice(-99), `${timestampPrefix()}  ${msg}`]);
   }, []);
 
   const clearLog = useCallback(() => setLog([]), []);
