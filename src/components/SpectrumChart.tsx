@@ -6,15 +6,22 @@
 // shading through green, yellow, orange to red on the right, following the
 // actual wavelength at each point rather than a single flat line color.
 //
+// Also draws a touch/drag-able crosshair -- a vertical red line plus a
+// "Wavelength: XXXnm   Value: X.XXXX" readout above the chart, matching
+// the vendor app's own Spec. tab (which shows the same line+readout for
+// wherever you've touched its chart). Starts on the curve's peak point
+// (its most informative point untouched) and moves to the nearest real
+// point as you touch or drag anywhere on the chart.
+//
 // Requires react-native-svg:
 //   npm install react-native-svg
 // It has a small native module, so a JS-only Fast Refresh isn't enough the
 // first time it's added -- a full rebuild (npx react-native run-android, or
 // the Android Studio Run button) is needed after installing it.
 
-import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import Svg, { Path, Line, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, GestureResponderEvent } from 'react-native';
+import Svg, { Path, Line, Circle, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface Props {
@@ -83,6 +90,19 @@ export default function SpectrumChart({ spectrum, height = 200, width }: Props) 
   // box on that screen.
   const { colors } = useTheme();
 
+  // Which point the wavelength/value readout above the chart (and the
+  // vertical crosshair line on it) is currently showing -- null means "no
+  // touch yet this reading, fall back to the peak point" (see
+  // defaultIndex below), matching the vendor app's own Spec. tab, which
+  // always has SOME line showing rather than nothing until you first touch
+  // the chart. Reset back to that default whenever a new spectrum comes in
+  // (a new reading, or MainTab's placeholder-vs-real swap) -- a touch
+  // position from a previous reading's curve has no meaning on this one.
+  const [touchedIndex, setTouchedIndex] = useState<number | null>(null);
+  useEffect(() => {
+    setTouchedIndex(null);
+  }, [spectrum]);
+
   if (spectrum.length < 2) {
     return <View style={{ height }} />;
   }
@@ -99,6 +119,35 @@ export default function SpectrumChart({ spectrum, height = 200, width }: Props) 
 
   const xFor = (nm: number) => PADDING.left + ((nm - minNm) / nmRange) * chartWidth;
   const yFor = (value: number) => PADDING.top + chartHeight - (value / maxValue) * chartHeight;
+
+  // Default crosshair position before any touch: the peak point -- the
+  // single most informative point on an untouched curve, and the same
+  // point the vendor app's own "Peak(nm)" stat tile calls out.
+  let defaultIndex = 0;
+  for (let i = 1; i < spectrum.length; i++) {
+    if (spectrum[i].value > spectrum[defaultIndex].value) defaultIndex = i;
+  }
+  const activeIndex = touchedIndex !== null ? Math.min(touchedIndex, spectrum.length - 1) : defaultIndex;
+  const activePoint = spectrum[activeIndex];
+
+  // Finds the spectrum point nearest an x touched inside the chart's own
+  // plot area (in the Svg's own coordinate space, same origin as xFor/
+  // yFor above -- see the wrapping View's style below for why a touch's
+  // locationX lines up with that directly, no extra offset needed).
+  const handleTouch = (evt: GestureResponderEvent) => {
+    const touchX = evt.nativeEvent.locationX;
+    const touchNm = minNm + ((touchX - PADDING.left) / chartWidth) * nmRange;
+    let nearest = 0;
+    let bestDiff = Infinity;
+    for (let i = 0; i < spectrum.length; i++) {
+      const diff = Math.abs(spectrum[i].nm - touchNm);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        nearest = i;
+      }
+    }
+    setTouchedIndex(nearest);
+  };
 
   // Filled area path: baseline -> up to the first point -> along the curve
   // -> back down to baseline -> closed. This is what gets filled with the
@@ -132,8 +181,26 @@ export default function SpectrumChart({ spectrum, height = 200, width }: Props) 
 
   return (
     <View style={styles.container}>
+      {/* Wavelength/value readout for the crosshair below -- "like the
+          stock app": a plain text line above the chart naming the nm
+          you're on and the value there, rather than a tooltip you'd have
+          to hold a finger down to keep seeing. */}
+      <Text style={[styles.readout, { color: colors.muted }]}>
+        Wavelength: {activePoint.nm}nm   Value: {activePoint.value.toFixed(4)}
+      </Text>
       {width > 0 && (
-        <Svg width={width} height={height}>
+        <Svg
+          width={width}
+          height={height}
+          // Touch (and drag) anywhere on the chart moves the crosshair to
+          // the nearest point -- onResponderMove (not just Grant) is what
+          // makes this a drag rather than a tap-only control, matching the
+          // vendor app's own touch/drag behavior on its Spec. tab.
+          onStartShouldSetResponder={() => true}
+          onMoveShouldSetResponder={() => true}
+          onResponderGrant={handleTouch}
+          onResponderMove={handleTouch}
+        >
           <Defs>
             <LinearGradient
               id="spectrumGradient"
@@ -191,6 +258,20 @@ export default function SpectrumChart({ spectrum, height = 200, width }: Props) 
 
           {/* The filled, wavelength-colored spectrum curve itself */}
           <Path d={areaPath} fill="url(#spectrumGradient)" stroke="rgba(0,0,0,0.25)" strokeWidth={1} />
+
+          {/* The crosshair itself -- a vertical red line at the active
+              point's wavelength (matching the vendor app's own red
+              indicator line), plus a small dot marking exactly where it
+              meets the curve. */}
+          <Line
+            x1={xFor(activePoint.nm)}
+            y1={PADDING.top}
+            x2={xFor(activePoint.nm)}
+            y2={baselineY}
+            stroke="#e53935"
+            strokeWidth={1.2}
+          />
+          <Circle cx={xFor(activePoint.nm)} cy={yFor(activePoint.value)} r={4} fill="#e53935" stroke="#fff" strokeWidth={1} />
         </Svg>
       )}
     </View>
@@ -199,4 +280,5 @@ export default function SpectrumChart({ spectrum, height = 200, width }: Props) 
 
 const styles = StyleSheet.create({
   container: { width: '100%' },
+  readout: { fontSize: 11, fontFamily: 'monospace', marginBottom: 4 },
 });
