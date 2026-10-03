@@ -168,18 +168,18 @@ export default function MainTab({
             Tap ⚙ Settings to customize which measurements show here, and in what order.
           </Text>
           {result.spectrum.length > 0 && <SpectrumTab result={result} analysis={analysis} />}
+          {/* Take Reading (the green/accent button) comes first here --
+              Upload sits right below it rather than above, since taking
+              another reading is the more likely next action right after
+              looking at this one. */}
+          {status === 'connected' && <PrimaryButton title="Take Reading" onPress={measure} />}
           <PrimaryButton
             title={`Upload to ${HCRI_BRAND_HOST}`}
             onPress={onUpload}
             disabled={uploading}
             variant="muted"
           />
-          {status === 'connected' && (
-            <>
-              <PrimaryButton title="Take Reading" onPress={measure} />
-              <PrimaryButton title="Disconnect" onPress={disconnect} variant="muted" />
-            </>
-          )}
+          {status === 'connected' && <PrimaryButton title="Disconnect" onPress={disconnect} variant="muted" />}
         </View>
       )}
 

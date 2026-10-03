@@ -68,7 +68,7 @@
 
 import React, { useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import Svg, { Polygon, Polyline, Circle, Line, Rect, Text as SvgText, Image as SvgImage } from 'react-native-svg';
+import Svg, { Polygon, Polyline, Circle, Line, Text as SvgText, Image as SvgImage } from 'react-native-svg';
 import { planckianLocusXy, planckianTick, CCT_TICKS_K, XY } from '../utils/cieChromaticity';
 import { exactSpectralLocus5nm } from '../utils/spectralAnalysis';
 
@@ -87,9 +87,13 @@ interface Props {
   height?: number;
 }
 
-// Extra room on the right for the plain stacked CCT-label column, and a
-// little extra on top for the "CIE 1931" title.
-const PADDING = { top: 26, right: 34, bottom: 24, left: 32 };
+// Extra room on the right for the plain stacked CCT-label column, and
+// enough on top to hold the x/y annotation (see below) ABOVE the plot box
+// entirely, rather than inset into its top-left corner -- that's what
+// "higher" actually needed: sitting inset a few px into the box still read
+// as low/crowded against the horseshoe fill, no matter how far up within
+// the box it went.
+const PADDING = { top: 34, right: 34, bottom: 24, left: 32 };
 
 const X_DOMAIN: [number, number] = [0.0, 0.8];
 const Y_DOMAIN: [number, number] = [0.0, 0.9];
@@ -336,31 +340,19 @@ export default function ChromaticityChart({ x, y, cct, height = 300 }: Props) {
             );
           })}
 
-          {/* The reading's own x/y, pinned to the top-left corner of the
-              plot box -- drawn last (on top of the fill/locus/dot) so it's
-              always legible regardless of what's directly underneath that
-              corner for a given reading's color. A small translucent
-              backing card, same spirit as the dot's white stroke, rather
-              than a second stat-card row below the chart (SpectrumTab.tsx
-              used to show one here) -- the measurement grid above this
-              whole swipeable section already covers CCT/Duv/Ra/R9/etc. for
-              whichever the person has chosen to see; x/y specifically only
-              ever showed up here, so they stay on the chart itself. */}
+          {/* The reading's own x/y, pinned above the top-left corner of the
+              plot box, in the chart's own top margin -- not inset into the
+              box itself (that read as "too low", crowded against the
+              horseshoe fill, no matter how far up within the box it went).
+              Up here there's nothing underneath but blank white canvas, so
+              no backing card is needed to keep it legible the way the old
+              in-box placement did. */}
           {Number.isFinite(x) && Number.isFinite(y) && (
             <>
-              <Rect
-                x={PADDING.left + 2}
-                y={PADDING.top - 2}
-                width={64}
-                height={26}
-                rx={4}
-                fill="#ffffff"
-                opacity={0.85}
-              />
-              <SvgText x={PADDING.left + 7} y={PADDING.top + 8} fontSize={10} fill="#333" fontFamily="monospace">
+              <SvgText x={PADDING.left} y={12} fontSize={10} fill="#333" fontFamily="monospace">
                 x {x.toFixed(4)}
               </SvgText>
-              <SvgText x={PADDING.left + 7} y={PADDING.top + 20} fontSize={10} fill="#333" fontFamily="monospace">
+              <SvgText x={PADDING.left} y={24} fontSize={10} fill="#333" fontFamily="monospace">
                 y {y.toFixed(4)}
               </SvgText>
             </>

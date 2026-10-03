@@ -23,6 +23,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import PrimaryButton from '../../components/PrimaryButton';
+import CollapsibleSection from '../../components/CollapsibleSection';
 import { colors } from '../../theme';
 import { SavedReading } from '../../storage/readingHistory';
 import { analyzeSpectrum } from '../../utils/spectralAnalysis';
@@ -52,6 +53,25 @@ interface Props {
 function formatSavedAt(ms: number): string {
   const d = new Date(ms);
   return d.toLocaleString();
+}
+
+/** Midnight (local time) of the day `ms` falls on -- used as the grouping
+ * key so two readings taken on the same calendar day always land in the
+ * same group regardless of what time of day each one happened. */
+function startOfDay(ms: number): number {
+  const d = new Date(ms);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+/** "Yesterday", or the weekday+date for anything older -- `dayStart` is
+ * already a startOfDay() value, same as `todayStart`, so this is just
+ * counting whole days between them rather than reasoning about times. */
+function dateGroupLabel(dayStart: number, todayStart: number): string {
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+  const diffDays = Math.round((todayStart - dayStart) / ONE_DAY_MS);
+  if (diffDays === 1) return 'Yesterday';
+  return new Date(dayStart).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
 function HistoryRow({
@@ -115,7 +135,22 @@ function HistoryRow({
   const rowInner = (
     <>
       <View style={styles.rowHeader}>
-        <Text style={styles.rowMeta}>{formatSavedAt(reading.savedAt)}</Text>
+        <View style={styles.rowHeaderLeft}>
+          <Text style={styles.rowMeta}>{formatSavedAt(reading.savedAt)}</Text>
+          {/* Spectrum-derived CCT/Ra (see the `analysis` memo above) --
+              matches what Main/Spectrum/Data show for this same reading,
+              and doesn't depend on the device's own metrics-block offsets
+              being right for whatever model/firmware took it. Right next
+              to the date/time rather than its own line below the label
+              field -- that extra line was most of why these rows felt so
+              tall. Lux is the one number on this app that's still
+              genuinely device-reported elsewhere (no spectral equivalent
+              exists to compute it from), which is why only CCT/Ra show up
+              in this summary. */}
+          <Text style={styles.rowSummaryInline}>
+            {analysis.cct.toFixed(0)}K · Ra {analysis.ra.toFixed(1)}
+          </Text>
+        </View>
         {!selectMode && (
           <View style={styles.rowHeaderButtons}>
             <TouchableOpacity onPress={() => onOpen(reading)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -143,17 +178,6 @@ function HistoryRow({
         multiline
         textAlignVertical="top"
       />
-
-      {/* Spectrum-derived CCT/Ra (see the `analysis` memo above) -- matches
-          what Main/Spectrum/Data show for this same reading, and doesn't
-          depend on the device's own metrics-block offsets being right for
-          whatever model/firmware took it. Lux is the one number on this
-          app that's still genuinely device-reported elsewhere (no spectral
-          equivalent exists to compute it from), which is why only CCT/Ra
-          show up in this summary. */}
-      <Text style={styles.rowSummary}>
-        {analysis.cct.toFixed(0)}K · Ra {analysis.ra.toFixed(1)}
-      </Text>
 
       {!selectMode && (
         <View style={styles.rowActions}>
@@ -250,6 +274,43 @@ export default function HistoryTab({
   };
 
   const selectAll = () => setSelected(new Set(history.map((r) => r.id)));
+
+  // Split into today's readings (shown flat, same as always -- these are
+  // the ones still actively being worked with this session) and every
+  // other day's readings, bucketed into a collapsed-by-default section
+  // per calendar day. `history` already arrives most-recent-first, so
+  // walking it in order and only ever appending to the LAST day-bucket
+  // seen keeps each bucket's own readings in that same order, and the
+  // buckets themselves come out newest-first too (today's readings aside,
+  // that starts with Yesterday) with no separate sort needed.
+  const { todayReadings, pastGroups } = useMemo(() => {
+    const todayStart = startOfDay(Date.now());
+    const today: SavedReading[] = [];
+    const order: number[] = [];
+    const byDay = new Map<number, SavedReading[]>();
+    for (const r of history) {
+      const dayStart = startOfDay(r.savedAt);
+      if (dayStart === todayStart) {
+        today.push(r);
+        continue;
+      }
+      let bucket = byDay.get(dayStart);
+      if (!bucket) {
+        bucket = [];
+        byDay.set(dayStart, bucket);
+        order.push(dayStart);
+      }
+      bucket.push(r);
+    }
+    return {
+      todayReadings: today,
+      pastGroups: order.map((dayStart) => ({
+        key: String(dayStart),
+        label: dateGroupLabel(dayStart, todayStart),
+        readings: byDay.get(dayStart)!,
+      })),
+    };
+  }, [history]);
 
   const handleUploadSelected = () => {
     if (selected.size === 0) return;
@@ -351,7 +412,14 @@ export default function HistoryTab({
         </View>
       )}
 
-      {history.map((r) => (
+      {/* Today's readings stay flat, right at the top, same as this list
+          has always shown them -- these are the ones still actively being
+          worked with this session, not something to tuck away. Only
+          labeled "Today" when there's also at least one collapsed day
+          below it to distinguish from; with nothing but today's readings,
+          a label would just be noise. */}
+      {pastGroups.length > 0 && todayReadings.length > 0 && <Text style={styles.todayLabel}>Today</Text>}
+      {todayReadings.map((r) => (
         <HistoryRow
           key={r.id}
           reading={r}
@@ -365,6 +433,32 @@ export default function HistoryTab({
           selected={selected.has(r.id)}
           onToggleSelected={toggleSelected}
         />
+      ))}
+
+      {/* Every other day's readings, one collapsed-by-default section per
+          calendar day -- this is what actually keeps a history of any
+          real size from turning into a wall of rows; only the readings
+          from a day you actually tap open ever render expanded. */}
+      {pastGroups.map((group) => (
+        <CollapsibleSection key={group.key} title={group.label} count={group.readings.length}>
+          <View style={styles.dateGroup}>
+            {group.readings.map((r) => (
+              <HistoryRow
+                key={r.id}
+                reading={r}
+                uploading={uploadingId === r.id}
+                onRename={onRename}
+                onUploadWithLabel={onUploadWithLabel}
+                onDelete={onDelete}
+                onShareOne={onShareOne}
+                onOpen={onOpen}
+                selectMode={selectMode}
+                selected={selected.has(r.id)}
+                onToggleSelected={toggleSelected}
+              />
+            ))}
+          </View>
+        </CollapsibleSection>
       ))}
     </View>
   );
@@ -405,10 +499,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    padding: 12,
-    marginBottom: 10,
+    padding: 10,
+    marginBottom: 8,
   },
-  rowSelectable: { paddingVertical: 12 },
+  rowSelectable: { paddingVertical: 10 },
   rowSelected: { borderColor: colors.accent },
   selectRow: { flexDirection: 'row', alignItems: 'flex-start' },
   checkboxCol: { width: 30, alignItems: 'center', justifyContent: 'center', paddingTop: 2 },
@@ -424,8 +518,10 @@ const styles = StyleSheet.create({
   checkboxChecked: { backgroundColor: colors.accent, borderColor: colors.accent },
   checkboxMark: { color: colors.text, fontSize: 13, fontWeight: '700' },
   selectRowBody: { flex: 1 },
-  rowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  rowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  rowHeaderLeft: { flexDirection: 'row', alignItems: 'baseline', flexShrink: 1, flexWrap: 'wrap' },
   rowMeta: { color: colors.muted, fontSize: 11, fontFamily: 'monospace' },
+  rowSummaryInline: { color: colors.text, fontSize: 11, fontWeight: '600', marginLeft: 8 },
   rowHeaderButtons: { flexDirection: 'row', alignItems: 'center' },
   viewText: { color: colors.info, fontSize: 12, fontWeight: '600', marginRight: 14 },
   deleteText: { color: colors.danger, fontSize: 12 },
@@ -436,13 +532,12 @@ const styles = StyleSheet.create({
     borderColor: colors.cardBorder,
     borderRadius: 8,
     paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingVertical: 6,
     color: colors.text,
     fontSize: 13,
-    minHeight: 38,
+    minHeight: 32,
     marginBottom: 6,
   },
-  rowSummary: { color: colors.text, fontSize: 12, marginBottom: 10 },
 
   rowActions: { flexDirection: 'row', marginHorizontal: -4 },
   actionButton: {
@@ -452,9 +547,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.cardBorder,
     borderRadius: 8,
-    paddingVertical: 10,
+    paddingVertical: 8,
     alignItems: 'center',
   },
   actionButtonDisabled: { opacity: 0.6 },
   actionButtonText: { color: colors.text, fontSize: 13, fontWeight: '600' },
+
+  dateGroup: { marginBottom: 2 },
+  todayLabel: {
+    color: colors.mutedFaint,
+    fontSize: 10.5,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
 });

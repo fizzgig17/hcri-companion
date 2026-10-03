@@ -84,7 +84,11 @@ export default function SpectrumTab({ result, analysis }: Props) {
           content: (
             <View style={styles.chartCard}>
               <Text style={styles.rvaluesTitle}>CRI R1-R15</Text>
-              <RValuesBarChart ri={analysis.ri} />
+              {/* Explicit height, same as the Chrom page's chart just
+                  below -- left to its own default (rowCount*22+28, ~360px
+                  for all 15 R-values) this was noticeably taller than the
+                  other two swipeable pages. */}
+              <RValuesBarChart ri={analysis.ri} height={280} />
             </View>
           ),
         },
