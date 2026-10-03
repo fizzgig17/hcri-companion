@@ -84,6 +84,13 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
     empty: { paddingVertical: 40, alignItems: 'center' },
     emptyText: { color: colors.muted, fontSize: 13 },
 
+    // overflow: 'hidden' on both of these -- confirmed 2026-10-03: without
+    // it, a child that draws right up to its own edge (the Chrom page's
+    // CCT label column in particular, see ChromaticityChart.tsx) can
+    // visibly spill a few px past this card's rounded corner instead of
+    // being clipped to it, since a plain View doesn't clip its children
+    // to its own border-radius by default. Harmless on the other two
+    // pages, which don't draw anything that close to their own edge.
     chartCard: {
       backgroundColor: colors.card,
       borderRadius: 12,
@@ -91,6 +98,29 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
       borderColor: colors.cardBorder,
       padding: 10,
       marginBottom: 12,
+      overflow: 'hidden',
+    },
+    // Same card as chartCard above (identical radius/border/padding, so
+    // the border reads as the same shape swiping from either neighboring
+    // page) but with a guaranteed white background instead of the
+    // theme's card color -- the CIE diagram's colors (and the reference
+    // image it matches) assume a plain white backdrop regardless of
+    // light/dark mode, same reasoning ChromaticityChart's own plot-box
+    // Polygon fill has always used. Only the chart's background color
+    // differs between these two styles; keeping the radius/border
+    // identical is what actually fixes "the border doesn't line up
+    // between tabs" -- the Chrom page used to nest a SECOND, differently-
+    // rounded white box (ChromaticityChart's own `container` style)
+    // inside this one, which is what made its border look different from
+    // Spectrum/R-Values' as you swiped between them.
+    chromCard: {
+      backgroundColor: '#ffffff',
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      padding: 10,
+      marginBottom: 12,
+      overflow: 'hidden',
     },
     spectrumRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3 },
     spectrumNm: { color: colors.muted, fontSize: 12, fontFamily: 'monospace' },
@@ -135,7 +165,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
           key: 'chrom',
           label: 'Chrom',
           content: (
-            <View style={styles.chartCard}>
+            <View style={styles.chromCard}>
               {/* Shorter than the original 280 -- trimmed because this
                   page (plus the measurement grid and docked tab bar above
                   it) was running long on Main. The diagram's X/Y domain
