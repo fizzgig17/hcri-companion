@@ -23,6 +23,7 @@ import SettingsScreen from './screens/SettingsScreen';
 import ReadingDetailScreen from './screens/ReadingDetailScreen';
 import ErrorBoundary from './components/ErrorBoundary';
 import DevBuildBanner from './components/DevBuildBanner';
+import CrashReporter from './components/CrashReporter';
 import { HomeIcon, HistoryIcon, SettingsIcon } from './components/TabBarIcons';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { LogProvider } from './contexts/LogContext';
@@ -137,6 +138,12 @@ export default function App() {
             outside it means a caught-and-reset crash doesn't wipe the log
             you'd want to read to find out what crashed. */}
         <LogProvider>
+          {/* No UI of its own -- surfaces whatever crashLog.ts recorded
+              right before the LAST crash (if any) into this session's
+              debug log, so the "flash open then crash" report has
+              something to go on next time it happens without needing
+              adb attached at that exact moment. See CrashReporter.tsx. */}
+          <CrashReporter />
           {/* Wraps EVERYTHING below it -- including navigation itself -- so an
               uncaught error anywhere in the tree (Home, Settings, any tab) hits
               this instead of taking the whole app down. See
