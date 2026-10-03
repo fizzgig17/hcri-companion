@@ -12,7 +12,7 @@
 
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors } from '../theme';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface Props {
   label: string;
@@ -22,6 +22,24 @@ interface Props {
 }
 
 export default function StatCard({ label, value, unit, compact }: Props) {
+  const { colors } = useTheme();
+
+  const styles = StyleSheet.create({
+    statCard: { width: '50%', paddingHorizontal: 6, marginBottom: 12 },
+    statValue: { color: colors.text, fontSize: 22, fontWeight: '700' },
+    statUnit: { color: colors.muted, fontSize: 14, fontWeight: '400' },
+    statLabel: { color: colors.muted, fontSize: 12, marginTop: 2 },
+
+    // Three columns instead of two, and smaller text/spacing throughout --
+    // what actually keeps a long, customized list from making the result
+    // card towering: at 7 tiles (the default set) this is 3 rows instead
+    // of 4, and each row itself is shorter.
+    statCardCompact: { width: '33.33%', paddingHorizontal: 5, marginBottom: 8 },
+    statValueCompact: { fontSize: 17 },
+    statUnitCompact: { fontSize: 11 },
+    statLabelCompact: { fontSize: 10.5, marginTop: 1 },
+  });
+
   return (
     <View style={[styles.statCard, compact && styles.statCardCompact]}>
       <Text style={[styles.statValue, compact && styles.statValueCompact]}>
@@ -32,19 +50,3 @@ export default function StatCard({ label, value, unit, compact }: Props) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  statCard: { width: '50%', paddingHorizontal: 6, marginBottom: 12 },
-  statValue: { color: colors.text, fontSize: 22, fontWeight: '700' },
-  statUnit: { color: colors.muted, fontSize: 14, fontWeight: '400' },
-  statLabel: { color: colors.muted, fontSize: 12, marginTop: 2 },
-
-  // Three columns instead of two, and smaller text/spacing throughout --
-  // what actually keeps a long, customized list from making the result
-  // card towering: at 7 tiles (the default set) this is 3 rows instead
-  // of 4, and each row itself is shorter.
-  statCardCompact: { width: '33.33%', paddingHorizontal: 5, marginBottom: 8 },
-  statValueCompact: { fontSize: 17 },
-  statUnitCompact: { fontSize: 11 },
-  statLabelCompact: { fontSize: 10.5, marginTop: 1 },
-});

@@ -27,7 +27,7 @@ import ChromaticityChart from '../../components/ChromaticityChart';
 import RValuesBarChart from '../../components/RValuesBarChart';
 import CollapsibleSection from '../../components/CollapsibleSection';
 import SwipablePages from '../../components/SwipablePages';
-import { colors } from '../../theme';
+import { useTheme } from '../../contexts/ThemeContext';
 import { MeterResult } from '../../ble/parseResult';
 import { SpectralAnalysis } from '../../utils/spectralAnalysis';
 
@@ -38,6 +38,27 @@ interface Props {
 }
 
 export default function SpectrumTab({ result, analysis }: Props) {
+  const { colors } = useTheme();
+
+  const styles = StyleSheet.create({
+    empty: { paddingVertical: 40, alignItems: 'center' },
+    emptyText: { color: colors.muted, fontSize: 13 },
+
+    chartCard: {
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      padding: 10,
+      marginBottom: 12,
+    },
+    spectrumRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3 },
+    spectrumNm: { color: colors.muted, fontSize: 12, fontFamily: 'monospace' },
+    spectrumValue: { color: colors.text, fontSize: 12, fontFamily: 'monospace' },
+
+    rvaluesTitle: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
+  });
+
   if (!result || !analysis) {
     return (
       <View style={styles.empty}>
@@ -96,22 +117,3 @@ export default function SpectrumTab({ result, analysis }: Props) {
     />
   );
 }
-
-const styles = StyleSheet.create({
-  empty: { paddingVertical: 40, alignItems: 'center' },
-  emptyText: { color: colors.muted, fontSize: 13 },
-
-  chartCard: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    padding: 10,
-    marginBottom: 12,
-  },
-  spectrumRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3 },
-  spectrumNm: { color: colors.muted, fontSize: 12, fontFamily: 'monospace' },
-  spectrumValue: { color: colors.text, fontSize: 12, fontFamily: 'monospace' },
-
-  rvaluesTitle: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
-});

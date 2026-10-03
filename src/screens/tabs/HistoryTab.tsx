@@ -24,7 +24,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import PrimaryButton from '../../components/PrimaryButton';
 import CollapsibleSection from '../../components/CollapsibleSection';
-import { colors } from '../../theme';
+import { useTheme } from '../../contexts/ThemeContext';
 import { SavedReading } from '../../storage/readingHistory';
 import { analyzeSpectrum } from '../../utils/spectralAnalysis';
 
@@ -97,6 +97,7 @@ function HistoryRow({
   selected: boolean;
   onToggleSelected: (id: string) => void;
 }) {
+  const { colors } = useTheme();
   const [text, setText] = useState(reading.label);
 
   // Spectrum-derived CCT/Ra for the row summary below, same values
@@ -131,6 +132,67 @@ function HistoryRow({
       onRename(reading.id, trimmed);
     }
   };
+
+  const styles = StyleSheet.create({
+    row: {
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      padding: 10,
+      marginBottom: 8,
+    },
+    rowSelectable: { paddingVertical: 10 },
+    rowSelected: { borderColor: colors.accent },
+    selectRow: { flexDirection: 'row', alignItems: 'flex-start' },
+    checkboxCol: { width: 30, alignItems: 'center', justifyContent: 'center', paddingTop: 2 },
+    checkbox: {
+      width: 20,
+      height: 20,
+      borderRadius: 5,
+      borderWidth: 1.5,
+      borderColor: colors.cardBorder,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    checkboxChecked: { backgroundColor: colors.accent, borderColor: colors.accent },
+    checkboxMark: { color: colors.text, fontSize: 13, fontWeight: '700' },
+    selectRowBody: { flex: 1 },
+    rowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+    rowHeaderLeft: { flexDirection: 'row', alignItems: 'baseline', flexShrink: 1, flexWrap: 'wrap' },
+    rowMeta: { color: colors.muted, fontSize: 11, fontFamily: 'monospace' },
+    rowSummaryInline: { color: colors.text, fontSize: 11, fontWeight: '600', marginLeft: 8 },
+    rowHeaderButtons: { flexDirection: 'row', alignItems: 'center' },
+    viewText: { color: colors.info, fontSize: 12, fontWeight: '600', marginRight: 14 },
+    deleteText: { color: colors.danger, fontSize: 12 },
+
+    labelInput: {
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      color: colors.text,
+      fontSize: 13,
+      minHeight: 32,
+      marginBottom: 6,
+    },
+
+    rowActions: { flexDirection: 'row', marginHorizontal: -4 },
+    actionButton: {
+      flex: 1,
+      marginHorizontal: 4,
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 8,
+      paddingVertical: 8,
+      alignItems: 'center',
+    },
+    actionButtonDisabled: { opacity: 0.6 },
+    actionButtonText: { color: colors.text, fontSize: 13, fontWeight: '600' },
+  });
 
   const rowInner = (
     <>
@@ -245,6 +307,7 @@ export default function HistoryTab({
   uploadingId,
   bulkUploading,
 }: Props) {
+  const { colors } = useTheme();
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // Local only -- onDeleteMany itself awaits nothing (HomeScreen's version
@@ -346,6 +409,47 @@ export default function HistoryTab({
       ]
     );
   };
+
+  const styles = StyleSheet.create({
+    empty: { paddingVertical: 40, alignItems: 'center' },
+    emptyText: { color: colors.muted, fontSize: 13, textAlign: 'center', paddingHorizontal: 20 },
+
+    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 8 },
+    headerTitle: { color: colors.muted, fontSize: 12, marginBottom: 4, flexShrink: 1 },
+    headerButtons: { flexDirection: 'row', alignItems: 'center' },
+    selectText: { color: colors.accent, fontSize: 13, fontWeight: '600', marginRight: 16, marginBottom: 4 },
+    cancelText: { color: colors.muted, fontSize: 13, fontWeight: '600', marginBottom: 4 },
+
+    selectBar: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      marginBottom: 10,
+    },
+    selectAllText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
+    selectBarButtons: { flexDirection: 'row' },
+    // Overrides PrimaryButton's default marginTop:8 (meant for a full-width
+    // button stacked below other content) -- here it sits inline next to
+    // "Select All" text, so that top margin would push it visibly lower than
+    // its sibling instead of centering with it.
+    selectBarButton: { marginTop: 0, marginLeft: 8 },
+
+    dateGroup: { marginBottom: 2 },
+    todayLabel: {
+      color: colors.mutedFaint,
+      fontSize: 10.5,
+      fontWeight: '700',
+      letterSpacing: 1,
+      textTransform: 'uppercase',
+      marginBottom: 6,
+    },
+  });
 
   if (loading) {
     return (
@@ -463,103 +567,3 @@ export default function HistoryTab({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  empty: { paddingVertical: 40, alignItems: 'center' },
-  emptyText: { color: colors.muted, fontSize: 13, textAlign: 'center', paddingHorizontal: 20 },
-
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 8 },
-  headerTitle: { color: colors.muted, fontSize: 12, marginBottom: 4, flexShrink: 1 },
-  headerButtons: { flexDirection: 'row', alignItems: 'center' },
-  selectText: { color: colors.accent, fontSize: 13, fontWeight: '600', marginRight: 16, marginBottom: 4 },
-  cancelText: { color: colors.muted, fontSize: 13, fontWeight: '600', marginBottom: 4 },
-
-  selectBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 10,
-  },
-  selectAllText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
-  selectBarButtons: { flexDirection: 'row' },
-  // Overrides PrimaryButton's default marginTop:8 (meant for a full-width
-  // button stacked below other content) -- here it sits inline next to
-  // "Select All" text, so that top margin would push it visibly lower than
-  // its sibling instead of centering with it.
-  selectBarButton: { marginTop: 0, marginLeft: 8 },
-
-  row: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    padding: 10,
-    marginBottom: 8,
-  },
-  rowSelectable: { paddingVertical: 10 },
-  rowSelected: { borderColor: colors.accent },
-  selectRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  checkboxCol: { width: 30, alignItems: 'center', justifyContent: 'center', paddingTop: 2 },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 5,
-    borderWidth: 1.5,
-    borderColor: colors.cardBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxChecked: { backgroundColor: colors.accent, borderColor: colors.accent },
-  checkboxMark: { color: colors.text, fontSize: 13, fontWeight: '700' },
-  selectRowBody: { flex: 1 },
-  rowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  rowHeaderLeft: { flexDirection: 'row', alignItems: 'baseline', flexShrink: 1, flexWrap: 'wrap' },
-  rowMeta: { color: colors.muted, fontSize: 11, fontFamily: 'monospace' },
-  rowSummaryInline: { color: colors.text, fontSize: 11, fontWeight: '600', marginLeft: 8 },
-  rowHeaderButtons: { flexDirection: 'row', alignItems: 'center' },
-  viewText: { color: colors.info, fontSize: 12, fontWeight: '600', marginRight: 14 },
-  deleteText: { color: colors.danger, fontSize: 12 },
-
-  labelInput: {
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    color: colors.text,
-    fontSize: 13,
-    minHeight: 32,
-    marginBottom: 6,
-  },
-
-  rowActions: { flexDirection: 'row', marginHorizontal: -4 },
-  actionButton: {
-    flex: 1,
-    marginHorizontal: 4,
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    borderRadius: 8,
-    paddingVertical: 8,
-    alignItems: 'center',
-  },
-  actionButtonDisabled: { opacity: 0.6 },
-  actionButtonText: { color: colors.text, fontSize: 13, fontWeight: '600' },
-
-  dateGroup: { marginBottom: 2 },
-  todayLabel: {
-    color: colors.mutedFaint,
-    fontSize: 10.5,
-    fontWeight: '700',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    marginBottom: 6,
-  },
-});

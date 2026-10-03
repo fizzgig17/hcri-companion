@@ -12,7 +12,8 @@
 // HomeScreen/SettingsScreen with a bit of local state instead.
 
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { StatusBar } from 'react-native';
+import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import HomeScreen from './screens/HomeScreen';
@@ -20,8 +21,31 @@ import SettingsScreen from './screens/SettingsScreen';
 import ReadingDetailScreen from './screens/ReadingDetailScreen';
 import ErrorBoundary from './components/ErrorBoundary';
 import DevBuildBanner from './components/DevBuildBanner';
+import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 
 const Stack = createNativeStackNavigator();
+
+// Pulled out so it can call useTheme() -- that only works BELOW
+// <ThemeProvider>, which is why App() itself (below) doesn't call it
+// directly and instead renders this as ThemeProvider's child.
+function Navigation() {
+  const { colors, scheme } = useTheme();
+
+  return (
+    <NavigationContainer theme={scheme === 'light' ? DefaultTheme : DarkTheme}>
+      {/* Status bar text/icons need to flip too -- dark-on-light is
+          unreadable against a light background, and vice versa. */}
+      <StatusBar barStyle={scheme === 'light' ? 'dark-content' : 'light-content'} />
+      <Stack.Navigator
+        screenOptions={{ headerStyle: { backgroundColor: colors.card }, headerTintColor: colors.text }}
+      >
+        <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'hCRI.io Settings' }} />
+        <Stack.Screen name="ReadingDetail" component={ReadingDetailScreen} options={{ title: 'Reading' }} />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
 
 export default function App() {
   return (
@@ -37,18 +61,18 @@ export default function App() {
           this instead of taking the whole app down. See
           components/ErrorBoundary.tsx for why. */}
       <ErrorBoundary>
-        {/* Sits above the navigator (every screen, not just Home) so it's
-            impossible to be on ANY screen of a dev-targeted build without
-            seeing it -- a no-op view in a production build, see
-            components/DevBuildBanner.tsx. */}
-        <DevBuildBanner />
-        <NavigationContainer>
-          <Stack.Navigator screenOptions={{ headerStyle: { backgroundColor: '#111' }, headerTintColor: '#eee' }}>
-            <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
-            <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'hCRI.io Settings' }} />
-            <Stack.Screen name="ReadingDetail" component={ReadingDetailScreen} options={{ title: 'Reading' }} />
-          </Stack.Navigator>
-        </NavigationContainer>
+        {/* Resolves the Light/Dark/System preference (see
+            contexts/ThemeContext.tsx) once, here at the root, so every
+            screen below reads the same live theme via useTheme() rather
+            than each one loading/resolving the preference on its own. */}
+        <ThemeProvider>
+          {/* Sits above the navigator (every screen, not just Home) so
+              it's impossible to be on ANY screen of a dev-targeted build
+              without seeing it -- a no-op view in a production build, see
+              components/DevBuildBanner.tsx. */}
+          <DevBuildBanner />
+          <Navigation />
+        </ThemeProvider>
       </ErrorBoundary>
     </SafeAreaProvider>
   );

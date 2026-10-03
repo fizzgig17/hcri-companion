@@ -11,6 +11,7 @@
 // installing once for both).
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ThemeMode } from '../theme';
 
 const KEEP_AWAKE_KEY = 'hcri.io.pref.keepAwakeWhileConnected';
 
@@ -42,4 +43,19 @@ export async function loadVerboseLoggingPreference(): Promise<boolean> {
 
 export async function saveVerboseLoggingPreference(enabled: boolean): Promise<void> {
   await AsyncStorage.setItem(VERBOSE_LOGGING_KEY, enabled ? 'true' : 'false');
+}
+
+// Defaults to 'system' -- a fresh install should follow the phone's own
+// light/dark setting rather than forcing dark (this app's original, only
+// look) on someone whose phone is set to light mode. Light and Dark are
+// still there to override that per ThemeContext.tsx.
+const THEME_MODE_KEY = 'hcri.io.pref.themeMode';
+
+export async function loadThemeModePreference(): Promise<ThemeMode> {
+  const raw = await AsyncStorage.getItem(THEME_MODE_KEY);
+  return raw === 'light' || raw === 'dark' ? raw : 'system';
+}
+
+export async function saveThemeModePreference(mode: ThemeMode): Promise<void> {
+  await AsyncStorage.setItem(THEME_MODE_KEY, mode);
 }

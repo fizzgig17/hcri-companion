@@ -31,7 +31,7 @@ import {
   TouchableOpacity,
   Dimensions,
 } from 'react-native';
-import { colors } from '../theme';
+import { useTheme } from '../contexts/ThemeContext';
 
 export interface Page {
   key: string;
@@ -44,6 +44,7 @@ interface Props {
 }
 
 export default function SwipablePages({ pages }: Props) {
+  const { colors } = useTheme();
   // Same reasoning as SpectrumChart's own width state: gating page content
   // entirely behind `width > 0` meant the Spectrum tab's pages (including
   // its SpectrumChart) didn't even get constructed, let alone laid out,
@@ -70,6 +71,13 @@ export default function SwipablePages({ pages }: Props) {
     scrollRef.current?.scrollTo({ x: index * width, animated: true });
     setActiveIndex(index);
   };
+
+  const styles = StyleSheet.create({
+    dotsRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 8, marginBottom: 4 },
+    dotTouchable: { padding: 4 },
+    dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.cardBorder },
+    dotActive: { backgroundColor: colors.accent, width: 16 },
+  });
 
   return (
     <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
@@ -118,10 +126,3 @@ export default function SwipablePages({ pages }: Props) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  dotsRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 8, marginBottom: 4 },
-  dotTouchable: { padding: 4 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.cardBorder },
-  dotActive: { backgroundColor: colors.accent, width: 16 },
-});

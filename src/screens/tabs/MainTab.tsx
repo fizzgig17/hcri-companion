@@ -20,7 +20,8 @@ import { View, Text, TouchableOpacity, ActivityIndicator, Modal, StyleSheet } fr
 import PrimaryButton from '../../components/PrimaryButton';
 import StatCard from '../../components/StatCard';
 import SpectrumTab from './SpectrumTab';
-import { colors, statusColors, statusLabels } from '../../theme';
+import { statusLabels } from '../../theme';
+import { useTheme } from '../../contexts/ThemeContext';
 import { MeterResult } from '../../ble/parseResult';
 import { SpectralAnalysis } from '../../utils/spectralAnalysis';
 import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
@@ -85,7 +86,56 @@ export default function MainTab({
   uploading,
   statIds,
 }: Props) {
+  const { colors, statusColors } = useTheme();
   const canSwitchMeters = status === 'connected' && (devicePickerDevices?.length ?? 0) > 1;
+
+  const styles = StyleSheet.create({
+    statusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+    resetLink: { alignItems: 'center', paddingVertical: 8 },
+    resetLinkText: { color: colors.muted, fontSize: 12 },
+    statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
+    statusText: { color: colors.muted, fontSize: 14 },
+
+    switchMeterButton: { flexDirection: 'row', alignItems: 'center', marginLeft: 12 },
+    switchMeterIcon: { color: colors.info, fontSize: 14, marginRight: 4 },
+    switchMeterText: { color: colors.info, fontSize: 12, fontWeight: '600' },
+
+    resultCard: {
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      padding: 14,
+      marginTop: 16,
+    },
+    statGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -5, marginBottom: 2 },
+    customizeHint: { color: colors.mutedFaint, fontSize: 10.5, marginBottom: 10, textAlign: 'center' },
+
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.6)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 24,
+    },
+    modalSheet: {
+      width: '100%',
+      maxWidth: 400,
+      backgroundColor: colors.card,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      padding: 18,
+    },
+    modalTitle: { color: colors.text, fontSize: 16, fontWeight: '700', marginBottom: 4 },
+    modalSubtitle: { color: colors.muted, fontSize: 13, marginBottom: 14 },
+    modalCancel: { alignItems: 'center', paddingVertical: 12, marginTop: 6 },
+    modalCancelText: { color: colors.muted, fontSize: 13, fontWeight: '600' },
+
+    deviceRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.cardBorder },
+    deviceName: { color: colors.text, fontSize: 14, fontWeight: '600' },
+    deviceMeta: { color: colors.muted, fontSize: 11, fontFamily: 'monospace', marginTop: 1 },
+  });
 
   return (
     <View>
@@ -228,51 +278,3 @@ export default function MainTab({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  statusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  resetLink: { alignItems: 'center', paddingVertical: 8 },
-  resetLinkText: { color: colors.muted, fontSize: 12 },
-  statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
-  statusText: { color: colors.muted, fontSize: 14 },
-
-  switchMeterButton: { flexDirection: 'row', alignItems: 'center', marginLeft: 12 },
-  switchMeterIcon: { color: colors.info, fontSize: 14, marginRight: 4 },
-  switchMeterText: { color: colors.info, fontSize: 12, fontWeight: '600' },
-
-  resultCard: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    padding: 14,
-    marginTop: 16,
-  },
-  statGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -5, marginBottom: 2 },
-  customizeHint: { color: colors.mutedFaint, fontSize: 10.5, marginBottom: 10, textAlign: 'center' },
-
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  modalSheet: {
-    width: '100%',
-    maxWidth: 400,
-    backgroundColor: colors.card,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    padding: 18,
-  },
-  modalTitle: { color: colors.text, fontSize: 16, fontWeight: '700', marginBottom: 4 },
-  modalSubtitle: { color: colors.muted, fontSize: 13, marginBottom: 14 },
-  modalCancel: { alignItems: 'center', paddingVertical: 12, marginTop: 6 },
-  modalCancelText: { color: colors.muted, fontSize: 13, fontWeight: '600' },
-
-  deviceRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.cardBorder },
-  deviceName: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  deviceMeta: { color: colors.muted, fontSize: 11, fontFamily: 'monospace', marginTop: 1 },
-});

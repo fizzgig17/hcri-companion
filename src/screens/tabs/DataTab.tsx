@@ -12,7 +12,7 @@ import React from 'react';
 import { View, Text, TextInput, StyleSheet } from 'react-native';
 import PrimaryButton from '../../components/PrimaryButton';
 import CollapsibleSection from '../../components/CollapsibleSection';
-import { colors } from '../../theme';
+import { useTheme } from '../../contexts/ThemeContext';
 import { MeterResult } from '../../ble/parseResult';
 import { SpectralAnalysis } from '../../utils/spectralAnalysis';
 import { buildCsv, defaultLabel } from '../../hcri/buildCsv';
@@ -62,6 +62,86 @@ export default function DataTab({
   onShareCsv,
   cachedUsername,
 }: Props) {
+  const { colors } = useTheme();
+
+  const styles = StyleSheet.create({
+    empty: { paddingVertical: 40, alignItems: 'center' },
+    emptyText: { color: colors.muted, fontSize: 13 },
+
+    card: {
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      padding: 14,
+      marginBottom: 12,
+    },
+    row: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingVertical: 4,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.cardBorder,
+    },
+    rowLabel: { color: colors.muted, fontSize: 12 },
+    rowValue: { color: colors.text, fontSize: 12, fontFamily: 'monospace' },
+
+    // Compact, plain-text summary of the core colorimetric numbers -- small
+    // and unboxed on purpose (no tile background/border like StatCard),
+    // since this is just a quick-reference recap of what Main's result card
+    // already showed prominently, not a second place to feature them.
+    summaryRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      paddingBottom: 10,
+      marginBottom: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.cardBorder,
+    },
+    summaryItem: { width: '33.33%', marginBottom: 6 },
+    summaryValue: { color: colors.text, fontSize: 13, fontWeight: '600', fontFamily: 'monospace' },
+    summaryUnit: { color: colors.muted, fontSize: 10, fontWeight: '400' },
+    summaryLabel: { color: colors.muted, fontSize: 10 },
+
+    csvPreview: {
+      color: colors.text,
+      fontSize: 10,
+      lineHeight: 14,
+      fontFamily: 'monospace',
+    },
+
+    fieldLabel: { color: colors.muted, fontSize: 11, marginBottom: 4 },
+    // Background/border live on the wrapper, not the TextInput itself, so the
+    // overlaid default-text <Text> (titleInputOverlay) and the real input
+    // share the exact same padding box and line up pixel-for-pixel.
+    titleInputWrap: {
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 8,
+      minHeight: 38,
+      position: 'relative',
+    },
+    titleInputOverlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      color: colors.muted,
+      fontSize: 13,
+    },
+    titleInput: {
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      color: colors.text,
+      fontSize: 13,
+      minHeight: 38,
+    },
+  });
+
   if (!result || !analysis) {
     return (
       <View style={styles.empty}>
@@ -176,81 +256,3 @@ export default function DataTab({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  empty: { paddingVertical: 40, alignItems: 'center' },
-  emptyText: { color: colors.muted, fontSize: 13 },
-
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    padding: 14,
-    marginBottom: 12,
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.cardBorder,
-  },
-  rowLabel: { color: colors.muted, fontSize: 12 },
-  rowValue: { color: colors.text, fontSize: 12, fontFamily: 'monospace' },
-
-  // Compact, plain-text summary of the core colorimetric numbers -- small
-  // and unboxed on purpose (no tile background/border like StatCard),
-  // since this is just a quick-reference recap of what Main's result card
-  // already showed prominently, not a second place to feature them.
-  summaryRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingBottom: 10,
-    marginBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.cardBorder,
-  },
-  summaryItem: { width: '33.33%', marginBottom: 6 },
-  summaryValue: { color: colors.text, fontSize: 13, fontWeight: '600', fontFamily: 'monospace' },
-  summaryUnit: { color: colors.muted, fontSize: 10, fontWeight: '400' },
-  summaryLabel: { color: colors.muted, fontSize: 10 },
-
-  csvPreview: {
-    color: colors.text,
-    fontSize: 10,
-    lineHeight: 14,
-    fontFamily: 'monospace',
-  },
-
-  fieldLabel: { color: colors.muted, fontSize: 11, marginBottom: 4 },
-  // Background/border live on the wrapper, not the TextInput itself, so the
-  // overlaid default-text <Text> (titleInputOverlay) and the real input
-  // share the exact same padding box and line up pixel-for-pixel.
-  titleInputWrap: {
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    borderRadius: 8,
-    minHeight: 38,
-    position: 'relative',
-  },
-  titleInputOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    color: colors.muted,
-    fontSize: 13,
-  },
-  titleInput: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    color: colors.text,
-    fontSize: 13,
-    minHeight: 38,
-  },
-});

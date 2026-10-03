@@ -24,7 +24,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
 import Svg, { Rect, Line, Text as SvgText } from 'react-native-svg';
-import { colors } from '../theme';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface Props {
   ri: number[];
@@ -66,6 +66,7 @@ function readableTextOn(hex: string): string {
 }
 
 export default function RValuesBarChart({ ri, height }: Props) {
+  const { colors } = useTheme();
   const [width, setWidth] = useState(() => Dimensions.get('window').width);
 
   const items = ri
@@ -95,6 +96,10 @@ export default function RValuesBarChart({ ri, height }: Props) {
   const rowHeight = plotHeight / items.length;
   const barHeight = Math.min(rowHeight * 0.62, 16);
   const x0 = xFor(lo);
+
+  const styles = StyleSheet.create({
+    container: { width: '100%' },
+  });
 
   return (
     <View style={styles.container} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
@@ -165,7 +170,3 @@ export default function RValuesBarChart({ ri, height }: Props) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { width: '100%' },
-});

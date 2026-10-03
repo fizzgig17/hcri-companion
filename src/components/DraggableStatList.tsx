@@ -19,7 +19,7 @@
 
 import React, { useMemo, useRef } from 'react';
 import { View, Text, TouchableOpacity, PanResponder, PanResponderInstance, Animated, StyleSheet } from 'react-native';
-import { colors } from '../theme';
+import { useTheme } from '../contexts/ThemeContext';
 
 const ROW_HEIGHT = 50;
 
@@ -37,6 +37,7 @@ export interface DraggableStatListProps {
 }
 
 export default function DraggableStatList({ order, enabled, labelFor, onReorder, onToggle }: DraggableStatListProps) {
+  const { colors } = useTheme();
   // One Animated.Value per id, each tracking that row's current `top`
   // (index * ROW_HEIGHT), created once per id and reused across
   // reorders/re-renders -- a fresh Animated.Value every render would
@@ -124,6 +125,36 @@ export default function DraggableStatList({ order, enabled, labelFor, onReorder,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order.join('|')]);
 
+  const styles = StyleSheet.create({
+    row: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      height: ROW_HEIGHT,
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderBottomWidth: 1,
+      borderBottomColor: colors.cardBorder,
+      backgroundColor: colors.card,
+    },
+    handle: { width: 40, alignItems: 'center', justifyContent: 'center', height: '100%' },
+    handleGlyph: { color: colors.muted, fontSize: 20 },
+    checkbox: {
+      width: 22,
+      height: 22,
+      borderRadius: 5,
+      borderWidth: 1.5,
+      borderColor: colors.mutedFaint,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 12,
+    },
+    checkboxChecked: { backgroundColor: colors.accent, borderColor: colors.accent },
+    checkmark: { color: '#fff', fontSize: 13, fontWeight: '700' },
+    rowLabel: { color: colors.text, fontSize: 15, fontWeight: '500' },
+    rowLabelDisabled: { color: colors.muted },
+  });
+
   return (
     <View style={{ height: order.length * ROW_HEIGHT }}>
       {order.map((id) => {
@@ -150,33 +181,3 @@ export default function DraggableStatList({ order, enabled, labelFor, onReorder,
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  row: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: ROW_HEIGHT,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.cardBorder,
-    backgroundColor: colors.card,
-  },
-  handle: { width: 40, alignItems: 'center', justifyContent: 'center', height: '100%' },
-  handleGlyph: { color: colors.muted, fontSize: 20 },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 5,
-    borderWidth: 1.5,
-    borderColor: colors.mutedFaint,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  checkboxChecked: { backgroundColor: colors.accent, borderColor: colors.accent },
-  checkmark: { color: '#fff', fontSize: 13, fontWeight: '700' },
-  rowLabel: { color: colors.text, fontSize: 15, fontWeight: '500' },
-  rowLabelDisabled: { color: colors.muted },
-});

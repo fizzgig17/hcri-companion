@@ -15,7 +15,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
 import Svg, { Path, Line, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
-import { colors } from '../theme';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface Props {
   spectrum: { nm: number; value: number }[];
@@ -91,6 +91,7 @@ export default function SpectrumChart({ spectrum, height = 200 }: Props) {
   // estimate means a chart is drawn immediately on mount; onLayout still
   // corrects it to the exact measured value the moment it arrives, same as
   // before.
+  const { colors } = useTheme();
   const [width, setWidth] = useState(() => Dimensions.get('window').width);
 
   if (spectrum.length < 2) {

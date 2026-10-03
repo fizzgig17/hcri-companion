@@ -6,7 +6,7 @@
 
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, StyleProp, ViewStyle } from 'react-native';
-import { colors } from '../theme';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface Props {
   title: string;
@@ -18,6 +18,27 @@ interface Props {
 }
 
 export default function PrimaryButton({ title, onPress, disabled, variant = 'accent', style }: Props) {
+  const { colors } = useTheme();
+
+  const styles = StyleSheet.create({
+    button: {
+      borderRadius: 10,
+      paddingVertical: 14,
+      paddingHorizontal: 20,
+      alignItems: 'center',
+      marginTop: 8,
+    },
+    buttonAccent: { backgroundColor: colors.accent },
+    buttonMuted: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder },
+    // Outlined rather than solid-filled -- "Forget Credentials" is a
+    // destructive but infrequent action, not something that should compete
+    // visually with Save for attention every time this screen is opened.
+    buttonDanger: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.danger },
+    buttonDisabled: { opacity: 0.5 },
+    buttonText: { color: colors.text, fontSize: 15, fontWeight: '600' },
+    buttonTextDanger: { color: colors.danger },
+  });
+
   return (
     <TouchableOpacity
       style={[
@@ -34,22 +55,3 @@ export default function PrimaryButton({ title, onPress, disabled, variant = 'acc
     </TouchableOpacity>
   );
 }
-
-const styles = StyleSheet.create({
-  button: {
-    borderRadius: 10,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonAccent: { backgroundColor: colors.accent },
-  buttonMuted: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.cardBorder },
-  // Outlined rather than solid-filled -- "Forget Credentials" is a
-  // destructive but infrequent action, not something that should compete
-  // visually with Save for attention every time this screen is opened.
-  buttonDanger: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.danger },
-  buttonDisabled: { opacity: 0.5 },
-  buttonText: { color: colors.text, fontSize: 15, fontWeight: '600' },
-  buttonTextDanger: { color: colors.danger },
-});

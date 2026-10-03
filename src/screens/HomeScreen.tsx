@@ -31,7 +31,7 @@ import { shareDebugLog } from '../utils/shareLog';
 import { shareSingleReadingCsv, shareAllReadingsCsv } from '../utils/shareCsv';
 import { hapticSuccess, hapticFailure } from '../utils/haptics';
 import { enableKeepAwake, disableKeepAwake } from '../utils/keepAwake';
-import { colors } from '../theme';
+import { useTheme } from '../contexts/ThemeContext';
 import TabBar from '../components/TabBar';
 import MainTab, { Status, FoundDevice } from './tabs/MainTab';
 import DataTab from './tabs/DataTab';
@@ -55,6 +55,7 @@ type TabKey = 'main' | 'data' | 'history' | 'about' | 'logs';
 const CONNECT_SCAN_WINDOW_MS = 3000;
 
 export default function HomeScreen({ navigation }: any) {
+  const { colors } = useTheme();
   const [activeTab, setActiveTab] = useState<TabKey>('main');
   const [status, setStatus] = useState<Status>('disconnected');
   const [result, setResult] = useState<MeterResult | null>(null);
@@ -727,6 +728,27 @@ export default function HomeScreen({ navigation }: any) {
 
   const isBusy = status === 'connecting' || status === 'measuring' || status === 'uploading';
 
+  const styles = StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    // paddingBottom is extra-generous (not just enough to clear the home
+    // indicator/nav bar) because this ScrollView is shared by every tab --
+    // Data's and History's own content (collapsible sections expanded,
+    // a long reading list) can run considerably taller than Main's, and
+    // this is the one padding value that has to leave room for all of them
+    // without the bottom-most content ever crowding the edge of the screen.
+    content: { padding: 16, paddingBottom: 56 },
+
+    headerRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 12,
+    },
+    title: { fontSize: 22, fontWeight: '700', color: colors.text },
+    deviceSubtitle: { fontSize: 12, color: colors.muted, marginTop: 1 },
+    settingsGear: { fontSize: 22, color: colors.muted },
+  });
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -806,24 +828,3 @@ export default function HomeScreen({ navigation }: any) {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  // paddingBottom is extra-generous (not just enough to clear the home
-  // indicator/nav bar) because this ScrollView is shared by every tab --
-  // Data's and History's own content (collapsible sections expanded,
-  // a long reading list) can run considerably taller than Main's, and
-  // this is the one padding value that has to leave room for all of them
-  // without the bottom-most content ever crowding the edge of the screen.
-  content: { padding: 16, paddingBottom: 56 },
-
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  title: { fontSize: 22, fontWeight: '700', color: colors.text },
-  deviceSubtitle: { fontSize: 12, color: colors.muted, marginTop: 1 },
-  settingsGear: { fontSize: 22, color: colors.muted },
-});

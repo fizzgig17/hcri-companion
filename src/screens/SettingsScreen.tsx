@@ -26,9 +26,10 @@ import {
 } from '../storage/statDisplayPrefs';
 import { STAT_METRIC_BY_ID } from '../utils/statMetrics';
 import { maskSecret } from '../utils/maskSecret';
-import { colors } from '../theme';
+import { useTheme } from '../contexts/ThemeContext';
 
 export default function SettingsScreen() {
+  const { colors } = useTheme();
   const [username, setUsername] = useState('');
   const [token, setToken] = useState('');
   const [hasSaved, setHasSaved] = useState(false);
@@ -147,6 +148,69 @@ export default function SettingsScreen() {
     setHasSaved(false);
   };
 
+  const styles = StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    // Padding lives here (the scrollable content) rather than on the
+    // ScrollView's own `style` -- padding on the outer style can clip the
+    // last bit of content at the bottom of a scroll on some platforms.
+    // paddingBottom is generous, not just enough to clear the content itself
+    // -- this screen has no SafeAreaView of its own, so nothing else is
+    // reserving room for the home indicator/nav bar below the last field,
+    // and the draggable measurement list (DraggableStatList) can run long
+    // enough that a tighter value left it crowding the bottom of the screen.
+    contentContainer: { padding: 16, paddingBottom: 56 },
+    label: { color: colors.muted, marginTop: 14, marginBottom: 6 },
+    input: {
+      backgroundColor: colors.card,
+      color: colors.text,
+      padding: 11,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    // Visually distinct from `input` (no editable-looking border/background)
+    // so it reads as "locked display", not just a disabled text field.
+    lockedField: {
+      backgroundColor: colors.card,
+      padding: 11,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    // Matches `input`'s own text color rather than a dimmer gray -- a dimmer
+    // tone on this box's near-black background read as "I can't see the
+    // key, maybe it's too dark" in practice, even though it technically had
+    // enough contrast on paper.
+    lockedFieldText: { color: colors.text, fontFamily: 'monospace', fontSize: 14 },
+    hint: { color: colors.mutedFaint, fontSize: 12, marginTop: 10, lineHeight: 16 },
+    // Provides the gap above the Save button; noTopMargin below cancels out
+    // PrimaryButton's own default marginTop so it doesn't stack on top of this.
+    saveButtonWrap: { marginTop: 18 },
+    noTopMargin: { marginTop: 0 },
+    toggleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 28,
+      paddingTop: 20,
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+    },
+    toggleTextWrap: { flex: 1, marginRight: 12 },
+    toggleLabel: { color: colors.text, fontSize: 14, fontWeight: '600', marginBottom: 4 },
+    toggleHint: { color: colors.muted, fontSize: 12, lineHeight: 16 },
+
+    statsSection: {
+      marginTop: 28,
+      paddingTop: 20,
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+    },
+    statsHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    statsTitle: { color: colors.text, fontSize: 14, fontWeight: '600' },
+    statsResetLink: { color: colors.info, fontSize: 12.5 },
+    statsHint: { color: colors.muted, fontSize: 12, lineHeight: 16, marginTop: 4, marginBottom: 14 },
+  });
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       {hasSaved ? (
@@ -186,7 +250,7 @@ export default function SettingsScreen() {
             onChangeText={setUsername}
             autoCapitalize="none"
             placeholder="username"
-            placeholderTextColor="#666"
+            placeholderTextColor={colors.mutedFaint}
           />
 
           <Text style={styles.label}>hCRI.io API Token</Text>
@@ -197,7 +261,7 @@ export default function SettingsScreen() {
             autoCapitalize="none"
             secureTextEntry
             placeholder="hcri_..."
-            placeholderTextColor="#666"
+            placeholderTextColor={colors.mutedFaint}
           />
 
           <View style={styles.saveButtonWrap}>
@@ -250,66 +314,3 @@ export default function SettingsScreen() {
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#111' },
-  // Padding lives here (the scrollable content) rather than on the
-  // ScrollView's own `style` -- padding on the outer style can clip the
-  // last bit of content at the bottom of a scroll on some platforms.
-  // paddingBottom is generous, not just enough to clear the content itself
-  // -- this screen has no SafeAreaView of its own, so nothing else is
-  // reserving room for the home indicator/nav bar below the last field,
-  // and the draggable measurement list (DraggableStatList) can run long
-  // enough that a tighter value left it crowding the bottom of the screen.
-  contentContainer: { padding: 16, paddingBottom: 56 },
-  label: { color: '#999', marginTop: 14, marginBottom: 6 },
-  input: {
-    backgroundColor: '#1c1c1c',
-    color: '#eee',
-    padding: 11,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#333',
-  },
-  // Visually distinct from `input` (no editable-looking border/background)
-  // so it reads as "locked display", not just a disabled text field.
-  lockedField: {
-    backgroundColor: '#161618',
-    padding: 11,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#2a2a2e',
-  },
-  // Matches `input`'s own text color (#eee) rather than a dimmer gray --
-  // '#bbb' on this box's near-black background read as "I can't see the
-  // key, maybe it's too dark" in practice, even though it technically had
-  // enough contrast on paper.
-  lockedFieldText: { color: '#eee', fontFamily: 'monospace', fontSize: 14 },
-  hint: { color: '#777', fontSize: 12, marginTop: 10, lineHeight: 16 },
-  // Provides the gap above the Save button; noTopMargin below cancels out
-  // PrimaryButton's own default marginTop so it doesn't stack on top of this.
-  saveButtonWrap: { marginTop: 18 },
-  noTopMargin: { marginTop: 0 },
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 28,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#2a2a2e',
-  },
-  toggleTextWrap: { flex: 1, marginRight: 12 },
-  toggleLabel: { color: '#eee', fontSize: 14, fontWeight: '600', marginBottom: 4 },
-  toggleHint: { color: '#999', fontSize: 12, lineHeight: 16 },
-
-  statsSection: {
-    marginTop: 28,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#2a2a2e',
-  },
-  statsHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  statsTitle: { color: '#eee', fontSize: 14, fontWeight: '600' },
-  statsResetLink: { color: colors.info, fontSize: 12.5 },
-  statsHint: { color: '#999', fontSize: 12, lineHeight: 16, marginTop: 4, marginBottom: 14 },
-});

@@ -24,7 +24,7 @@ import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '.
 import { STAT_METRIC_BY_ID } from '../utils/statMetrics';
 import SpectrumTab from './tabs/SpectrumTab';
 import StatCard from '../components/StatCard';
-import { colors } from '../theme';
+import { useTheme } from '../contexts/ThemeContext';
 
 function formatSavedAt(ms: number): string {
   return new Date(ms).toLocaleString();
@@ -37,6 +37,7 @@ function formatSavedAt(ms: number): string {
 // shape (route.params.reading: SavedReading) is still enforced where it
 // matters, at the one call site that navigates here (HomeScreen.tsx).
 export default function ReadingDetailScreen({ route, navigation }: any) {
+  const { colors } = useTheme();
   const reading: SavedReading = route.params.reading;
 
   // Same fallback readingHistory.ts's own SavedReading.analysis comment
@@ -63,6 +64,24 @@ export default function ReadingDetailScreen({ route, navigation }: any) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const styles = StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    content: { padding: 16, paddingBottom: 32 },
+
+    savedAt: { color: colors.muted, fontSize: 12, fontFamily: 'monospace', marginBottom: 10 },
+
+    resultCard: {
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      padding: 14,
+      marginBottom: 16,
+    },
+    statGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -5, marginBottom: 2 },
+    customizeHint: { color: colors.mutedFaint, fontSize: 10.5, marginBottom: 2, textAlign: 'center' },
+  });
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.savedAt}>{formatSavedAt(reading.savedAt)}</Text>
@@ -84,21 +103,3 @@ export default function ReadingDetailScreen({ route, navigation }: any) {
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#111' },
-  content: { padding: 16, paddingBottom: 32 },
-
-  savedAt: { color: colors.muted, fontSize: 12, fontFamily: 'monospace', marginBottom: 10 },
-
-  resultCard: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    padding: 14,
-    marginBottom: 16,
-  },
-  statGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -5, marginBottom: 2 },
-  customizeHint: { color: colors.mutedFaint, fontSize: 10.5, marginBottom: 2, textAlign: 'center' },
-});

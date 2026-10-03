@@ -12,7 +12,7 @@
 
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView, useWindowDimensions, StyleSheet, Alert } from 'react-native';
-import { colors } from '../../theme';
+import { useTheme } from '../../contexts/ThemeContext';
 
 interface Props {
   log: string[];
@@ -22,6 +22,8 @@ interface Props {
 }
 
 export default function LogsTab({ log, onShare, onClear }: Props) {
+  const { colors } = useTheme();
+
   const confirmClear = () => {
     Alert.alert('Clear debug log?', 'This clears what\'s shown here. It does not affect anything already shared or uploaded.', [
       { text: 'Cancel', style: 'cancel' },
@@ -34,6 +36,42 @@ export default function LogsTab({ log, onShare, onClear }: Props) {
   // this card -- the log box itself takes whatever's left, with a sane
   // floor so it's never uselessly short on a small/split-screen window.
   const logBoxHeight = Math.max(260, height - 320);
+
+  const styles = StyleSheet.create({
+    card: {
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      padding: 14,
+    },
+    empty: { color: colors.mutedFaint, fontSize: 12, fontStyle: 'italic', paddingVertical: 4 },
+    buttonRow: { flexDirection: 'row', marginHorizontal: -4, marginBottom: 10 },
+    rowButton: { flex: 1, marginHorizontal: 4 },
+    shareButton: {
+      backgroundColor: colors.info,
+      borderRadius: 8,
+      paddingVertical: 10,
+      alignItems: 'center',
+    },
+    shareButtonText: { color: colors.text, fontSize: 13, fontWeight: '600' },
+    clearButton: {
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.danger,
+      borderRadius: 8,
+      paddingVertical: 10,
+      alignItems: 'center',
+    },
+    clearButtonText: { color: colors.danger, fontSize: 13, fontWeight: '600' },
+    logBox: {
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 8,
+      padding: 8,
+    },
+    logLine: { color: colors.mutedFaint, fontSize: 11, fontFamily: 'monospace', paddingVertical: 1 },
+  });
 
   return (
     <View style={styles.card}>
@@ -65,39 +103,3 @@ export default function LogsTab({ log, onShare, onClear }: Props) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    padding: 14,
-  },
-  empty: { color: colors.mutedFaint, fontSize: 12, fontStyle: 'italic', paddingVertical: 4 },
-  buttonRow: { flexDirection: 'row', marginHorizontal: -4, marginBottom: 10 },
-  rowButton: { flex: 1, marginHorizontal: 4 },
-  shareButton: {
-    backgroundColor: colors.info,
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  shareButtonText: { color: colors.text, fontSize: 13, fontWeight: '600' },
-  clearButton: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.danger,
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  clearButtonText: { color: colors.danger, fontSize: 13, fontWeight: '600' },
-  logBox: {
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    borderRadius: 8,
-    padding: 8,
-  },
-  logLine: { color: colors.mutedFaint, fontSize: 11, fontFamily: 'monospace', paddingVertical: 1 },
-});
