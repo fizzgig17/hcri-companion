@@ -68,7 +68,7 @@
 
 import React, { useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import Svg, { Polygon, Polyline, Circle, Line, Text as SvgText, Image as SvgImage } from 'react-native-svg';
+import Svg, { Polygon, Polyline, Circle, Line, Rect, Text as SvgText, Image as SvgImage } from 'react-native-svg';
 import { planckianLocusXy, planckianTick, CCT_TICKS_K, XY } from '../utils/cieChromaticity';
 import { exactSpectralLocus5nm } from '../utils/spectralAnalysis';
 
@@ -335,6 +335,36 @@ export default function ChromaticityChart({ x, y, cct, height = 300 }: Props) {
               </SvgText>
             );
           })}
+
+          {/* The reading's own x/y, pinned to the top-left corner of the
+              plot box -- drawn last (on top of the fill/locus/dot) so it's
+              always legible regardless of what's directly underneath that
+              corner for a given reading's color. A small translucent
+              backing card, same spirit as the dot's white stroke, rather
+              than a second stat-card row below the chart (SpectrumTab.tsx
+              used to show one here) -- the measurement grid above this
+              whole swipeable section already covers CCT/Duv/Ra/R9/etc. for
+              whichever the person has chosen to see; x/y specifically only
+              ever showed up here, so they stay on the chart itself. */}
+          {Number.isFinite(x) && Number.isFinite(y) && (
+            <>
+              <Rect
+                x={PADDING.left + 4}
+                y={PADDING.top + 4}
+                width={64}
+                height={30}
+                rx={4}
+                fill="#ffffff"
+                opacity={0.85}
+              />
+              <SvgText x={PADDING.left + 9} y={PADDING.top + 16} fontSize={10} fill="#333" fontFamily="monospace">
+                x {x.toFixed(4)}
+              </SvgText>
+              <SvgText x={PADDING.left + 9} y={PADDING.top + 28} fontSize={10} fill="#333" fontFamily="monospace">
+                y {y.toFixed(4)}
+              </SvgText>
+            </>
+          )}
         </Svg>
       )}
     </View>

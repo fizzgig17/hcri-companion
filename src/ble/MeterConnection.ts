@@ -170,8 +170,23 @@ export class MeterConnection {
     };
   }
 
-  /** Scans for a device whose name matches any known meter model prefix and connects to it. Resolves with the connected Device. */
-  async scanAndConnect(timeoutMs = 15000): Promise<Device> {
+  /**
+   * Scans for `windowMs` and resolves with every device whose name matches
+   * a known meter model prefix, deduped by id (RSSI updated to whatever was
+   * last heard), sorted strongest-signal first. Always waits out the full
+   * window rather than resolving on the first match -- the caller needs an
+   * accurate count (one meter -> connect straight to it; more than one ->
+   * let the person pick, see HomeScreen.tsx's connect()/the device-picker
+   * overlay) and the only way to know "is there a second one out there" is
+   * to keep listening for the whole window rather than stopping at the
+   * first advertisement seen.
+   *
+   * Replaces the old scanAndConnect(), which connected to whichever
+   * matching device it heard first -- fine when there's only ever one
+   * meter around, but it had no way to notice (or offer a choice) when
+   * there were several.
+   */
+  async scanForKnownMeters(windowMs = 3000): Promise<Device[]> {
     const authorized = await requestBlePermissions();
     if (!authorized) {
       throw new Error(
@@ -181,39 +196,40 @@ export class MeterConnection {
 
     this.log(`Scanning for known meter models (${METER_NAME_PREFIXES.join(', ')})...`);
 
-    const found = await new Promise<Device>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.manager.stopDeviceScan();
-        reject(new Error('Scan timed out -- meter not found'));
-      }, timeoutMs);
-
+    const found = new Map<string, Device>();
+    await new Promise<void>((resolve) => {
       this.manager.startDeviceScan(null, { allowDuplicates: false }, (error, device) => {
         if (error) {
-          clearTimeout(timeout);
-          this.manager.stopDeviceScan();
-          reject(error);
+          this.log(`Scan error: ${error.message}`);
           return;
         }
         if (matchesKnownMeter(device?.name)) {
-          clearTimeout(timeout);
-          this.manager.stopDeviceScan();
-          this.log(`Found ${device!.name} (${device!.id})`);
-          resolve(device!);
+          found.set(device!.id, device!);
         }
       });
+      setTimeout(() => {
+        this.manager.stopDeviceScan();
+        resolve();
+      }, windowMs);
     });
 
-    this.log('Connecting...');
-    const device = await found.connect();
-    return this.finishConnecting(device);
+    const devices = Array.from(found.values()).sort((a, b) => (b.rssi ?? -999) - (a.rssi ?? -999));
+    this.log(
+      devices.length === 0
+        ? 'No known meter models found.'
+        : `Found ${devices.length} meter-like device(s): ${devices
+            .map((d) => `${d.name} (${d.id})`)
+            .join(', ')}`
+    );
+    return devices;
   }
 
   /**
-   * Connects directly to a device you already have the ID for -- e.g. one
-   * picked from the "Scan for Nearby Meters" list -- skipping the
-   * scan-and-match-by-name step entirely. Useful when you already know
-   * which device you want (and lets you connect to a meter whose name
-   * doesn't happen to match METER_NAME_PREFIXES, too).
+   * Connects directly to a device you already have the ID for -- e.g. the
+   * single match scanForKnownMeters() found, or whichever one the person
+   * picked from the device-picker overlay when it found more than one.
+   * Skips the scan-and-match-by-name step entirely, so this also works for
+   * a meter whose name doesn't happen to match METER_NAME_PREFIXES.
    */
   async connectToDevice(deviceId: string): Promise<Device> {
     const authorized = await requestBlePermissions();
@@ -223,8 +239,9 @@ export class MeterConnection {
       );
     }
 
-    // A scan may still be running (e.g. the "Scan for Nearby Meters" list
-    // is open) -- stop it before connecting, since some Android BLE stacks
+    // A scan may still be running (e.g. scanForKnownMeters() just resolved
+    // with more than one candidate, and the person is now picking from the
+    // overlay) -- stop it before connecting, since some Android BLE stacks
     // get flaky about connecting while a scan is still active.
     this.manager.stopDeviceScan();
 
@@ -233,7 +250,7 @@ export class MeterConnection {
     return this.finishConnecting(device);
   }
 
-  /** Shared post-connect setup: service/characteristic discovery, MTU request, subscribing, and wiring the disconnect listener. Used by both scanAndConnect and connectToDevice. */
+  /** Shared post-connect setup: service/characteristic discovery, MTU request, subscribing, and wiring the disconnect listener. Called from connectToDevice() -- the only way to connect now, whether it's the single match scanForKnownMeters() found or a pick from the device-picker overlay. */
   private async finishConnecting(found: Device): Promise<Device> {
     this.log('Discovering services...');
     let connected = await found.discoverAllServicesAndCharacteristics();
@@ -493,36 +510,6 @@ export class MeterConnection {
   }
 
   /**
-   * Scans for ANY nearby BLE device, not just ones matching a known meter
-   * prefix -- useful as a diagnostic: confirms whether the meter is
-   * actually advertising at all, and shows its real advertised name/RSSI
-   * even if it doesn't match METER_NAME_PREFIXES (e.g. a brand new model
-   * you haven't added yet). Deliberately reuses this.manager rather than
-   * creating a new BleManager, for the same reason scanAndConnect does --
-   * multiple live BleManager instances is what caused reconnects to
-   * silently stop working until an app restart.
-   *
-   * Calls onDevice once per advertisement seen (a device may fire
-   * repeatedly as its RSSI updates). Returns a stop function; scanning
-   * also auto-stops after timeoutMs if you don't call it first.
-   */
-  scanForAllDevices(onDevice: (device: Device) => void, timeoutMs = 15000): () => void {
-    this.manager.startDeviceScan(null, { allowDuplicates: false }, (error, device) => {
-      if (error) {
-        this.log(`Scan error: ${error.message}`);
-        return;
-      }
-      if (device) onDevice(device);
-    });
-
-    const timeout = setTimeout(() => this.manager.stopDeviceScan(), timeoutMs);
-    return () => {
-      clearTimeout(timeout);
-      this.manager.stopDeviceScan();
-    };
-  }
-
-  /**
    * Clears out BLE connections to meter-like devices left over from a
    * PREVIOUS JS/native session -- e.g. after Metro pushes new code and the
    * app reloads (or a fresh build is installed) while a meter was still
@@ -560,7 +547,7 @@ export class MeterConnection {
    * connections this object never itself established. Safe to call even
    * when there's nothing stale to clean up; failures here are the
    * expected, harmless common case and are swallowed rather than surfaced
-   * as real errors. Call this BEFORE scanAndConnect()/connectToDevice(),
+   * as real errors. Call this BEFORE scanForKnownMeters()/connectToDevice(),
    * not after.
    */
   async resetStaleConnection(): Promise<void> {

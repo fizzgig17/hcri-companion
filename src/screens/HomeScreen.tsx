@@ -16,7 +16,7 @@ import { MeterResult } from '../ble/parseResult';
 import { analyzeSpectrum } from '../utils/spectralAnalysis';
 import { buildCsv, defaultLabel } from '../hcri/buildCsv';
 import { uploadToHcri } from '../hcri/uploadToHcri';
-import { loadHcriCredentials } from '../storage/secureStorage';
+import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
 import { loadKeepAwakePreference, loadVerboseLoggingPreference } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
 import {
@@ -27,7 +27,6 @@ import {
   deleteManyReadings,
   SavedReading,
 } from '../storage/readingHistory';
-import { METER_NAME_PREFIXES } from '../ble/protocol';
 import { shareDebugLog } from '../utils/shareLog';
 import { shareSingleReadingCsv, shareAllReadingsCsv } from '../utils/shareCsv';
 import { hapticSuccess, hapticFailure } from '../utils/haptics';
@@ -35,17 +34,25 @@ import { enableKeepAwake, disableKeepAwake } from '../utils/keepAwake';
 import { colors } from '../theme';
 import TabBar from '../components/TabBar';
 import MainTab, { Status, FoundDevice } from './tabs/MainTab';
-import SpectrumTab from './tabs/SpectrumTab';
 import DataTab from './tabs/DataTab';
 import HistoryTab from './tabs/HistoryTab';
 import AboutTab from './tabs/AboutTab';
 import LogsTab from './tabs/LogsTab';
 
-// 'chrom' is gone as its own tab key -- it's now a swipeable sub-page
-// inside SpectrumTab (see SwipablePages), matching how the vendor app
-// visually groups Spec./Chrom. together rather than scattering them
-// across unrelated top-level tabs.
-type TabKey = 'main' | 'spectrum' | 'data' | 'history' | 'about' | 'logs';
+// 'chrom' and 'spectrum' are both gone as their own tab keys -- Spectrum/
+// Chrom/R-Values are now swipeable sub-pages (see SwipablePages) living
+// directly on the Main tab, right below its measurement grid, rather than
+// a separate tab you have to switch to after every reading. ReadingDetail
+// Screen.tsx shows the exact same arrangement for a past reading.
+type TabKey = 'main' | 'data' | 'history' | 'about' | 'logs';
+
+// How long a Connect attempt spends collecting matching advertisements
+// before deciding how many distinct meters are actually out there. Unlike
+// the old scanAndConnect() (gone now -- see MeterConnection.ts), this can't
+// just resolve the instant it hears the first match: the whole point is
+// knowing whether a SECOND one is also in range, which means waiting out a
+// real window rather than racing to the first advertisement.
+const CONNECT_SCAN_WINDOW_MS = 3000;
 
 export default function HomeScreen({ navigation }: any) {
   const [activeTab, setActiveTab] = useState<TabKey>('main');
@@ -216,25 +223,121 @@ export default function HomeScreen({ navigation }: any) {
     return connRef.current;
   }, [appendLog]);
 
-  const connect = useCallback(async () => {
-    setStatus('connecting');
-    try {
-      const conn = getConnection();
-      // Clears any BLE connection to the meter left over from a previous
-      // app/JS session (see MeterConnection.resetStaleConnection() for why
-      // this is needed -- it's what used to require a power cycle after
-      // reloading the app with the meter still connected). Cheap/harmless
-      // when there's nothing stale to clear.
-      await conn.resetStaleConnection();
-      await conn.scanAndConnect();
-      await initializeMeter(conn);
-      setDeviceName(conn.getDeviceName());
-      setStatus('connected');
-    } catch (e: any) {
-      appendLog(`Connect failed: ${e.message}`);
-      setStatus('disconnected');
-    }
-  }, [appendLog, getConnection]);
+  // The candidates from the most recent scan that found more than one
+  // matching meter -- kept around even after connecting (NOT cleared the
+  // moment a device is picked/auto-chosen), so MainTab's "switch meter"
+  // icon can reopen the exact same list later without a fresh scan. Reset
+  // to null whenever a scan comes back with 0 or 1 matches, since then
+  // there's nothing to switch between. `devicePickerVisible` is the
+  // separate, short-lived flag for whether the overlay itself is up right
+  // now -- it starts true the moment multiMeterCandidates is first set
+  // (from connect()'s own scan) and goes false on a pick/dismiss, while
+  // multiMeterCandidates itself lives on for the icon.
+  const [multiMeterCandidates, setMultiMeterCandidates] = useState<FoundDevice[] | null>(null);
+  const [devicePickerVisible, setDevicePickerVisible] = useState(false);
+
+  /**
+   * `preferLastDeviceOnMultiple`: used by the "app came back to the
+   * foreground after we auto-disconnected it" path below, NOT by a fresh
+   * app launch or a manual tap on Connect. In that one case, popping up a
+   * picker the person didn't ask for every time they switch back to the
+   * app (with some other meter now also in range) would be more annoying
+   * than useful -- reconnecting to whichever meter was connected right
+   * before backgrounding is almost always what's actually wanted. If that
+   * meter isn't among what's currently in range (out of range now, or this
+   * is the very first connect of the session with nothing recorded yet),
+   * this still falls back to the normal picker rather than guessing.
+   */
+  const connect = useCallback(
+    async (opts?: { preferLastDeviceOnMultiple?: boolean }) => {
+      setStatus('connecting');
+      try {
+        const conn = getConnection();
+        // Clears any BLE connection to the meter left over from a previous
+        // app/JS session (see MeterConnection.resetStaleConnection() for why
+        // this is needed -- it's what used to require a power cycle after
+        // reloading the app with the meter still connected). Cheap/harmless
+        // when there's nothing stale to clear.
+        await conn.resetStaleConnection();
+        const candidates = await conn.scanForKnownMeters(CONNECT_SCAN_WINDOW_MS);
+
+        if (candidates.length === 0) {
+          setMultiMeterCandidates(null);
+          throw new Error('Meter not found -- make sure it is powered on and in range');
+        }
+
+        if (candidates.length === 1) {
+          setMultiMeterCandidates(null);
+          await conn.connectToDevice(candidates[0].id);
+          await initializeMeter(conn);
+          setDeviceName(conn.getDeviceName());
+          setStatus('connected');
+          return;
+        }
+
+        // More than one match -- remember the list either way (so the
+        // switch-meter icon works later even if we silently pick one
+        // below), then decide whether that's a silent pick or a picker.
+        const mapped = candidates.map((d) => ({ id: d.id, name: d.name, rssi: d.rssi }));
+        setMultiMeterCandidates(mapped);
+
+        const lastId = opts?.preferLastDeviceOnMultiple ? await loadLastDeviceId().catch(() => null) : null;
+        const lastMatch = lastId ? candidates.find((d) => d.id === lastId) : undefined;
+        if (lastMatch) {
+          await conn.connectToDevice(lastMatch.id);
+          await initializeMeter(conn);
+          setDeviceName(conn.getDeviceName());
+          setStatus('connected');
+          return;
+        }
+
+        // Either this is a fresh launch/manual Connect (always asks when
+        // there's more than one), or it's a foreground-reconnect that
+        // couldn't find the previously-connected meter among what's in
+        // range now -- either way, nothing safe to guess, so ask.
+        setDevicePickerVisible(true);
+        setStatus('disconnected');
+      } catch (e: any) {
+        appendLog(`Connect failed: ${e.message}`);
+        setStatus('disconnected');
+      }
+    },
+    [appendLog, getConnection]
+  );
+
+  /** Called when the person taps a device in the picker overlay -- whether it just opened from connect()'s own scan, or was reopened later via the "switch meter" icon while already connected to a different one of the same candidates. */
+  const selectDeviceFromPicker = useCallback(
+    async (deviceId: string) => {
+      setDevicePickerVisible(false);
+      setStatus('connecting');
+      try {
+        const conn = getConnection();
+        // Only relevant for the switch-meter case: a previous meter may
+        // still be connected, and connectToDevice() doesn't drop an
+        // existing connection on its own before opening a new one.
+        if (conn.isConnected()) {
+          await conn.disconnect();
+        }
+        await conn.connectToDevice(deviceId);
+        await initializeMeter(conn);
+        setDeviceName(conn.getDeviceName());
+        setStatus('connected');
+      } catch (e: any) {
+        appendLog(`Connect failed: ${e.message}`);
+        setStatus('disconnected');
+      }
+    },
+    [appendLog, getConnection]
+  );
+
+  /** The "switch meter" icon next to the status row -- reopens the overlay with the already-known candidate list, no rescan. Only ever enabled (see MainTab) when multiMeterCandidates actually has 2+ entries. */
+  const openDevicePicker = useCallback(() => {
+    setDevicePickerVisible(true);
+  }, []);
+
+  const dismissDevicePicker = useCallback(() => {
+    setDevicePickerVisible(false);
+  }, []);
 
   // Try to connect automatically as soon as the app opens, rather than
   // requiring a manual tap on "Connect to Meter" every time -- if the
@@ -242,7 +345,10 @@ export default function HomeScreen({ navigation }: any) {
   // "Connected" with no user action needed. If it's not found (meter off,
   // out of range, etc.) this just fails quietly into the normal
   // disconnected state, same as if Connect had been pressed and timed out;
-  // the button is still there to retry manually.
+  // the button is still there to retry manually. No preferLastDeviceOnMultiple
+  // here -- this is a fresh app launch, not a reconnect, so if more than one
+  // meter is in range it should pop up the picker same as a manual tap
+  // would, not silently guess.
   useEffect(() => {
     connect();
     // Intentionally run once on mount only.
@@ -278,70 +384,6 @@ export default function HomeScreen({ navigation }: any) {
   useEffect(() => {
     return () => disableKeepAwake();
   }, []);
-
-  // Diagnostic: list nearby BLE devices that look like a Hopoocolor meter
-  // (name starts with a known prefix, e.g. "HPCS") -- filters out all the
-  // other unrelated BLE noise (headphones, watches, etc.) a raw scan picks
-  // up, since the only thing worth surfacing here is "is a meter actually
-  // advertising, and under what name/RSSI."
-  const [scanning, setScanning] = useState(false);
-  const [foundDevices, setFoundDevices] = useState<FoundDevice[]>([]);
-  const stopScanRef = useRef<(() => void) | null>(null);
-
-  const toggleScan = useCallback(() => {
-    if (scanning) {
-      stopScanRef.current?.();
-      stopScanRef.current = null;
-      setScanning(false);
-      return;
-    }
-
-    setFoundDevices([]);
-    setScanning(true);
-    const conn = getConnection();
-    stopScanRef.current = conn.scanForAllDevices((device) => {
-      const name = device.name;
-      if (!name || !METER_NAME_PREFIXES.some((prefix) => name.startsWith(prefix))) {
-        return; // not a meter -- ignore
-      }
-      setFoundDevices((prev) => {
-        const existing = prev.findIndex((d) => d.id === device.id);
-        const entry = { id: device.id, name: device.name, rssi: device.rssi };
-        if (existing >= 0) {
-          const next = [...prev];
-          next[existing] = entry;
-          return next;
-        }
-        return [...prev, entry];
-      });
-    }, 15000);
-
-    // Auto-flip the button back after the scan's own timeout elapses.
-    setTimeout(() => setScanning(false), 15000);
-  }, [scanning, getConnection]);
-
-  /** Connect directly to a device tapped in the "Nearby Meters" list, instead of re-running the generic scan-and-match-by-name. */
-  const connectToFoundDevice = useCallback(
-    async (deviceId: string) => {
-      stopScanRef.current?.();
-      stopScanRef.current = null;
-      setScanning(false);
-
-      setStatus('connecting');
-      try {
-        const conn = getConnection();
-        await conn.resetStaleConnection();
-        await conn.connectToDevice(deviceId);
-        await initializeMeter(conn);
-        setDeviceName(conn.getDeviceName());
-        setStatus('connected');
-      } catch (e: any) {
-        appendLog(`Connect failed: ${e.message}`);
-        setStatus('disconnected');
-      }
-    },
-    [appendLog, getConnection]
-  );
 
   // Manual escape hatch for the same stale-connection problem connect()
   // already guards against automatically -- for the case where it still
@@ -465,7 +507,12 @@ export default function HomeScreen({ navigation }: any) {
         if (autoDisconnectedRef.current) {
           autoDisconnectedRef.current = false;
           appendLog('App back in foreground -- reconnecting to meter...');
-          connect();
+          // preferLastDeviceOnMultiple: true -- this is a reconnect, not a
+          // fresh choice, so if more than one meter happens to be in range
+          // right now, silently go back to the one that was connected
+          // before backgrounding rather than popping up a picker the
+          // person didn't ask for (see connect()'s own comment on this).
+          connect({ preferLastDeviceOnMultiple: true });
         }
         return;
       }
@@ -696,7 +743,6 @@ export default function HomeScreen({ navigation }: any) {
         <TabBar
           tabs={[
             { key: 'main', label: 'Main' },
-            { key: 'spectrum', label: 'Spectrum' },
             { key: 'data', label: 'Data' },
             { key: 'history', label: 'History' },
             { key: 'about', label: 'About' },
@@ -712,20 +758,20 @@ export default function HomeScreen({ navigation }: any) {
             isBusy={isBusy}
             result={result}
             analysis={analysis}
-            connect={connect}
+            connect={() => connect()}
             measure={measure}
             disconnect={disconnect}
             resetConnection={resetConnection}
-            scanning={scanning}
-            foundDevices={foundDevices}
-            toggleScan={toggleScan}
-            connectToFoundDevice={connectToFoundDevice}
+            devicePickerDevices={multiMeterCandidates}
+            devicePickerVisible={devicePickerVisible}
+            onOpenDevicePicker={openDevicePicker}
+            onSelectDevice={selectDeviceFromPicker}
+            onDismissDevicePicker={dismissDevicePicker}
             onUpload={upload}
             uploading={status === 'uploading'}
             statIds={statIds}
           />
         )}
-        {activeTab === 'spectrum' && <SpectrumTab result={result} analysis={analysis} />}
         {activeTab === 'data' && (
           <DataTab
             result={result}

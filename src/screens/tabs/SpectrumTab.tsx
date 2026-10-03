@@ -1,20 +1,24 @@
 // src/screens/tabs/SpectrumTab.tsx
 //
-// The "Spectrum" tab: three swipeable sub-pages sharing one top-level tab --
-// the wavelength-colored SPD graph (+ raw per-nm values), the CIE 1931
-// chromaticity diagram, and the CRI R1-R15 bar chart, matching how the
-// vendor app visually groups Spec./Chrom. as adjacent tabs (R-Values is
-// this app's own addition, ported from hCRI.io's own report page -- see
-// RValuesBarChart.tsx). Swipe between them, or tap the dot indicator.
-// Chrom used to be its own top-level tab; merged in here since all three
-// are "what does this reading's color/spectrum look like" views on the
-// exact same result, not separate concerns the way Data/Logs are.
+// Three swipeable sub-pages -- the wavelength-colored SPD graph (+ raw
+// per-nm values), the CIE 1931 chromaticity diagram, and the CRI R1-R15
+// bar chart (ported from hCRI.io's own report page -- see
+// RValuesBarChart.tsx). Swipe between them, or tap the dot indicator. No
+// longer a top-level tab of its own -- it's mounted directly below the
+// measurement grid on MainTab (and ReadingDetailScreen, for a past
+// reading), the one place that grid already lives, rather than a separate
+// tab you'd have to switch to after every reading. Chrom's own x/y numbers
+// are annotated directly on its chart (see ChromaticityChart.tsx) instead
+// of a second stat-card row here -- the measurement grid above already
+// covers CCT/Duv/Ra/R9/etc. for whichever of those the person has chosen
+// to see.
 //
-// This same component is reused, unchanged, by ReadingDetailScreen (the
-// History tab's "View" -> past-reading detail screen) -- a saved
-// reading's result/analysis are the exact same shape as a live one, so
-// there's exactly one implementation of "Spectrum/Chrom/R-Values" to keep
-// in sync rather than two that could drift apart.
+// This same component is reused, unchanged, by both MainTab.tsx (the live
+// reading) and ReadingDetailScreen.tsx (the History tab's "View" ->
+// past-reading detail screen) -- a saved reading's result/analysis are the
+// exact same shape as a live one, so there's exactly one implementation of
+// "Spectrum/Chrom/R-Values" to keep in sync rather than two that could
+// drift apart.
 
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
@@ -22,7 +26,6 @@ import SpectrumChart from '../../components/SpectrumChart';
 import ChromaticityChart from '../../components/ChromaticityChart';
 import RValuesBarChart from '../../components/RValuesBarChart';
 import CollapsibleSection from '../../components/CollapsibleSection';
-import StatCard from '../../components/StatCard';
 import SwipablePages from '../../components/SwipablePages';
 import { colors } from '../../theme';
 import { MeterResult } from '../../ble/parseResult';
@@ -72,14 +75,6 @@ export default function SpectrumTab({ result, analysis }: Props) {
           content: (
             <View style={styles.chartCard}>
               <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} height={280} />
-              <View style={styles.statGrid}>
-                <StatCard label="x" value={analysis.x.toFixed(4)} />
-                <StatCard label="y" value={analysis.y.toFixed(4)} />
-                <StatCard label="CCT" value={analysis.cct.toFixed(0)} unit="K" />
-                <StatCard label="Duv" value={analysis.duv.toFixed(5)} />
-                <StatCard label="Ra (CRI)" value={analysis.ra.toFixed(1)} />
-                <StatCard label="R9" value={analysis.r9.toFixed(1)} />
-              </View>
             </View>
           ),
         },
@@ -114,6 +109,5 @@ const styles = StyleSheet.create({
   spectrumNm: { color: colors.muted, fontSize: 12, fontFamily: 'monospace' },
   spectrumValue: { color: colors.text, fontSize: 12, fontFamily: 'monospace' },
 
-  statGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -6, marginTop: 10 },
   rvaluesTitle: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
 });

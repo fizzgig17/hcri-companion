@@ -1,18 +1,25 @@
 // src/screens/tabs/MainTab.tsx
 //
 // The "Main" tab: connection status, Connect/Take Reading/Disconnect at
-// the top, the latest reading + spectrum right below it, and the
-// nearby-meter scan diagnostic tucked at the bottom (it's a
-// troubleshooting tool, not something you need every time). This is
+// the top, and the latest reading right below it -- the same measurement-
+// grid-then-swipeable-Spectrum/Chrom/R-Values arrangement ReadingDetail
+// Screen.tsx shows for a past reading, just for the live one. This is
 // deliberately the ONLY tab that touches the actual BLE connection
-// lifecycle -- Spectrum/Data/Logs are all read-only detail views of
+// lifecycle -- Data/History/Logs are all read-only detail views of
 // whatever the last reading was.
+//
+// There's no "Scan for Nearby Meters" section here any more -- connect()
+// in HomeScreen.tsx now scans for a few seconds every time Connect is
+// pressed, and the device-picker Modal below only appears if that scan
+// actually turns up more than one matching meter. One meter in range
+// (the overwhelmingly common case) connects straight through with no
+// extra UI at all, same as before.
 
 import React from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, Modal, StyleSheet } from 'react-native';
 import PrimaryButton from '../../components/PrimaryButton';
 import StatCard from '../../components/StatCard';
-import SpectrumChart from '../../components/SpectrumChart';
+import SpectrumTab from './SpectrumTab';
 import { colors, statusColors, statusLabels } from '../../theme';
 import { MeterResult } from '../../ble/parseResult';
 import { SpectralAnalysis } from '../../utils/spectralAnalysis';
@@ -38,10 +45,14 @@ interface Props {
   disconnect: () => void;
   /** Manually clears any BLE connection left over from a previous app session -- see MeterConnection.resetStaleConnection(). Surfaced here since that's exactly the situation this button is for: meter won't connect, normally requiring a power cycle. */
   resetConnection: () => void;
-  scanning: boolean;
-  foundDevices: FoundDevice[];
-  toggleScan: () => void;
-  connectToFoundDevice: (id: string) => void;
+  /** The candidates from the most recent scan that found more than one matching meter -- kept around (not cleared on connect) so the "switch meter" icon below can reopen the same list later without a fresh scan. Null means the last scan found 0 or 1 (the ordinary case), so there's nothing to switch between and the icon doesn't show at all. */
+  devicePickerDevices: FoundDevice[] | null;
+  /** Whether the picker overlay itself is open right now -- separate from devicePickerDevices (which outlives the overlay being dismissed, see above). True right after connect()'s scan finds more than one match, or after tapping the "switch meter" icon. */
+  devicePickerVisible: boolean;
+  /** Reopens the overlay using the already-known devicePickerDevices list (the "switch meter" icon) -- never triggers a fresh scan. */
+  onOpenDevicePicker: () => void;
+  onSelectDevice: (id: string) => void;
+  onDismissDevicePicker: () => void;
   /** Same upload action/state DataTab's "Upload to hCRI.io" button uses --
    * duplicated here so you don't have to switch tabs after taking a
    * reading just to send it. Uses whatever title is currently set on the
@@ -65,20 +76,38 @@ export default function MainTab({
   measure,
   disconnect,
   resetConnection,
-  scanning,
-  foundDevices,
-  toggleScan,
-  connectToFoundDevice,
+  devicePickerDevices,
+  devicePickerVisible,
+  onOpenDevicePicker,
+  onSelectDevice,
+  onDismissDevicePicker,
   onUpload,
   uploading,
   statIds,
 }: Props) {
+  const canSwitchMeters = status === 'connected' && (devicePickerDevices?.length ?? 0) > 1;
+
   return (
     <View>
       <View style={styles.statusRow}>
         <View style={[styles.statusDot, { backgroundColor: statusColors[status] }]} />
         <Text style={styles.statusText}>{statusLabels[status]}</Text>
         {isBusy && <ActivityIndicator size="small" color={colors.muted} style={{ marginLeft: 8 }} />}
+        {/* Only shows up when the meter currently connected was one of
+            SEVERAL matches the last scan found -- lets you reopen that same
+            list and pick a different one without a fresh scan or having to
+            disconnect first yourself (onSelectDevice below disconnects the
+            current meter before connecting to whichever one you pick). */}
+        {canSwitchMeters && (
+          <TouchableOpacity
+            onPress={onOpenDevicePicker}
+            style={styles.switchMeterButton}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.switchMeterIcon}>⇄</Text>
+            <Text style={styles.switchMeterText}>Switch meter</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {status === 'disconnected' && (
@@ -138,7 +167,7 @@ export default function MainTab({
           <Text style={styles.customizeHint}>
             Tap ⚙ Settings to customize which measurements show here, and in what order.
           </Text>
-          {result.spectrum.length > 0 && <SpectrumChart spectrum={result.spectrum} />}
+          {result.spectrum.length > 0 && <SpectrumTab result={result} analysis={analysis} />}
           <PrimaryButton
             title={`Upload to ${HCRI_BRAND_HOST}`}
             onPress={onUpload}
@@ -154,43 +183,48 @@ export default function MainTab({
         </View>
       )}
 
-      <View style={styles.scanCard}>
-        <View style={styles.scanHeaderRow}>
-          <Text style={styles.scanTitle}>
-            Scan for Nearby Meters{foundDevices.length > 0 ? ` (${foundDevices.length})` : ''}
-          </Text>
-        </View>
-
-        <TouchableOpacity style={styles.scanLink} onPress={toggleScan}>
-          <Text style={styles.scanLinkText}>
-            {scanning ? 'Scanning… tap to stop' : 'Scan for nearby HPCS devices'}
-          </Text>
-        </TouchableOpacity>
-
-        {foundDevices.length === 0 && (
-          <Text style={styles.deviceMeta}>
-            {scanning ? 'Listening for advertisements…' : 'No HPCS devices found yet.'}
-          </Text>
-        )}
-
-        {foundDevices
-          .slice()
-          .sort((a, b) => (b.rssi ?? -999) - (a.rssi ?? -999))
-          .map((d) => (
-            <TouchableOpacity
-              key={d.id}
-              style={styles.deviceRow}
-              onPress={() => connectToFoundDevice(d.id)}
-              disabled={isBusy}
-              activeOpacity={0.6}
-            >
-              <Text style={styles.deviceName}>{d.name ?? '(unnamed)'}</Text>
-              <Text style={styles.deviceMeta}>
-                {d.id} · {d.rssi ?? '?'} dBm · tap to connect
-              </Text>
+      {/* Opens right after connect()'s scan finds more than one matching
+          meter, or later via the "switch meter" icon above -- a plain
+          Modal overlay rather than a page of its own, since picking a
+          device is a brief, one-off interruption, not a destination you
+          navigate to. Dismissing (backdrop tap or Cancel) just closes the
+          overlay: if this came from a fresh Connect tap with nothing
+          connected yet, that leaves the attempt exactly where
+          resetStaleConnection()/the scan already left it, free to tap
+          Connect again; if it came from the switch-meter icon, the
+          existing connection is untouched. */}
+      <Modal
+        visible={devicePickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={onDismissDevicePicker}
+      >
+        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={onDismissDevicePicker}>
+          {/* Swallows the backdrop's onPress so tapping the sheet itself
+              doesn't also dismiss it -- a plain nested View would still let
+              the touch bubble up to the TouchableOpacity behind it. */}
+          <TouchableOpacity style={styles.modalSheet} activeOpacity={1} onPress={() => {}}>
+            <Text style={styles.modalTitle}>More than one meter found</Text>
+            <Text style={styles.modalSubtitle}>Pick which one to connect to.</Text>
+            {(devicePickerDevices ?? []).map((d) => (
+              <TouchableOpacity
+                key={d.id}
+                style={styles.deviceRow}
+                onPress={() => onSelectDevice(d.id)}
+                activeOpacity={0.6}
+              >
+                <Text style={styles.deviceName}>{d.name ?? '(unnamed)'}</Text>
+                <Text style={styles.deviceMeta}>
+                  {d.id} · {d.rssi ?? '?'} dBm
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={styles.modalCancel} onPress={onDismissDevicePicker}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
             </TouchableOpacity>
-          ))}
-      </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -201,6 +235,10 @@ const styles = StyleSheet.create({
   resetLinkText: { color: colors.muted, fontSize: 12 },
   statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
   statusText: { color: colors.muted, fontSize: 14 },
+
+  switchMeterButton: { flexDirection: 'row', alignItems: 'center', marginLeft: 12 },
+  switchMeterIcon: { color: colors.info, fontSize: 14, marginRight: 4 },
+  switchMeterText: { color: colors.info, fontSize: 12, fontWeight: '600' },
 
   resultCard: {
     backgroundColor: colors.card,
@@ -213,21 +251,28 @@ const styles = StyleSheet.create({
   statGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -5, marginBottom: 2 },
   customizeHint: { color: colors.mutedFaint, fontSize: 10.5, marginBottom: 10, textAlign: 'center' },
 
-  scanCard: {
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalSheet: {
+    width: '100%',
+    maxWidth: 400,
     backgroundColor: colors.card,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.cardBorder,
-    padding: 14,
-    marginTop: 16,
+    padding: 18,
   },
-  scanHeaderRow: { marginBottom: 4 },
-  scanTitle: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  modalTitle: { color: colors.text, fontSize: 16, fontWeight: '700', marginBottom: 4 },
+  modalSubtitle: { color: colors.muted, fontSize: 13, marginBottom: 14 },
+  modalCancel: { alignItems: 'center', paddingVertical: 12, marginTop: 6 },
+  modalCancelText: { color: colors.muted, fontSize: 13, fontWeight: '600' },
 
-  scanLink: { alignItems: 'center', paddingVertical: 10, marginTop: 4 },
-  scanLinkText: { color: colors.info, fontSize: 13 },
-
-  deviceRow: { paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.cardBorder },
+  deviceRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.cardBorder },
   deviceName: { color: colors.text, fontSize: 14, fontWeight: '600' },
   deviceMeta: { color: colors.muted, fontSize: 11, fontFamily: 'monospace', marginTop: 1 },
 });
