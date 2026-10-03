@@ -56,24 +56,34 @@ export default function App() {
     // (which used to handle this automatically) and draws its own header
     // row instead, so that row has to account for the inset itself.
     <SafeAreaProvider>
-      {/* Wraps EVERYTHING below it -- including navigation itself -- so an
-          uncaught error anywhere in the tree (Home, Settings, any tab) hits
-          this instead of taking the whole app down. See
-          components/ErrorBoundary.tsx for why. */}
-      <ErrorBoundary>
-        {/* Resolves the Light/Dark/System preference (see
-            contexts/ThemeContext.tsx) once, here at the root, so every
-            screen below reads the same live theme via useTheme() rather
-            than each one loading/resolving the preference on its own. */}
-        <ThemeProvider>
+      {/* Resolves the Light/Dark/System preference (see
+          contexts/ThemeContext.tsx) once, here at the root, so every
+          screen below reads the same live theme via useTheme() rather
+          than each one loading/resolving the preference on its own.
+          Has to be the OUTERMOST wrapper, further out than ErrorBoundary
+          -- ErrorBoundary's own functional wrapper (see
+          components/ErrorBoundary.tsx) calls useTheme() itself, to theme
+          its fallback screen. useTheme() throws if there's no
+          ThemeProvider above it in the tree, so with ErrorBoundary on
+          the outside (as this used to be ordered) that throw happened
+          unconditionally on every mount, before ErrorBoundary's own
+          class component ever got a chance to render -- a crash with
+          nothing left to catch it, since the thing that crashed was the
+          catcher itself. */}
+      <ThemeProvider>
+        {/* Wraps EVERYTHING below it -- including navigation itself -- so an
+            uncaught error anywhere in the tree (Home, Settings, any tab) hits
+            this instead of taking the whole app down. See
+            components/ErrorBoundary.tsx for why. */}
+        <ErrorBoundary>
           {/* Sits above the navigator (every screen, not just Home) so
               it's impossible to be on ANY screen of a dev-targeted build
               without seeing it -- a no-op view in a production build, see
               components/DevBuildBanner.tsx. */}
           <DevBuildBanner />
           <Navigation />
-        </ThemeProvider>
-      </ErrorBoundary>
+        </ErrorBoundary>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }
