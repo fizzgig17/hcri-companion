@@ -8,7 +8,7 @@
 // of whatever the last reading and log happen to be.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Alert, AppState } from 'react-native';
+import { View, ScrollView, StyleSheet, Alert, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MeterConnection } from '../ble/MeterConnection';
 import { initializeMeter, takeMeasurement } from '../ble/takeMeasurement';
@@ -530,11 +530,18 @@ export default function HomeScreen({ navigation }: any) {
     container: { flex: 1, backgroundColor: colors.background },
     // paddingBottom is extra-generous (not just enough to clear the home
     // indicator/nav bar) because this ScrollView is shared by every tab --
-    // Data's and History's own content (collapsible sections expanded,
-    // a long reading list) can run considerably taller than Main's, and
-    // this is the one padding value that has to leave room for all of them
-    // without the bottom-most content ever crowding the edge of the screen.
-    content: { padding: 16, paddingBottom: 56 },
+    // Data's own content (collapsible sections expanded) can run
+    // considerably taller than Main's, and this is the one padding value
+    // that has to leave room for that without the bottom-most content ever
+    // crowding the edge of the screen.
+    //
+    // paddingTop is deliberately much smaller than the horizontal/bottom
+    // padding -- this used to be the gap under the "hCRI Companion"
+    // title/gear header, sized for that, not for the empty safe-area inset
+    // it backs onto now that the header's gone (SafeAreaView's top edge
+    // already reserves room for the status bar/notch on its own).
+    content: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 56 },
+    tabBarWrap: { marginBottom: 16 },
   });
 
   return (
@@ -546,15 +553,17 @@ export default function HomeScreen({ navigation }: any) {
             status row (the dot + "Connected"/"Disconnected" text) is the
             first thing on screen now -- one less row of chrome before the
             actual reading. */}
-        <TabBar
-          tabs={[
-            { key: 'main', label: 'Main' },
-            { key: 'data', label: 'Data' },
-            { key: 'logs', label: 'Logs' },
-          ]}
-          active={activeTab}
-          onChange={setActiveTab}
-        />
+        <View style={styles.tabBarWrap}>
+          <TabBar
+            tabs={[
+              { key: 'main', label: 'Main' },
+              { key: 'data', label: 'Data' },
+              { key: 'logs', label: 'Logs' },
+            ]}
+            active={activeTab}
+            onChange={setActiveTab}
+          />
+        </View>
 
         {activeTab === 'main' && (
           <MainTab
