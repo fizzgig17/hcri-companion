@@ -66,7 +66,7 @@
 //
 // Requires react-native-svg (already a dependency -- see SpectrumChart.tsx).
 
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Polygon, Polyline, Circle, Line, Text as SvgText, Image as SvgImage } from 'react-native-svg';
 import { planckianLocusXy, planckianTick, CCT_TICKS_K, XY } from '../utils/cieChromaticity';
@@ -85,6 +85,8 @@ interface Props {
   y: number;
   cct?: number;
   height?: number;
+  /** The chart's actual available content width (inside SpectrumTab's chartCard padding), computed once by SpectrumTab and handed down as a plain prop -- same change, and for the same "box too big for the viewport" reason, as SpectrumChart.tsx/RValuesBarChart.tsx's matching Props. This used to be measured locally via onLayout (seeded at 0, corrected once layout ran); that still landed on the right NUMBER for this chart's own immediate container, but that container's own size was itself wrong whenever a host screen (MainTab, via its resultCard) added chrome the layers above never accounted for -- onLayout faithfully measuring a wrongly-sized ancestor doesn't help. Computing it once, in one place, up where the real chrome is known, fixes that at the source instead of here. */
+  width: number;
 }
 
 // Extra room on the right for the plain stacked CCT-label column, and
@@ -134,9 +136,7 @@ function wavelengthToColor(wavelengthNm: number): string {
   return `rgb(${to255(r)}, ${to255(g)}, ${to255(b)})`;
 }
 
-export default function ChromaticityChart({ x, y, cct, height = 300 }: Props) {
-  const [width, setWidth] = useState(0);
-
+export default function ChromaticityChart({ x, y, cct, height = 300, width }: Props) {
   const chartWidth = Math.max(width - PADDING.left - PADDING.right, 0);
   const chartHeight = height - PADDING.top - PADDING.bottom;
 
@@ -183,7 +183,7 @@ export default function ChromaticityChart({ x, y, cct, height = 300 }: Props) {
   const centroidPx = { x: xFor(0.33), y: yFor(0.33) };
 
   return (
-    <View style={styles.container} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+    <View style={styles.container}>
       <Text style={styles.title}>CIE 1931</Text>
       {width > 0 && (
         <Svg width={width} height={height}>

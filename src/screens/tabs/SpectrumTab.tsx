@@ -21,7 +21,7 @@
 // drift apart.
 
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import SpectrumChart from '../../components/SpectrumChart';
 import ChromaticityChart from '../../components/ChromaticityChart';
 import RValuesBarChart from '../../components/RValuesBarChart';
@@ -35,10 +35,50 @@ interface Props {
   result: MeterResult | null;
   /** Spectrum-derived x/y/CCT/Duv/Ra/R9 for `result`, computed once in HomeScreen via analyzeSpectrum() -- the exact port of hCRI.io's own algorithm, so this matches what hCRI.io itself will show for the same upload. */
   analysis: SpectralAnalysis | null;
+  /**
+   * Extra horizontal chrome (both sides combined) imposed by whatever
+   * wraps THIS instance of SpectrumTab, beyond the screen's own usual
+   * 16px-each-side scroll padding -- which both this component and the
+   * three chart components it renders used to just assume was the only
+   * chrome there'd ever be. ReadingDetailScreen really does render
+   * SpectrumTab directly inside its own padded scroll content, so 0
+   * (the default) is correct there. MainTab, though, additionally wraps
+   * it in its own `resultCard` (padding: 14 each side, 28px total) --
+   * confirmed 2026-10-03 as the actual cause of "the box around the
+   * chart is too big for the viewport, missing left or right lines":
+   * every chart was computing its width as if only the screen's 32px
+   * padding existed, so on Main every chart (and the swipeable pager
+   * itself) rendered 28px wider than the real room left inside
+   * resultCard, pushing their right edge (and the pager's forced page
+   * width, which every chart's own container stretches to fill) out
+   * past the card's visible border. MainTab now passes its real 28px
+   * here instead.
+   */
+  extraHorizontalChrome?: number;
 }
 
-export default function SpectrumTab({ result, analysis }: Props) {
+// The screen's own scroll-content padding (HomeScreen's and
+// ReadingDetailScreen's `content` styles both use paddingHorizontal: 16
+// / padding: 16 -- 16px each side) -- true for every host of this
+// component regardless of extraHorizontalChrome above.
+const SCREEN_PADDING = 32;
+// Each chart's own chartCard, below, has padding: 10 each side.
+const CARD_PADDING = 20;
+
+export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 0 }: Props) {
   const { colors } = useTheme();
+  // Computed once, here, rather than separately (and inconsistently) in
+  // SwipablePages and in each of the three chart components -- see this
+  // file's own Props comment above for why a hardcoded per-component
+  // chrome constant was the actual bug. `pageWidth` is what the
+  // swipeable pager's own page (and so each chart's chartCard, which
+  // stretches to fill it) should be; `chartWidth` is what's left once a
+  // chartCard's own padding is subtracted, i.e. what each chart itself
+  // should draw its SVG at.
+  const { width: windowWidth } = useWindowDimensions();
+  const totalChrome = SCREEN_PADDING + extraHorizontalChrome;
+  const pageWidth = windowWidth - totalChrome;
+  const chartWidth = Math.max(pageWidth - CARD_PADDING, 0);
 
   const styles = StyleSheet.create({
     empty: { paddingVertical: 40, alignItems: 'center' },
@@ -69,6 +109,7 @@ export default function SpectrumTab({ result, analysis }: Props) {
 
   return (
     <SwipablePages
+      horizontalChrome={totalChrome}
       pages={[
         {
           key: 'spectrum',
@@ -76,7 +117,7 @@ export default function SpectrumTab({ result, analysis }: Props) {
           content: (
             <View>
               <View style={styles.chartCard}>
-                <SpectrumChart spectrum={result.spectrum} />
+                <SpectrumChart spectrum={result.spectrum} width={chartWidth} />
               </View>
 
               <CollapsibleSection title="Raw Values" count={result.spectrum.length}>
@@ -102,7 +143,7 @@ export default function SpectrumTab({ result, analysis }: Props) {
                   wider than tall at 280, so this compresses the horseshoe
                   a little further rather than clipping anything -- still
                   fully legible, just slightly flatter-looking. */}
-              <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} height={230} />
+              <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} height={230} width={chartWidth} />
             </View>
           ),
         },
@@ -119,7 +160,7 @@ export default function SpectrumTab({ result, analysis }: Props) {
                   "running long on Main" reason as Chrom's -- still room
                   enough per row (~14px) for all 15 R# labels and bars to
                   stay legible without crowding. */}
-              <RValuesBarChart ri={analysis.ri} height={230} />
+              <RValuesBarChart ri={analysis.ri} height={230} width={chartWidth} />
             </View>
           ),
         },

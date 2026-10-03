@@ -33,9 +33,20 @@ import {
 } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 
-// Horizontal chrome this component always sits inside, on both screens
-// that use it (HomeScreen's and ReadingDetailScreen's own scroll content
-// -- see their `content` styles): 16px of padding on each side.
+// Horizontal chrome this component sits inside on BOTH screens that use
+// it (HomeScreen's and ReadingDetailScreen's own scroll content -- see
+// their `content` styles): 16px of padding on each side. This is only
+// the SCREEN's own chrome, though -- it's the default for
+// `horizontalChrome` below, not a hardcoded truth. MainTab additionally
+// wraps SpectrumTab (and so this component) in its own `resultCard`
+// padding, which used to NOT be accounted for here at all: this
+// component would force every page to the screen-only width (32px
+// narrower than the window), 28px too WIDE for the real space left
+// inside resultCard's own padding, pushing every chart's right edge
+// (sometimes both edges) past the card's visible border -- the "box
+// around the chart is too big for the viewport" / "missing left or
+// right lines" report. See SpectrumTab.tsx's `extraHorizontalChrome`
+// prop for where that real figure now comes from.
 const SCREEN_HORIZONTAL_PADDING = 32;
 
 export interface Page {
@@ -46,9 +57,11 @@ export interface Page {
 
 interface Props {
   pages: Page[];
+  /** Total horizontal chrome (both sides combined) already reserved by whatever wraps this component, beyond... well, instead of the default screen-only padding. Pass this whenever a host screen adds its own card/padding around SpectrumTab, so pages come out the real width rather than an estimate that's too wide. */
+  horizontalChrome?: number;
 }
 
-export default function SwipablePages({ pages }: Props) {
+export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZONTAL_PADDING }: Props) {
   const { colors } = useTheme();
   // Confirmed 2026-10-03: measuring this via onLayout at all -- even
   // seeded with a close estimate that onLayout then "corrects" -- means
@@ -63,7 +76,7 @@ export default function SwipablePages({ pages }: Props) {
   // across rotation/resize), so there's only ever one value, computed up
   // front -- nothing to snap to on a later layout pass.
   const { width: windowWidth } = useWindowDimensions();
-  const width = windowWidth - SCREEN_HORIZONTAL_PADDING;
+  const width = windowWidth - horizontalChrome;
   const [activeIndex, setActiveIndex] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
   // One measured height per page, filled in as each page's onLayout fires

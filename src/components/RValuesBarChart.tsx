@@ -22,18 +22,16 @@
 // is R15, exactly like every other place in this app that reads R-values.
 
 import React from 'react';
-import { View, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import Svg, { Rect, Line, Text as SvgText } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface Props {
   ri: number[];
   height?: number;
+  /** The chart's actual available content width (inside SpectrumTab's chartCard padding), computed once by SpectrumTab -- see its own comment and SpectrumChart.tsx's matching Props for why this is a plain prop now instead of a hardcoded per-chart chrome constant. */
+  width: number;
 }
-
-// Horizontal chrome this chart always sits inside -- same chartCard and
-// screen padding as SpectrumChart.tsx (see its matching constant).
-const HORIZONTAL_CHROME = 52;
 
 // Copied verbatim from hcri.io's ReportView.jsx (TCS_COLORS) -- one fixed
 // color per TCS sample (1-15), not derived from the value itself, so Ri's
@@ -69,17 +67,10 @@ function readableTextOn(hex: string): string {
   return luminance > 0.6 ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.96)';
 }
 
-export default function RValuesBarChart({ ri, height }: Props) {
+export default function RValuesBarChart({ ri, height, width }: Props) {
   const { colors } = useTheme();
-  // Computed directly, not measured -- see SpectrumChart.tsx's longer
-  // comment on the same change. This chart sits inside the exact same
-  // chrome (chartCard padding + screen padding), so its width is a known
-  // function of the window width rather than something onLayout needs to
-  // discover and then correct -- which removes both the old risk of a
-  // blank chart while onLayout was pending AND the "wide then narrow"
-  // shift a corrected estimate still caused.
-  const { width: windowWidth } = useWindowDimensions();
-  const width = windowWidth - HORIZONTAL_CHROME;
+  // `width` arrives as a plain prop from SpectrumTab now -- see
+  // SpectrumChart.tsx's matching comment for why.
 
   const items = ri
     .map((v, i) => ({ i: i + 1, v }))

@@ -6,7 +6,7 @@
 // own Chrom. tab. Read-only, like Spectrum/Data/Logs.
 
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import ChromaticityChart from '../../components/ChromaticityChart';
 import StatCard from '../../components/StatCard';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -18,6 +18,13 @@ interface Props {
 
 export default function ChromTab({ result }: Props) {
   const { colors } = useTheme();
+  // Not actually mounted anywhere any more (SpectrumTab.tsx's "Chrom" page
+  // superseded this standalone tab) -- ChromaticityChart just needs a
+  // `width` prop now instead of measuring itself (see its own comment),
+  // so this keeps compiling with a reasonable stand-in rather than the
+  // real per-host chrome math SpectrumTab.tsx now owns.
+  const { width: windowWidth } = useWindowDimensions();
+  const chartWidth = Math.max(windowWidth - 32 - 28, 0);
 
   const styles = StyleSheet.create({
     empty: { paddingVertical: 40, alignItems: 'center' },
@@ -43,7 +50,7 @@ export default function ChromTab({ result }: Props) {
 
   return (
     <View style={styles.card}>
-      <ChromaticityChart x={result.x} y={result.y} cct={result.cct} height={280} />
+      <ChromaticityChart x={result.x} y={result.y} cct={result.cct} height={280} width={chartWidth} />
       <View style={styles.statGrid}>
         <StatCard label="x" value={result.x.toFixed(4)} />
         <StatCard label="y" value={result.y.toFixed(4)} />

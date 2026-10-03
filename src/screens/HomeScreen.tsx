@@ -437,16 +437,6 @@ export default function HomeScreen({ navigation }: any) {
     statusRef.current = status;
   }, [status]);
 
-  // Set only by the backgrounding branch below, and only when there was
-  // actually something connected to drop -- distinguishes "disconnected
-  // because the app just backgrounded itself" from "already disconnected
-  // for some other reason (never connected, meter dropped the link on its
-  // own, person tapped Disconnect manually)". The foreground branch uses
-  // this to reconnect automatically ONLY in the first case: reconnecting
-  // after a deliberate manual disconnect would silently undo the thing the
-  // person just chose to do, the moment they switch back to the app.
-  const autoDisconnectedRef = useRef(false);
-
   // Whether a share sheet (or anything else that briefly hands control to
   // the OS) is up right now -- see ../ble/backgroundDisconnectGuard.ts.
   // Sharing a CSV (shareCsv.ts's RNShare.open) puts up the native share
@@ -463,10 +453,20 @@ export default function HomeScreen({ navigation }: any) {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
-        // Coming back to the foreground -- reconnect if (and only if) we're
-        // the ones who disconnected on the way out.
-        if (autoDisconnectedRef.current) {
-          autoDisconnectedRef.current = false;
+        // Coming back to the foreground -- always try to reconnect if
+        // there's no meter connected right now, no matter WHY there isn't
+        // one: this used to only fire when THIS app's own backgrounding
+        // branch (below) was what disconnected it, which meant coming
+        // back to a meter that was already disconnected before
+        // backgrounding (or never connected at all this session) just sat
+        // there disconnected until the person tapped Connect themselves.
+        // statusRef.current (not the `status` that triggered this effect
+        // -- see this effect's own dep comment) is checked rather than
+        // skipped entirely, so this doesn't fire a redundant connect() on
+        // top of one already in flight (mount's own connect(), a manual
+        // tap, a reconnect from a previous foreground event) or try to
+        // "reconnect" something that's already connected.
+        if (statusRef.current === 'disconnected') {
           appendLog('App back in foreground -- reconnecting to meter...');
           // preferLastDeviceOnMultiple: true -- this is a reconnect, not a
           // fresh choice, so if more than one meter happens to be in range
@@ -488,7 +488,6 @@ export default function HomeScreen({ navigation }: any) {
       }
       if (statusRef.current !== 'disconnected') {
         appendLog(`App moved to ${nextAppState} -- disconnecting meter.`);
-        autoDisconnectedRef.current = true;
         disconnect();
       }
     });
