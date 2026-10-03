@@ -15,9 +15,15 @@
 // shareLog.ts) -- that's for attaching a log to whatever the person
 // already has open; this is a direct "start an email to the developer"
 // action with no log attached, since most feedback isn't a bug report.
+//
+// Right below that is a plain link back to the companion page on hCRI.io's
+// own site (www.hcri.io/companion) -- opened in whatever browser/app
+// handles https: links on the device, same fallback-to-Alert pattern as
+// the feedback mailto link above for the rare case nothing's registered
+// to handle it.
 
 import React from 'react';
-import { View, Text, StyleSheet, Linking, Alert } from 'react-native';
+import { View, Text, StyleSheet, Linking, Alert, TouchableOpacity } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { SUPPORTED_DEVICES } from '../../ble/supportedDevices';
 import PrimaryButton from '../../components/PrimaryButton';
@@ -29,6 +35,11 @@ const FEEDBACK_SUBJECT = 'hCRI Companion Feedback';
 // but %20 is the unambiguous one every mail client handles) the same way
 // any other URL-embedded text would.
 const FEEDBACK_MAILTO = `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(FEEDBACK_SUBJECT)}`;
+
+// The companion page on hCRI.io's own site -- same domain every other
+// link/brand reference in this app already uses (HCRI_BRAND_HOST,
+// dev.hcri.io, the feedback address above), not a separate site.
+const COMPANION_PAGE_URL = 'https://www.hcri.io/companion';
 
 export default function AboutTab() {
   const { colors } = useTheme();
@@ -45,8 +56,16 @@ export default function AboutTab() {
     });
   };
 
+  const openCompanionPage = () => {
+    Linking.openURL(COMPANION_PAGE_URL).catch(() => {
+      Alert.alert('Could not open browser', `Visit ${COMPANION_PAGE_URL} directly instead.`);
+    });
+  };
+
   const styles = StyleSheet.create({
     feedbackButton: { marginBottom: 14 },
+    companionLink: { alignItems: 'center', paddingVertical: 4, marginBottom: 14 },
+    companionLinkText: { color: colors.info, fontSize: 13, fontWeight: '600' },
     card: {
       backgroundColor: colors.card,
       borderRadius: 12,
@@ -73,6 +92,10 @@ export default function AboutTab() {
   return (
     <View>
       <PrimaryButton title="Send Feedback" onPress={sendFeedback} variant="muted" style={styles.feedbackButton} />
+
+      <TouchableOpacity onPress={openCompanionPage} style={styles.companionLink}>
+        <Text style={styles.companionLinkText}>Visit the hCRI Companion page →</Text>
+      </TouchableOpacity>
 
       <View style={styles.card}>
         <Text style={styles.heading}>Supported Meters</Text>
