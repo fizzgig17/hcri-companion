@@ -27,6 +27,7 @@ import CrashReporter from './components/CrashReporter';
 import { HomeIcon, HistoryIcon, SettingsIcon } from './components/TabBarIcons';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { LogProvider } from './contexts/LogContext';
+import { IS_DEV_BUILD } from './hcri/buildTarget';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -73,6 +74,18 @@ function Tabs() {
         options={{
           title: 'hCRI.io Settings',
           tabBarIcon: ({ color, size }) => <SettingsIcon color={color} size={size} />,
+          // Same double-inset bug as Home/History's own SafeAreaViews (see
+          // their `edges` comments) -- just arriving via a different path.
+          // Settings is the one tab that still uses React Navigation's own
+          // native header (headerShown isn't overridden to false here),
+          // and that header reserves the status-bar inset for itself
+          // automatically, with no idea DevBuildBanner (see App.tsx's own
+          // render below) already claimed that exact space on a dev-
+          // targeted build -- stacking into real, visible blank space
+          // above the title bar. On a non-dev build DevBuildBanner renders
+          // nothing, so `undefined` here just means "let the header
+          // measure it normally" -- unchanged from before.
+          headerStatusBarHeight: IS_DEV_BUILD ? 0 : undefined,
         }}
       />
     </Tab.Navigator>
