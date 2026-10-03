@@ -27,9 +27,18 @@ import {
 import { STAT_METRIC_BY_ID } from '../utils/statMetrics';
 import { maskSecret } from '../utils/maskSecret';
 import { useTheme } from '../contexts/ThemeContext';
+import { ThemeMode } from '../theme';
+
+// Labels/order for the Light/Dark/System picker below -- System first since
+// it's the default every fresh install starts on (see ThemeContext.tsx).
+const THEME_MODE_OPTIONS: { value: ThemeMode; label: string }[] = [
+  { value: 'system', label: 'System' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+];
 
 export default function SettingsScreen() {
-  const { colors } = useTheme();
+  const { colors, mode, setMode } = useTheme();
   const [username, setUsername] = useState('');
   const [token, setToken] = useState('');
   const [hasSaved, setHasSaved] = useState(false);
@@ -187,6 +196,35 @@ export default function SettingsScreen() {
     // PrimaryButton's own default marginTop so it doesn't stack on top of this.
     saveButtonWrap: { marginTop: 18 },
     noTopMargin: { marginTop: 0 },
+    // No borderTop/marginTop like toggleRow below -- this is the first
+    // section on the screen, directly under the credentials form, so there's
+    // nothing above it yet to separate from.
+    appearanceSection: { marginTop: 28 },
+    appearanceLabel: { color: colors.text, fontSize: 14, fontWeight: '600', marginBottom: 10 },
+    // Segmented control: three equal-width options sharing one pill-shaped
+    // track, rather than three separate buttons -- makes clear they're a
+    // single mutually-exclusive choice, not three independent toggles.
+    modeSegment: {
+      flexDirection: 'row',
+      backgroundColor: colors.card,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      padding: 3,
+    },
+    modeOption: {
+      flex: 1,
+      paddingVertical: 9,
+      borderRadius: 8,
+      alignItems: 'center',
+    },
+    modeOptionActive: { backgroundColor: colors.accent },
+    modeOptionText: { color: colors.muted, fontSize: 13, fontWeight: '600' },
+    // Matches PrimaryButton's own accent-background text color (colors.text,
+    // not colors.background) so this reads as the same "selected/accent"
+    // treatment used everywhere else in the app.
+    modeOptionTextActive: { color: colors.text },
+
     toggleRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -269,6 +307,24 @@ export default function SettingsScreen() {
           </View>
         </>
       )}
+
+      <View style={styles.appearanceSection}>
+        <Text style={styles.appearanceLabel}>Appearance</Text>
+        <View style={styles.modeSegment}>
+          {THEME_MODE_OPTIONS.map((opt) => {
+            const active = mode === opt.value;
+            return (
+              <TouchableOpacity
+                key={opt.value}
+                style={[styles.modeOption, active && styles.modeOptionActive]}
+                onPress={() => setMode(opt.value)}
+              >
+                <Text style={[styles.modeOptionText, active && styles.modeOptionTextActive]}>{opt.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
 
       <View style={styles.toggleRow}>
         <View style={styles.toggleTextWrap}>
