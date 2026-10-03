@@ -13,22 +13,18 @@
 // the Android Studio Run button) is needed after installing it.
 
 import React from 'react';
-import { View, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import Svg, { Path, Line, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface Props {
   spectrum: { nm: number; value: number }[];
   height?: number;
+  /** The chart's actual available content width (inside SpectrumTab's chartCard padding), computed once by SpectrumTab -- see its own comment for why this moved there instead of staying a hardcoded chrome constant in each chart file. */
+  width: number;
 }
 
 const PADDING = { top: 10, right: 10, bottom: 22, left: 28 };
-
-// Horizontal chrome this chart always sits inside: SpectrumTab's chartCard
-// (padding: 10 each side) inside the screen's own scroll content
-// (paddingHorizontal: 16 each side, on both HomeScreen and
-// ReadingDetailScreen, the only two places SpectrumTab is used).
-const HORIZONTAL_CHROME = 52;
 
 /**
  * Approximates the perceived color of a wavelength in the visible spectrum
@@ -76,32 +72,16 @@ function wavelengthToColor(wavelengthNm: number): string {
   return `rgb(${to255(r)}, ${to255(g)}, ${to255(b)})`;
 }
 
-export default function SpectrumChart({ spectrum, height = 200 }: Props) {
-  // SVG needs a concrete pixel width. This used to come from onLayout --
-  // React Native's own measurement of this component once it's actually
-  // laid out -- seeded with a window-width estimate so something drew
-  // immediately rather than waiting on that round-trip (see git history
-  // for the full "blank on the first reading" story this was built to
-  // avoid). But *any* two-step process -- draw an estimate, then correct
-  // it once onLayout reports back -- is visible as a shift whenever the
-  // estimate isn't exactly right, and it isn't: a plain window-width
-  // guess, or even that guess minus a rough padding allowance, still
-  // lands a few pixels off from the real measured value.
-  //
-  // Confirmed 2026-10-03: this chart's width isn't actually unknown --
-  // it's a known function of the window width, because it always sits
-  // inside the exact same chrome (SpectrumTab's chartCard, padding: 10
-  // each side, inside the screen's own scroll content, paddingHorizontal:
-  // 16 each side, on both HomeScreen and ReadingDetailScreen -- the only
-  // two places SpectrumTab is used). useWindowDimensions gives the
-  // window width directly and keeps it current across rotation/resize,
-  // so the chart can just compute its real width up front and draw it
-  // once -- no estimate, no onLayout correction, no second render to
-  // shift into, including on remount (e.g. swiping away from and back to
-  // the tab that holds it).
+export default function SpectrumChart({ spectrum, height = 200, width }: Props) {
+  // `width` is computed once by SpectrumTab (the window width minus
+  // whatever chrome actually wraps it on THIS host screen) and handed
+  // down as a plain prop -- no onLayout, no estimate-then-correct shift.
+  // See SpectrumTab.tsx's own comment for why this moved out of a
+  // hardcoded per-chart chrome constant: MainTab wraps SpectrumTab in an
+  // extra card of its own that a constant living here could never know
+  // about, which is what caused charts to render wider than their actual
+  // box on that screen.
   const { colors } = useTheme();
-  const { width: windowWidth } = useWindowDimensions();
-  const width = windowWidth - HORIZONTAL_CHROME;
 
   if (spectrum.length < 2) {
     return <View style={{ height }} />;

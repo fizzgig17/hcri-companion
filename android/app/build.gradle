@@ -60,8 +60,21 @@ react {
  * -- a smaller, harder-to-reverse-engineer release build, and no real
  * downside now that it's verified working (see proguard-rules.pro for the
  * native-module keep rules react-native-ble-plx and friends need).
+ *
+ * Confirmed 2026-10-03: this ran on EVERY release build, dev sideloads
+ * included -- which is also why a dev build's own crash stack traces
+ * came out obfuscated (see MainActivity.kt's comment on the react-
+ * native-screens crash this session tracked down: its trace was full of
+ * r8-map-id-prefixed hashes and single/double-letter class names like
+ * "ab:"/"bb:" instead of real ones, not just hard to build quickly).
+ * R8 is also real build time on top of the native-architecture cost
+ * below, spent on a build that only ever gets installed on one test
+ * phone and gets rebuilt constantly. deploy-dev.yml now passes
+ * `-PdisableMinifyForDev=true` to skip this; deploy-master.yml -- the
+ * actual Play Store-bound build -- leaves the property unset, so it
+ * keeps minifying exactly as before.
  */
-def enableProguardInReleaseBuilds = true
+def enableProguardInReleaseBuilds = !project.hasProperty('disableMinifyForDev')
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -91,6 +104,9 @@ android {
         applicationId "com.hcricompanion"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
+        // Also update src/buildInfo.ts (APP_VERSION/BUILD_DATE) in the same
+        // commit -- that's the JS-visible copy of this, shown at the top of
+        // Settings. Gradle values here aren't reachable from JS directly.
         versionCode 5
         versionName "1.2"
     }

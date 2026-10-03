@@ -78,11 +78,35 @@ jobs:
       # build (see deploy-master.yml, which still builds both). Building it
       # here too was pure wasted build time for an artifact nobody uses:
       # assembleRelease alone, not assembleRelease+bundleRelease.
+      #
+      # Two more build-time cuts added 2026-10-03 (builds had crept up to
+      # ~15 minutes), both dev-only -- deploy-master.yml intentionally
+      # leaves both defaults alone, since a Play Store submission needs
+      # the real thing:
+      #
+      #  -PreactNativeArchitectures=arm64-v8a overrides gradle.properties'
+      #  own default (armeabi-v7a,arm64-v8a,x86,x86_64 -- every ABI, meant
+      #  for the universal APK a real release needs). A dev sideload only
+      #  ever lands on one real phone, which for any phone bought in the
+      #  last several years is arm64-v8a -- so this skips compiling/
+      #  linking every native module (ble-plx, svg, Hermes, ...) three
+      #  extra times over for armeabi-v7a (32-bit ARM -- essentially
+      #  extinct on real devices by now) and x86/x86_64 (emulator-only,
+      #  never a real phone) architectures nothing here will ever run on.
+      #
+      #  -PdisableMinifyForDev=true skips Proguard/R8 -- see
+      #  app/build.gradle's own enableProguardInReleaseBuilds comment for
+      #  the full reasoning (real build-time cost on its own, AND it was
+      #  the reason a dev build's own crash stack traces came out
+      #  obfuscated, like the react-native-screens one this session spent
+      #  a while tracking down).
       - name: Build release APK
         working-directory: android
         run: |
           chmod +x ./gradlew
           ./gradlew assembleRelease \
+            -PreactNativeArchitectures=arm64-v8a \
+            -PdisableMinifyForDev=true \
             -PHCRICOMPANION_RELEASE_STORE_FILE=hcricompanion-release.keystore \
             -PHCRICOMPANION_RELEASE_STORE_PASSWORD="${{ secrets.HCRICOMPANION_RELEASE_STORE_PASSWORD }}" \
             -PHCRICOMPANION_RELEASE_KEY_ALIAS="${{ secrets.HCRICOMPANION_RELEASE_KEY_ALIAS }}" \

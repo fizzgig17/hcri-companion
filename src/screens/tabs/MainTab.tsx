@@ -230,7 +230,15 @@ export default function MainTab({
           <Text style={styles.customizeHint}>
             Tap ⚙ Settings to customize which measurements show here, and in what order.
           </Text>
-          {result.spectrum.length > 0 && <SpectrumTab result={result} analysis={analysis} />}
+          {/* resultCard (below) wraps this in its own padding: 14 each
+              side -- SpectrumTab/SwipablePages/the charts all otherwise
+              only know about the screen's own 16-each-side scroll
+              padding, which used to make every chart on THIS tab render
+              28px wider than the real room resultCard leaves for it --
+              see SpectrumTab.tsx's extraHorizontalChrome comment. */}
+          {result.spectrum.length > 0 && (
+            <SpectrumTab result={result} analysis={analysis} extraHorizontalChrome={28} />
+          )}
           {/* Take Reading (the green/accent button) comes first here --
               Upload sits right below it rather than above, since taking
               another reading is the more likely next action right after
