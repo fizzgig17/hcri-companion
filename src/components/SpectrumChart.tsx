@@ -12,8 +12,8 @@
 // first time it's added -- a full rebuild (npx react-native run-android, or
 // the Android Studio Run button) is needed after installing it.
 
-import React, { useState } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import React from 'react';
+import { View, StyleSheet, useWindowDimensions } from 'react-native';
 import Svg, { Path, Line, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -23,6 +23,12 @@ interface Props {
 }
 
 const PADDING = { top: 10, right: 10, bottom: 22, left: 28 };
+
+// Horizontal chrome this chart always sits inside: SpectrumTab's chartCard
+// (padding: 10 each side) inside the screen's own scroll content
+// (paddingHorizontal: 16 each side, on both HomeScreen and
+// ReadingDetailScreen, the only two places SpectrumTab is used).
+const HORIZONTAL_CHROME = 52;
 
 /**
  * Approximates the perceived color of a wavelength in the visible spectrum
@@ -71,31 +77,34 @@ function wavelengthToColor(wavelengthNm: number): string {
 }
 
 export default function SpectrumChart({ spectrum, height = 200 }: Props) {
-  // SVG needs a concrete pixel width, but this component doesn't know its
-  // own width until React Native lays it out -- onLayout gives us that on
-  // first render, and every render after just reuses it.
+  // SVG needs a concrete pixel width. This used to come from onLayout --
+  // React Native's own measurement of this component once it's actually
+  // laid out -- seeded with a window-width estimate so something drew
+  // immediately rather than waiting on that round-trip (see git history
+  // for the full "blank on the first reading" story this was built to
+  // avoid). But *any* two-step process -- draw an estimate, then correct
+  // it once onLayout reports back -- is visible as a shift whenever the
+  // estimate isn't exactly right, and it isn't: a plain window-width
+  // guess, or even that guess minus a rough padding allowance, still
+  // lands a few pixels off from the real measured value.
   //
-  // Confirmed 2026-10-02: starting this at 0 and waiting purely on onLayout
-  // meant nothing drew at all until that native layout round-trip actually
-  // completed through the bridge. This component only ever MOUNTS fresh
-  // once -- the very first time a reading lands and MainTab's/SpectrumTab's
-  // `result && ...` goes from false to true for the first time in a
-  // session; every later reading just re-renders this same already-mounted
-  // instance, reusing its already-resolved width. Right at that first-
-  // mount moment the JS thread is also busy (addReading() writing to
-  // AsyncStorage, the success haptic, several screens re-rendering off the
-  // new `result`), which can delay onLayout's delivery long enough that the
-  // chart area sat visibly blank for that one reading -- exactly the "the
-  // graph doesn't show" report, and only ever on the first reading of a
-  // session. Seeding this with the window's own width as a same-screen
-  // estimate means a chart is drawn immediately on mount; onLayout still
-  // corrects it to the exact measured value the moment it arrives, same as
-  // before.
+  // Confirmed 2026-10-03: this chart's width isn't actually unknown --
+  // it's a known function of the window width, because it always sits
+  // inside the exact same chrome (SpectrumTab's chartCard, padding: 10
+  // each side, inside the screen's own scroll content, paddingHorizontal:
+  // 16 each side, on both HomeScreen and ReadingDetailScreen -- the only
+  // two places SpectrumTab is used). useWindowDimensions gives the
+  // window width directly and keeps it current across rotation/resize,
+  // so the chart can just compute its real width up front and draw it
+  // once -- no estimate, no onLayout correction, no second render to
+  // shift into, including on remount (e.g. swiping away from and back to
+  // the tab that holds it).
   const { colors } = useTheme();
-  const [width, setWidth] = useState(() => Dimensions.get('window').width);
+  const { width: windowWidth } = useWindowDimensions();
+  const width = windowWidth - HORIZONTAL_CHROME;
 
   if (spectrum.length < 2) {
-    return <View style={{ height }} onLayout={(e) => setWidth(e.nativeEvent.layout.width)} />;
+    return <View style={{ height }} />;
   }
 
   const values = spectrum.map((p) => p.value);
@@ -142,7 +151,7 @@ export default function SpectrumChart({ spectrum, height = 200 }: Props) {
   for (let nm = firstTick; nm < maxNm; nm += 50) nmTicks.push(nm);
 
   return (
-    <View style={styles.container} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+    <View style={styles.container}>
       {width > 0 && (
         <Svg width={width} height={height}>
           <Defs>

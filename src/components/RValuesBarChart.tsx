@@ -21,8 +21,8 @@
 // `ri` is analysis.ri from spectralAnalysis.ts -- index 0 is R1, index 14
 // is R15, exactly like every other place in this app that reads R-values.
 
-import React, { useState } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import React from 'react';
+import { View, StyleSheet, useWindowDimensions } from 'react-native';
 import Svg, { Rect, Line, Text as SvgText } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -30,6 +30,10 @@ interface Props {
   ri: number[];
   height?: number;
 }
+
+// Horizontal chrome this chart always sits inside -- same chartCard and
+// screen padding as SpectrumChart.tsx (see its matching constant).
+const HORIZONTAL_CHROME = 52;
 
 // Copied verbatim from hcri.io's ReportView.jsx (TCS_COLORS) -- one fixed
 // color per TCS sample (1-15), not derived from the value itself, so Ri's
@@ -67,7 +71,15 @@ function readableTextOn(hex: string): string {
 
 export default function RValuesBarChart({ ri, height }: Props) {
   const { colors } = useTheme();
-  const [width, setWidth] = useState(() => Dimensions.get('window').width);
+  // Computed directly, not measured -- see SpectrumChart.tsx's longer
+  // comment on the same change. This chart sits inside the exact same
+  // chrome (chartCard padding + screen padding), so its width is a known
+  // function of the window width rather than something onLayout needs to
+  // discover and then correct -- which removes both the old risk of a
+  // blank chart while onLayout was pending AND the "wide then narrow"
+  // shift a corrected estimate still caused.
+  const { width: windowWidth } = useWindowDimensions();
+  const width = windowWidth - HORIZONTAL_CHROME;
 
   const items = ri
     .map((v, i) => ({ i: i + 1, v }))
@@ -77,7 +89,7 @@ export default function RValuesBarChart({ ri, height }: Props) {
   const chartHeight = height ?? Math.max(220, rowCount * 22 + 28);
 
   if (items.length === 0) {
-    return <View style={{ height: chartHeight }} onLayout={(e) => setWidth(e.nativeEvent.layout.width)} />;
+    return <View style={{ height: chartHeight }} />;
   }
 
   const lo = Math.min(0, ...items.map((d) => d.v));
@@ -102,7 +114,7 @@ export default function RValuesBarChart({ ri, height }: Props) {
   });
 
   return (
-    <View style={styles.container} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+    <View style={styles.container}>
       {width > 0 && (
         <Svg width={width} height={chartHeight}>
           {/* Gridlines every 20, with the tick value labeled above the plot area. */}

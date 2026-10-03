@@ -29,9 +29,14 @@ import {
   NativeScrollEvent,
   StyleSheet,
   TouchableOpacity,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
+
+// Horizontal chrome this component always sits inside, on both screens
+// that use it (HomeScreen's and ReadingDetailScreen's own scroll content
+// -- see their `content` styles): 16px of padding on each side.
+const SCREEN_HORIZONTAL_PADDING = 32;
 
 export interface Page {
   key: string;
@@ -45,14 +50,20 @@ interface Props {
 
 export default function SwipablePages({ pages }: Props) {
   const { colors } = useTheme();
-  // Same reasoning as SpectrumChart's own width state: gating page content
-  // entirely behind `width > 0` meant the Spectrum tab's pages (including
-  // its SpectrumChart) didn't even get constructed, let alone laid out,
-  // until THIS onLayout fired too -- stacking a second native round-trip on
-  // top of SpectrumChart's own and doubling the window for a delayed first
-  // reading to show nothing. Seeding from the window's width means pages
-  // mount immediately; onLayout still corrects it once it arrives.
-  const [width, setWidth] = useState(() => Dimensions.get('window').width);
+  // Confirmed 2026-10-03: measuring this via onLayout at all -- even
+  // seeded with a close estimate that onLayout then "corrects" -- means
+  // there are always two renders: one at the estimate, one at whatever
+  // onLayout reports, and any difference between them is a visible
+  // shift. But this component is only ever used inside HomeScreen's and
+  // ReadingDetailScreen's own scroll content, and both reserve exactly
+  // the same 16px-each-side horizontal padding (see their `content`
+  // styles) before this ever mounts -- so the real width isn't something
+  // that needs measuring at all, it's a known function of the window
+  // width. useWindowDimensions gives that directly (and keeps it correct
+  // across rotation/resize), so there's only ever one value, computed up
+  // front -- nothing to snap to on a later layout pass.
+  const { width: windowWidth } = useWindowDimensions();
+  const width = windowWidth - SCREEN_HORIZONTAL_PADDING;
   const [activeIndex, setActiveIndex] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
   // One measured height per page, filled in as each page's onLayout fires
@@ -80,7 +91,7 @@ export default function SwipablePages({ pages }: Props) {
   });
 
   return (
-    <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+    <View>
       {width > 0 && (
         <>
           {/* Height comes from the active page's own measurement, not the
