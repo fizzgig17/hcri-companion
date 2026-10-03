@@ -8,7 +8,7 @@
 // of whatever the last reading and log happen to be.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, AppState } from 'react-native';
+import { ScrollView, StyleSheet, Alert, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MeterConnection } from '../ble/MeterConnection';
 import { initializeMeter, takeMeasurement } from '../ble/takeMeasurement';
@@ -17,34 +17,30 @@ import { analyzeSpectrum } from '../utils/spectralAnalysis';
 import { buildCsv, defaultLabel } from '../hcri/buildCsv';
 import { uploadToHcri } from '../hcri/uploadToHcri';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
-import { loadKeepAwakePreference, loadVerboseLoggingPreference } from '../storage/preferences';
+import { loadKeepAwakePreference } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
-import {
-  loadHistory,
-  addReading,
-  renameReading,
-  deleteReading,
-  deleteManyReadings,
-  SavedReading,
-} from '../storage/readingHistory';
+import { addReading } from '../storage/readingHistory';
 import { shareDebugLog } from '../utils/shareLog';
-import { shareSingleReadingCsv, shareAllReadingsCsv } from '../utils/shareCsv';
+import { shareSingleReadingCsv } from '../utils/shareCsv';
 import { hapticSuccess, hapticFailure } from '../utils/haptics';
 import { enableKeepAwake, disableKeepAwake } from '../utils/keepAwake';
 import { useTheme } from '../contexts/ThemeContext';
+import { useLog } from '../contexts/LogContext';
+import { withBackgroundDisconnectSuppressed, isBackgroundDisconnectSuppressed } from '../ble/backgroundDisconnectGuard';
 import TabBar from '../components/TabBar';
 import MainTab, { Status, FoundDevice } from './tabs/MainTab';
 import DataTab from './tabs/DataTab';
-import HistoryTab from './tabs/HistoryTab';
-import AboutTab from './tabs/AboutTab';
 import LogsTab from './tabs/LogsTab';
 
 // 'chrom' and 'spectrum' are both gone as their own tab keys -- Spectrum/
 // Chrom/R-Values are now swipeable sub-pages (see SwipablePages) living
 // directly on the Main tab, right below its measurement grid, rather than
 // a separate tab you have to switch to after every reading. ReadingDetail
-// Screen.tsx shows the exact same arrangement for a past reading.
-type TabKey = 'main' | 'data' | 'history' | 'about' | 'logs';
+// Screen.tsx shows the exact same arrangement for a past reading. 'history'
+// and 'about' are gone too -- History is now its own bottom-nav tab
+// (HistoryScreen.tsx) and About is a section inside Settings, neither of
+// them panels inside Home any more -- see App.tsx for the bottom tab bar.
+type TabKey = 'main' | 'data' | 'logs';
 
 // How long a Connect attempt spends collecting matching advertisements
 // before deciding how many distinct meters are actually out there. Unlike
@@ -56,10 +52,10 @@ const CONNECT_SCAN_WINDOW_MS = 3000;
 
 export default function HomeScreen({ navigation }: any) {
   const { colors } = useTheme();
+  const { log, appendLog, clearLog, refreshVerboseLogging } = useLog();
   const [activeTab, setActiveTab] = useState<TabKey>('main');
   const [status, setStatus] = useState<Status>('disconnected');
   const [result, setResult] = useState<MeterResult | null>(null);
-  const [log, setLog] = useState<string[]>([]);
   const [deviceName, setDeviceName] = useState<string | null>(null);
   // The upload title/label the person typed on the Data tab. Deliberately
   // lifted up here rather than kept as local state inside DataTab -- state
@@ -88,34 +84,6 @@ export default function HomeScreen({ navigation }: any) {
   // rather than an empty grid for one frame.
   const [statIds, setStatIds] = useState<string[]>(() => visibleStatIds(defaultStatDisplayPrefs()));
   const connRef = useRef<MeterConnection | null>(null);
-
-  // Every completed measurement, persisted locally (see
-  // ../storage/readingHistory.ts) -- loaded once on mount, then kept in
-  // sync in-memory by every operation that changes it (a new reading,
-  // rename, delete) rather than re-reading from storage after each one.
-  const [history, setHistory] = useState<SavedReading[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(true);
-  // Which saved reading (if any) is currently being uploaded FROM the
-  // History tab -- separate from status === 'uploading', which is only for
-  // the current/latest reading's own upload on the Data tab. Keeping these
-  // separate means uploading an old reading from History doesn't make the
-  // whole app look busy/disable the Main tab's Take Reading button.
-  const [historyUploadingId, setHistoryUploadingId] = useState<string | null>(null);
-  // Separate from historyUploadingId (which row's spinner is showing right
-  // now, moving through the list one at a time during a bulk run) -- this
-  // is just "is a bulk run in progress at all", so HistoryTab can disable
-  // its Select mode controls for the whole duration rather than only
-  // around whichever single row happens to be mid-upload at any instant.
-  const [historyBulkUploading, setHistoryBulkUploading] = useState(false);
-
-  useEffect(() => {
-    loadHistory()
-      .then(setHistory)
-      .catch((e) => appendLog(`Failed to load reading history: ${e.message}`))
-      .finally(() => setHistoryLoading(false));
-    // Intentionally run once on mount only.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   useEffect(() => {
     const loadCachedUsername = () => {
@@ -151,26 +119,16 @@ export default function HomeScreen({ navigation }: any) {
 
   // Whether to keep the verbose-only log lines (BLE hex dumps, the raw
   // result body -- see MeterConnection.ts/takeMeasurement.ts's `verbose`
-  // flag) when they reach appendLog below. A ref, not state: appendLog is
-  // called at BLE wire-traffic frequency and is deliberately kept at a
-  // stable identity (empty useCallback deps -- see below) so it never
-  // forces getConnection/MeterConnection to be recreated; reading a ref
-  // lets this setting apply live without appendLog needing to depend on
-  // it. Refreshed on focus, same reasoning as cachedUsername/statIds above.
-  const verboseLoggingRef = useRef(false);
+  // flag) when they reach appendLog -- the preference itself now lives in
+  // LogContext (shared with HistoryScreen's own appendLog calls), but each
+  // screen that cares still refreshes it on focus, same reasoning as
+  // cachedUsername/statIds above: picks up a toggle flipped in Settings
+  // without needing an app restart.
   useEffect(() => {
-    const loadVerboseLogging = () => {
-      loadVerboseLoggingPreference()
-        .then((enabled) => {
-          verboseLoggingRef.current = enabled;
-        })
-        .catch(() => {});
-    };
-    loadVerboseLogging();
-    const unsubscribe = navigation.addListener('focus', loadVerboseLogging);
+    refreshVerboseLogging();
+    const unsubscribe = navigation.addListener('focus', refreshVerboseLogging);
     return unsubscribe;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navigation]);
+  }, [navigation, refreshVerboseLogging]);
 
   // Computed ONCE per reading, here, and threaded down to every tab that
   // shows a colorimetric number (Main, Spectrum, Data) -- rather than each
@@ -181,28 +139,6 @@ export default function HomeScreen({ navigation }: any) {
   // app grows -- there is exactly one CCT/Duv/Ra/R9 number in memory for a
   // given result, not three independent calls that happen to agree today.
   const analysis = useMemo(() => (result ? analyzeSpectrum(result.spectrum) : null), [result]);
-
-  const appendLog = useCallback((msg: string, verbose?: boolean) => {
-    // Also mirror to console.log -- React Native forwards this straight to
-    // the Metro terminal on the PC whenever the app is connected in debug
-    // mode, so you can copy/paste log lines from there without needing to
-    // screen-mirror or copy text off the phone itself. Deliberately
-    // unfiltered: Metro is a developer-only audience that already sees
-    // everything regardless of this app's own Verbose Logging setting.
-    console.log(`[meter] ${msg}`);
-    // The Logs tab / Share Debug Log, on the other hand, is what the
-    // Verbose Logging setting actually controls -- a verbose-flagged line
-    // (BLE hex dumps, the raw result body) only gets added here, and so
-    // only shows up on-screen or in a shared report, once that setting is
-    // on. Off by default (see preferences.ts).
-    if (verbose && !verboseLoggingRef.current) return;
-    setLog((prev) => [...prev.slice(-99), msg]);
-  }, []);
-
-  /** Clears the in-memory debug log shown on the Logs tab -- this log was never persisted (see the `log`/`setLog` state above), so this just empties what's currently on screen; it doesn't affect history or anything already shared via "Share Debug Log". */
-  const clearLog = useCallback(() => {
-    setLog([]);
-  }, []);
 
   // Reuse a single MeterConnection (and the native BleManager it owns)
   // across every Connect attempt. Creating a fresh one each press left the
@@ -415,12 +351,14 @@ export default function HomeScreen({ navigation }: any) {
       // back to, so a reading you never got around to renaming still
       // uploads under something identifiable rather than a bare
       // timestamp -- renaming (from the History tab) is still how you give
-      // it a more meaningful name.
+      // it a more meaningful name. History is now its own top-level screen
+      // (HistoryScreen.tsx) with its own copy of the saved list, loaded
+      // fresh from storage on focus -- so this just persists the reading;
+      // it doesn't need to update any local list here.
       try {
         const creds = await loadHcriCredentials();
         const label = defaultLabel(creds?.username ?? null, r.deviceName);
-        const saved = await addReading(r, label);
-        setHistory((prev) => [saved, ...prev]);
+        await addReading(r, label);
       } catch (e: any) {
         // Don't let a storage hiccup here look like the measurement itself
         // failed -- the reading is still shown/usable, it just didn't get
@@ -489,16 +427,18 @@ export default function HomeScreen({ navigation }: any) {
   // person just chose to do, the moment they switch back to the app.
   const autoDisconnectedRef = useRef(false);
 
-  // Set while a share sheet (or anything else that briefly hands control to
-  // the OS) is up -- see withBackgroundDisconnectSuppressed() below. Sharing
-  // a CSV (shareCsv.ts's RNShare.open) puts up the native share sheet,
-  // which iOS reports as the app going 'inactive' -- the exact same
+  // Whether a share sheet (or anything else that briefly hands control to
+  // the OS) is up right now -- see ../ble/backgroundDisconnectGuard.ts.
+  // Sharing a CSV (shareCsv.ts's RNShare.open) puts up the native share
+  // sheet, which iOS reports as the app going 'inactive' -- the exact same
   // AppState transition as the app switcher or an incoming call, which is
   // genuinely supposed to disconnect per the comment above. Without this,
   // every single CSV share disconnected the meter, which isn't "the person
   // switched away from the app" at all -- they're still looking at it,
-  // just with a system sheet over it.
-  const suppressAutoDisconnectRef = useRef(false);
+  // just with a system sheet over it. Lives in a shared module, not a ref
+  // here, because History (its own top-level tab now, not a panel inside
+  // Home) can also put up a share sheet and needs to be able to set this
+  // same flag.
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
@@ -522,7 +462,7 @@ export default function HomeScreen({ navigation }: any) {
       // for things like the app switcher or an incoming call, which should
       // disconnect same as a real background) -- EXCEPT when it's our own
       // share sheet doing that, which isn't the person leaving the app.
-      if (suppressAutoDisconnectRef.current) {
+      if (isBackgroundDisconnectSuppressed()) {
         appendLog(`App moved to ${nextAppState} during a share -- not disconnecting.`);
         return;
       }
@@ -534,20 +474,6 @@ export default function HomeScreen({ navigation }: any) {
     });
     return () => subscription.remove();
   }, [appendLog, connect, disconnect]);
-
-  /** Wraps an async action (sharing a CSV, so far) that's expected to
-   * briefly take the app out of the foreground on its own -- presenting a
-   * native share sheet, say -- so the AppState listener above doesn't treat
-   * that as the person switching away and disconnect the meter out from
-   * under them. */
-  const withBackgroundDisconnectSuppressed = useCallback(async (action: () => Promise<void>) => {
-    suppressAutoDisconnectRef.current = true;
-    try {
-      await action();
-    } finally {
-      suppressAutoDisconnectRef.current = false;
-    }
-  }, []);
 
   const upload = useCallback(async () => {
     if (!result) return;
@@ -571,7 +497,7 @@ export default function HomeScreen({ navigation }: any) {
     // The raw server response (res.message -- hCRI.io's API returns JSON)
     // still goes to Logs for anyone actually debugging an upload; the
     // popup itself just says what happened, same plain-language style as
-    // the bulk-upload summary in uploadManyFromHistory below.
+    // HistoryScreen's own bulk-upload summary.
     appendLog(res.message);
     Alert.alert(
       res.success ? 'Uploaded' : 'Upload failed',
@@ -580,131 +506,11 @@ export default function HomeScreen({ navigation }: any) {
     setStatus('connected');
   }, [result, navigation, appendLog, uploadTitle]);
 
-  /** Renames a History entry by itself -- no upload involved (e.g. committed on blur in HistoryTab). */
-  const renameFromHistory = useCallback(async (id: string, label: string) => {
-    await renameReading(id, label);
-    setHistory((prev) => prev.map((r) => (r.id === id ? { ...r, label } : r)));
-  }, []);
-
-  const deleteFromHistory = useCallback(async (id: string) => {
-    await deleteReading(id);
-    setHistory((prev) => prev.filter((r) => r.id !== id));
-  }, []);
-
-  /** Bulk/"delete all" version of deleteFromHistory, for HistoryTab's Select mode -- one storage write for the whole batch (see deleteManyReadings) instead of one deleteReading call per id. */
-  const deleteManyFromHistory = useCallback(async (ids: string[]) => {
-    await deleteManyReadings(ids);
-    const idSet = new Set(ids);
-    setHistory((prev) => prev.filter((r) => !idSet.has(r.id)));
-  }, []);
-
-  /**
-   * Uploads a past reading from History under whatever label is passed in
-   * (which may be freshly edited, not yet committed to storage). The label
-   * is persisted first -- "if you rename them to upload, it should save
-   * them with that name as well" -- so it sticks around in History even if
-   * the upload itself then fails, rather than the rename only ever having
-   * existed transiently as part of one upload request.
-   */
-  const uploadFromHistory = useCallback(
-    async (id: string, label: string) => {
-      const entry = history.find((r) => r.id === id);
-      if (!entry) return;
-
-      const creds = await loadHcriCredentials();
-      if (!creds) {
-        Alert.alert('No hCRI.io account set up', 'Add your username and API token first.', [
-          { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') },
-          { text: 'Cancel', style: 'cancel' },
-        ]);
-        return;
-      }
-
-      if (label !== entry.label) {
-        await renameFromHistory(id, label);
-      }
-
-      setHistoryUploadingId(id);
-      try {
-        const csv = buildCsv(entry.result);
-        const res = await uploadToHcri(csv, label, creds.token, appendLog);
-        appendLog(res.message);
-        Alert.alert(
-          res.success ? 'Uploaded' : 'Upload failed',
-          res.success ? `Uploaded "${label}".` : `Could not upload "${label}". Check Logs for details.`
-        );
-      } finally {
-        setHistoryUploadingId(null);
-      }
-    },
-    [history, navigation, appendLog, renameFromHistory]
-  );
-
-  /**
-   * Uploads several History entries in one go (HistoryTab's Select mode),
-   * each under its own already-saved label -- unlike uploadFromHistory,
-   * this never renames anything itself, so if a bulk selection still has
-   * generic "Reading <date/time>" labels on it, that's what goes up. Fix
-   * the name first (same inline field, before switching into Select mode)
-   * if that's not what you want.
-   *
-   * Sequential on purpose, not Promise.all -- keeps historyUploadingId
-   * meaningful as "which one is going up right now" (so HistoryTab can show
-   * a single moving spinner instead of N at once), and avoids firing a
-   * burst of simultaneous requests at hCRI.io for what could be a large
-   * selection. Credentials are checked once up front rather than once per
-   * item, so a missing account fails fast instead of after already
-   * uploading a few.
-   */
-  const uploadManyFromHistory = useCallback(
-    async (ids: string[]) => {
-      if (ids.length === 0) return;
-
-      const creds = await loadHcriCredentials();
-      if (!creds) {
-        Alert.alert('No hCRI.io account set up', 'Add your username and API token first.', [
-          { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') },
-          { text: 'Cancel', style: 'cancel' },
-        ]);
-        return;
-      }
-
-      setHistoryBulkUploading(true);
-      let okCount = 0;
-      let failCount = 0;
-      try {
-        for (const id of ids) {
-          const entry = history.find((r) => r.id === id);
-          if (!entry) continue;
-          setHistoryUploadingId(id);
-          try {
-            const csv = buildCsv(entry.result);
-            const res = await uploadToHcri(csv, entry.label, creds.token, appendLog);
-            appendLog(res.message);
-            if (res.success) {
-              okCount += 1;
-            } else {
-              failCount += 1;
-            }
-          } catch (e: any) {
-            failCount += 1;
-            appendLog(`Upload failed for "${entry.label}": ${e.message}`);
-          }
-        }
-      } finally {
-        setHistoryUploadingId(null);
-        setHistoryBulkUploading(false);
-      }
-
-      Alert.alert(
-        failCount === 0 ? 'Uploaded' : okCount === 0 ? 'Upload failed' : 'Upload finished',
-        failCount === 0
-          ? `Uploaded ${okCount} reading${okCount === 1 ? '' : 's'}.`
-          : `${okCount} succeeded, ${failCount} failed. Check Logs for details.`
-      );
-    },
-    [history, navigation, appendLog]
-  );
+  // History's own rename/delete/upload/share handlers now live in
+  // HistoryScreen.tsx -- History is its own top-level tab, not a panel
+  // inside Home, so it owns its own copy of the saved-reading list (loaded
+  // fresh from storage on focus) rather than reaching back into this
+  // screen's state.
 
   const shareCurrentCsv = useCallback(() => {
     if (!result) return;
@@ -712,19 +518,11 @@ export default function HomeScreen({ navigation }: any) {
     // "upload" always agree on what this reading is called.
     const label = uploadTitle.trim() || defaultLabel(cachedUsername, result.deviceName);
     withBackgroundDisconnectSuppressed(() => shareSingleReadingCsv(result, label));
-  }, [result, uploadTitle, cachedUsername, withBackgroundDisconnectSuppressed]);
-
-  const shareOneFromHistory = useCallback((reading: SavedReading) => {
-    withBackgroundDisconnectSuppressed(() => shareSingleReadingCsv(reading.result, reading.label));
-  }, [withBackgroundDisconnectSuppressed]);
-
-  const shareAllFromHistory = useCallback(() => {
-    withBackgroundDisconnectSuppressed(() => shareAllReadingsCsv(history));
-  }, [history, withBackgroundDisconnectSuppressed]);
+  }, [result, uploadTitle, cachedUsername]);
 
   const shareLog = useCallback(() => {
     withBackgroundDisconnectSuppressed(() => shareDebugLog(log));
-  }, [log, withBackgroundDisconnectSuppressed]);
+  }, [log]);
 
   const isBusy = status === 'connecting' || status === 'measuring' || status === 'uploading';
 
@@ -737,37 +535,21 @@ export default function HomeScreen({ navigation }: any) {
     // this is the one padding value that has to leave room for all of them
     // without the bottom-most content ever crowding the edge of the screen.
     content: { padding: 16, paddingBottom: 56 },
-
-    headerRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 12,
-    },
-    title: { fontSize: 22, fontWeight: '700', color: colors.text },
-    deviceSubtitle: { fontSize: 12, color: colors.muted, marginTop: 1 },
-    settingsGear: { fontSize: 22, color: colors.muted },
   });
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.headerRow}>
-          <View>
-            <Text style={styles.title}>hCRI Companion</Text>
-            {deviceName && <Text style={styles.deviceSubtitle}>{deviceName}</Text>}
-          </View>
-          <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
-            <Text style={styles.settingsGear}>⚙︎</Text>
-          </TouchableOpacity>
-        </View>
-
+        {/* No title/gear header any more -- "hCRI Companion" was just
+            branding, not information, and Settings is now its own bottom
+            tab rather than a button here (see App.tsx). MainTab's own
+            status row (the dot + "Connected"/"Disconnected" text) is the
+            first thing on screen now -- one less row of chrome before the
+            actual reading. */}
         <TabBar
           tabs={[
             { key: 'main', label: 'Main' },
             { key: 'data', label: 'Data' },
-            { key: 'history', label: 'History' },
-            { key: 'about', label: 'About' },
             { key: 'logs', label: 'Logs' },
           ]}
           active={activeTab}
@@ -792,6 +574,7 @@ export default function HomeScreen({ navigation }: any) {
             onUpload={upload}
             uploading={status === 'uploading'}
             statIds={statIds}
+            connectedDeviceName={deviceName}
           />
         )}
         {activeTab === 'data' && (
@@ -806,23 +589,6 @@ export default function HomeScreen({ navigation }: any) {
             cachedUsername={cachedUsername}
           />
         )}
-        {activeTab === 'history' && (
-          <HistoryTab
-            history={history}
-            loading={historyLoading}
-            onRename={renameFromHistory}
-            onUploadWithLabel={uploadFromHistory}
-            onUploadMany={uploadManyFromHistory}
-            onDelete={deleteFromHistory}
-            onDeleteMany={deleteManyFromHistory}
-            onShareOne={shareOneFromHistory}
-            onShareAll={shareAllFromHistory}
-            onOpen={(reading) => navigation.navigate('ReadingDetail', { reading })}
-            uploadingId={historyUploadingId}
-            bulkUploading={historyBulkUploading}
-          />
-        )}
-        {activeTab === 'about' && <AboutTab />}
         {activeTab === 'logs' && <LogsTab log={log} onShare={shareLog} onClear={clearLog} />}
       </ScrollView>
     </SafeAreaView>

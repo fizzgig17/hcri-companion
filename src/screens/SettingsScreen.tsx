@@ -28,6 +28,7 @@ import { STAT_METRIC_BY_ID } from '../utils/statMetrics';
 import { maskSecret } from '../utils/maskSecret';
 import { useTheme } from '../contexts/ThemeContext';
 import { ThemeMode } from '../theme';
+import AboutTab from './tabs/AboutTab';
 
 // Labels/order for the Light/Dark/System picker below -- System first since
 // it's the default every fresh install starts on (see ThemeContext.tsx).
@@ -247,6 +248,14 @@ export default function SettingsScreen() {
     statsTitle: { color: colors.text, fontSize: 14, fontWeight: '600' },
     statsResetLink: { color: colors.info, fontSize: 12.5 },
     statsHint: { color: colors.muted, fontSize: 12, lineHeight: 16, marginTop: 4, marginBottom: 14 },
+
+    aboutSection: {
+      marginTop: 28,
+      paddingTop: 20,
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+    },
+    aboutTitle: { color: colors.text, fontSize: 14, fontWeight: '600', marginBottom: 12 },
   });
 
   return (
@@ -366,6 +375,17 @@ export default function SettingsScreen() {
           onReorder={handleReorder}
           onToggle={handleToggleStat}
         />
+      </View>
+
+      {/* Used to be its own tab in Home's TabBar -- static reference
+          content (which meter models are supported) you check once, maybe
+          twice ever, not something that deserves a permanent slot next to
+          Main/Data/Logs. Settings is the right home for it: everything
+          else on this screen is also "look at this rarely, not every
+          session." */}
+      <View style={styles.aboutSection}>
+        <Text style={styles.aboutTitle}>About</Text>
+        <AboutTab />
       </View>
     </ScrollView>
   );

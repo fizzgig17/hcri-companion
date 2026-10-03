@@ -66,6 +66,11 @@ interface Props {
    * storage/statDisplayPrefs.ts), already resolved down to just the
    * enabled ids by HomeScreen. */
   statIds: string[];
+  /** The currently-connected meter's advertised name, or null when nothing's
+   * connected -- shown right next to the status dot/text. Used to live in
+   * Home's own header (dropped along with the rest of that header -- see
+   * HomeScreen.tsx), so this is the one place it's still visible at all. */
+  connectedDeviceName?: string | null;
 }
 
 export default function MainTab({
@@ -85,6 +90,7 @@ export default function MainTab({
   onUpload,
   uploading,
   statIds,
+  connectedDeviceName,
 }: Props) {
   const { colors, statusColors } = useTheme();
   const canSwitchMeters = status === 'connected' && (devicePickerDevices?.length ?? 0) > 1;
@@ -95,6 +101,7 @@ export default function MainTab({
     resetLinkText: { color: colors.muted, fontSize: 12 },
     statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
     statusText: { color: colors.muted, fontSize: 14 },
+    deviceNameText: { color: colors.text, fontSize: 14, fontWeight: '600' },
 
     switchMeterButton: { flexDirection: 'row', alignItems: 'center', marginLeft: 12 },
     switchMeterIcon: { color: colors.info, fontSize: 14, marginRight: 4 },
@@ -141,7 +148,13 @@ export default function MainTab({
     <View>
       <View style={styles.statusRow}>
         <View style={[styles.statusDot, { backgroundColor: statusColors[status] }]} />
-        <Text style={styles.statusText}>{statusLabels[status]}</Text>
+        {connectedDeviceName ? (
+          <Text style={styles.statusText}>
+            <Text style={styles.deviceNameText}>{connectedDeviceName}</Text> · {statusLabels[status]}
+          </Text>
+        ) : (
+          <Text style={styles.statusText}>{statusLabels[status]}</Text>
+        )}
         {isBusy && <ActivityIndicator size="small" color={colors.muted} style={{ marginLeft: 8 }} />}
         {/* Only shows up when the meter currently connected was one of
             SEVERAL matches the last scan found -- lets you reopen that same

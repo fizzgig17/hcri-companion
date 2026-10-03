@@ -15,15 +15,68 @@ import React from 'react';
 import { StatusBar } from 'react-native';
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import HomeScreen from './screens/HomeScreen';
+import HistoryScreen from './screens/HistoryScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import ReadingDetailScreen from './screens/ReadingDetailScreen';
 import ErrorBoundary from './components/ErrorBoundary';
 import DevBuildBanner from './components/DevBuildBanner';
+import { HomeIcon, HistoryIcon, SettingsIcon } from './components/TabBarIcons';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
+import { LogProvider } from './contexts/LogContext';
 
 const Stack = createNativeStackNavigator();
+const Tab = createBottomTabNavigator();
+
+// The three top-level destinations -- Home (take/view the current
+// reading), History (every past reading), Settings (account, appearance,
+// measurement customization, About). Used to be Home/Settings as stack
+// screens with History and About as panels buried inside Home's own
+// TabBar; pulling History and About out to where they're reachable in one
+// tap, same footing as Settings, is what let Home's own top bar shrink
+// down to just Main/Data/Logs -- see HomeScreen.tsx and SettingsScreen.tsx.
+function Tabs() {
+  const { colors } = useTheme();
+
+  return (
+    <Tab.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: colors.card },
+        headerTintColor: colors.text,
+        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.cardBorder },
+        tabBarActiveTintColor: colors.accent,
+        tabBarInactiveTintColor: colors.muted,
+      }}
+    >
+      {/* Draws its own compact status row (MainTab) instead of a native
+          header -- see HomeScreen.tsx for why there's no title bar here any
+          more. */}
+      <Tab.Screen
+        name="Home"
+        component={HomeScreen}
+        options={{ headerShown: false, tabBarIcon: ({ color, size }) => <HomeIcon color={color} size={size} /> }}
+      />
+      <Tab.Screen
+        name="History"
+        component={HistoryScreen}
+        options={{
+          headerShown: false,
+          tabBarIcon: ({ color, size }) => <HistoryIcon color={color} size={size} />,
+        }}
+      />
+      <Tab.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{
+          title: 'hCRI.io Settings',
+          tabBarIcon: ({ color, size }) => <SettingsIcon color={color} size={size} />,
+        }}
+      />
+    </Tab.Navigator>
+  );
+}
 
 // Pulled out so it can call useTheme() -- that only works BELOW
 // <ThemeProvider>, which is why App() itself (below) doesn't call it
@@ -39,8 +92,12 @@ function Navigation() {
       <Stack.Navigator
         screenOptions={{ headerStyle: { backgroundColor: colors.card }, headerTintColor: colors.text }}
       >
-        <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'hCRI.io Settings' }} />
+        {/* The bottom tab bar IS the app's main shell -- Tabs owns its own
+            headers per-tab, so this outer stack screen has none of its
+            own. ReadingDetail (pushed from History, "open a past
+            reading") sits on top of the tabs as a full-screen push, the
+            same relationship it had to Home before. */}
+        <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
         <Stack.Screen name="ReadingDetail" component={ReadingDetailScreen} options={{ title: 'Reading' }} />
       </Stack.Navigator>
     </NavigationContainer>
@@ -71,18 +128,28 @@ export default function App() {
           nothing left to catch it, since the thing that crashed was the
           catcher itself. */}
       <ThemeProvider>
-        {/* Wraps EVERYTHING below it -- including navigation itself -- so an
-            uncaught error anywhere in the tree (Home, Settings, any tab) hits
-            this instead of taking the whole app down. See
-            components/ErrorBoundary.tsx for why. */}
-        <ErrorBoundary>
-          {/* Sits above the navigator (every screen, not just Home) so
-              it's impossible to be on ANY screen of a dev-targeted build
-              without seeing it -- a no-op view in a production build, see
-              components/DevBuildBanner.tsx. */}
-          <DevBuildBanner />
-          <Navigation />
-        </ErrorBoundary>
+        {/* The debug log (Logs tab, Share Debug Log) -- lives above the
+            tab navigator, not inside HomeScreen, now that History is a
+            sibling tab that also needs to append to it (its own uploads)
+            rather than a panel nested inside Home. See
+            contexts/LogContext.tsx. Ordering relative to ErrorBoundary
+            doesn't matter (ErrorBoundary doesn't read it), but sitting
+            outside it means a caught-and-reset crash doesn't wipe the log
+            you'd want to read to find out what crashed. */}
+        <LogProvider>
+          {/* Wraps EVERYTHING below it -- including navigation itself -- so an
+              uncaught error anywhere in the tree (Home, Settings, any tab) hits
+              this instead of taking the whole app down. See
+              components/ErrorBoundary.tsx for why. */}
+          <ErrorBoundary>
+            {/* Sits above the navigator (every screen, not just Home) so
+                it's impossible to be on ANY screen of a dev-targeted build
+                without seeing it -- a no-op view in a production build, see
+                components/DevBuildBanner.tsx. */}
+            <DevBuildBanner />
+            <Navigation />
+          </ErrorBoundary>
+        </LogProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );
