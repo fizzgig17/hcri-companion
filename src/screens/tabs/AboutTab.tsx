@@ -6,16 +6,47 @@
 // which is the single place to update when a new model gets added --
 // this tab just renders whatever's in there, so it never needs its own
 // changes when the device list grows.
+//
+// Also the one place in the app that opens a plain mailto: link -- a
+// "Send Feedback" button at the top, pre-addressed to fizzgig@hcri.io
+// with a fixed subject line, so a report doesn't depend on the person
+// remembering (or me re-stating) the address each time. Deliberately NOT
+// routed through the debug log's own "Share Debug Log" share sheet (see
+// shareLog.ts) -- that's for attaching a log to whatever the person
+// already has open; this is a direct "start an email to the developer"
+// action with no log attached, since most feedback isn't a bug report.
 
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Linking, Alert } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { SUPPORTED_DEVICES } from '../../ble/supportedDevices';
+import PrimaryButton from '../../components/PrimaryButton';
+
+const FEEDBACK_EMAIL = 'fizzgig@hcri.io';
+const FEEDBACK_SUBJECT = 'hCRI Companion Feedback';
+// encodeURIComponent, not a hand-rolled replace -- mailto's subject is a
+// normal URL query-ish component, so spaces need to become %20 (or +,
+// but %20 is the unambiguous one every mail client handles) the same way
+// any other URL-embedded text would.
+const FEEDBACK_MAILTO = `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(FEEDBACK_SUBJECT)}`;
 
 export default function AboutTab() {
   const { colors } = useTheme();
 
+  const sendFeedback = () => {
+    // Linking.openURL rejects (rather than silently no-opping) when
+    // there's genuinely no app registered to handle mailto: at all --
+    // rare, but possible on a stripped-down Android build/custom ROM
+    // with no mail client installed. Falling back to telling the person
+    // the address directly beats a silent failed tap with no feedback at
+    // all (no pun intended).
+    Linking.openURL(FEEDBACK_MAILTO).catch(() => {
+      Alert.alert('Could not open an email app', `Email ${FEEDBACK_EMAIL} directly instead.`);
+    });
+  };
+
   const styles = StyleSheet.create({
+    feedbackButton: { marginBottom: 14 },
     card: {
       backgroundColor: colors.card,
       borderRadius: 12,
@@ -41,6 +72,8 @@ export default function AboutTab() {
 
   return (
     <View>
+      <PrimaryButton title="Send Feedback" onPress={sendFeedback} variant="muted" style={styles.feedbackButton} />
+
       <View style={styles.card}>
         <Text style={styles.heading}>Supported Meters</Text>
         <Text style={styles.subheading}>
