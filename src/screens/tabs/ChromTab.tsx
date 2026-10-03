@@ -9,7 +9,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import ChromaticityChart from '../../components/ChromaticityChart';
 import StatCard from '../../components/StatCard';
-import { colors } from '../../theme';
+import { useTheme } from '../../contexts/ThemeContext';
 import { MeterResult } from '../../ble/parseResult';
 
 interface Props {
@@ -17,6 +17,22 @@ interface Props {
 }
 
 export default function ChromTab({ result }: Props) {
+  const { colors } = useTheme();
+
+  const styles = StyleSheet.create({
+    empty: { paddingVertical: 40, alignItems: 'center' },
+    emptyText: { color: colors.muted, fontSize: 13 },
+
+    card: {
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      padding: 14,
+    },
+    statGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -6, marginTop: 10 },
+  });
+
   if (!result) {
     return (
       <View style={styles.empty}>
@@ -37,17 +53,3 @@ export default function ChromTab({ result }: Props) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  empty: { paddingVertical: 40, alignItems: 'center' },
-  emptyText: { color: colors.muted, fontSize: 13 },
-
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    padding: 14,
-  },
-  statGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -6, marginTop: 10 },
-});

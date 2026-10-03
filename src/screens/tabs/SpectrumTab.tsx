@@ -1,21 +1,33 @@
 // src/screens/tabs/SpectrumTab.tsx
 //
-// The "Spectrum" tab: two swipeable sub-pages sharing one top-level tab --
-// the wavelength-colored SPD graph (+ raw per-nm values) and the CIE 1931
-// chromaticity diagram, matching how the vendor app visually groups
-// Spec./Chrom. as adjacent tabs. Swipe between them, or tap the dot
-// indicator. Chrom used to be its own top-level tab; merged in here since
-// they're both "what does this reading's color/spectrum look like" views
-// on the exact same result, not separate concerns the way Data/Logs are.
+// Three swipeable sub-pages -- the wavelength-colored SPD graph (+ raw
+// per-nm values), the CIE 1931 chromaticity diagram, and the CRI R1-R15
+// bar chart (ported from hCRI.io's own report page -- see
+// RValuesBarChart.tsx). Swipe between them, or tap the dot indicator. No
+// longer a top-level tab of its own -- it's mounted directly below the
+// measurement grid on MainTab (and ReadingDetailScreen, for a past
+// reading), the one place that grid already lives, rather than a separate
+// tab you'd have to switch to after every reading. Chrom's own x/y numbers
+// are annotated directly on its chart (see ChromaticityChart.tsx) instead
+// of a second stat-card row here -- the measurement grid above already
+// covers CCT/Duv/Ra/R9/etc. for whichever of those the person has chosen
+// to see.
+//
+// This same component is reused, unchanged, by both MainTab.tsx (the live
+// reading) and ReadingDetailScreen.tsx (the History tab's "View" ->
+// past-reading detail screen) -- a saved reading's result/analysis are the
+// exact same shape as a live one, so there's exactly one implementation of
+// "Spectrum/Chrom/R-Values" to keep in sync rather than two that could
+// drift apart.
 
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import SpectrumChart from '../../components/SpectrumChart';
 import ChromaticityChart from '../../components/ChromaticityChart';
+import RValuesBarChart from '../../components/RValuesBarChart';
 import CollapsibleSection from '../../components/CollapsibleSection';
-import StatCard from '../../components/StatCard';
 import SwipablePages from '../../components/SwipablePages';
-import { colors } from '../../theme';
+import { useTheme } from '../../contexts/ThemeContext';
 import { MeterResult } from '../../ble/parseResult';
 import { SpectralAnalysis } from '../../utils/spectralAnalysis';
 
@@ -26,6 +38,27 @@ interface Props {
 }
 
 export default function SpectrumTab({ result, analysis }: Props) {
+  const { colors } = useTheme();
+
+  const styles = StyleSheet.create({
+    empty: { paddingVertical: 40, alignItems: 'center' },
+    emptyText: { color: colors.muted, fontSize: 13 },
+
+    chartCard: {
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      padding: 10,
+      marginBottom: 12,
+    },
+    spectrumRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3 },
+    spectrumNm: { color: colors.muted, fontSize: 12, fontFamily: 'monospace' },
+    spectrumValue: { color: colors.text, fontSize: 12, fontFamily: 'monospace' },
+
+    rvaluesTitle: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
+  });
+
   if (!result || !analysis) {
     return (
       <View style={styles.empty}>
@@ -62,15 +95,31 @@ export default function SpectrumTab({ result, analysis }: Props) {
           label: 'Chrom',
           content: (
             <View style={styles.chartCard}>
-              <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} height={280} />
-              <View style={styles.statGrid}>
-                <StatCard label="x" value={analysis.x.toFixed(4)} />
-                <StatCard label="y" value={analysis.y.toFixed(4)} />
-                <StatCard label="CCT" value={analysis.cct.toFixed(0)} unit="K" />
-                <StatCard label="Duv" value={analysis.duv.toFixed(5)} />
-                <StatCard label="Ra (CRI)" value={analysis.ra.toFixed(1)} />
-                <StatCard label="R9" value={analysis.r9.toFixed(1)} />
-              </View>
+              {/* Shorter than the original 280 -- trimmed because this
+                  page (plus the measurement grid and docked tab bar above
+                  it) was running long on Main. The diagram's X/Y domain
+                  (0.8 x 0.9, see ChromaticityChart.tsx) was already a bit
+                  wider than tall at 280, so this compresses the horseshoe
+                  a little further rather than clipping anything -- still
+                  fully legible, just slightly flatter-looking. */}
+              <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} height={230} />
+            </View>
+          ),
+        },
+        {
+          key: 'rvalues',
+          label: 'R-Values',
+          content: (
+            <View style={styles.chartCard}>
+              <Text style={styles.rvaluesTitle}>CRI R1-R15</Text>
+              {/* Explicit height, same as the Chrom page's chart just
+                  above -- left to its own default (rowCount*22+28, ~360px
+                  for all 15 R-values) this was noticeably taller than the
+                  other two swipeable pages. Trimmed from 280 for the same
+                  "running long on Main" reason as Chrom's -- still room
+                  enough per row (~14px) for all 15 R# labels and bars to
+                  stay legible without crowding. */}
+              <RValuesBarChart ri={analysis.ri} height={230} />
             </View>
           ),
         },
@@ -78,22 +127,3 @@ export default function SpectrumTab({ result, analysis }: Props) {
     />
   );
 }
-
-const styles = StyleSheet.create({
-  empty: { paddingVertical: 40, alignItems: 'center' },
-  emptyText: { color: colors.muted, fontSize: 13 },
-
-  chartCard: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    padding: 10,
-    marginBottom: 12,
-  },
-  spectrumRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3 },
-  spectrumNm: { color: colors.muted, fontSize: 12, fontFamily: 'monospace' },
-  spectrumValue: { color: colors.text, fontSize: 12, fontFamily: 'monospace' },
-
-  statGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -6, marginTop: 10 },
-});

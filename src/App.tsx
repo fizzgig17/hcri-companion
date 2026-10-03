@@ -12,15 +12,97 @@
 // HomeScreen/SettingsScreen with a bit of local state instead.
 
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import { StatusBar } from 'react-native';
+import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import HomeScreen from './screens/HomeScreen';
+import HistoryScreen from './screens/HistoryScreen';
 import SettingsScreen from './screens/SettingsScreen';
+import ReadingDetailScreen from './screens/ReadingDetailScreen';
 import ErrorBoundary from './components/ErrorBoundary';
 import DevBuildBanner from './components/DevBuildBanner';
+import { HomeIcon, HistoryIcon, SettingsIcon } from './components/TabBarIcons';
+import { ThemeProvider, useTheme } from './contexts/ThemeContext';
+import { LogProvider } from './contexts/LogContext';
 
 const Stack = createNativeStackNavigator();
+const Tab = createBottomTabNavigator();
+
+// The three top-level destinations -- Home (take/view the current
+// reading), History (every past reading), Settings (account, appearance,
+// measurement customization, About). Used to be Home/Settings as stack
+// screens with History and About as panels buried inside Home's own
+// TabBar; pulling History and About out to where they're reachable in one
+// tap, same footing as Settings, is what let Home's own top bar shrink
+// down to just Main/Data/Logs -- see HomeScreen.tsx and SettingsScreen.tsx.
+function Tabs() {
+  const { colors } = useTheme();
+
+  return (
+    <Tab.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: colors.card },
+        headerTintColor: colors.text,
+        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.cardBorder },
+        tabBarActiveTintColor: colors.accent,
+        tabBarInactiveTintColor: colors.muted,
+      }}
+    >
+      {/* Draws its own compact status row (MainTab) instead of a native
+          header -- see HomeScreen.tsx for why there's no title bar here any
+          more. */}
+      <Tab.Screen
+        name="Home"
+        component={HomeScreen}
+        options={{ headerShown: false, tabBarIcon: ({ color, size }) => <HomeIcon color={color} size={size} /> }}
+      />
+      <Tab.Screen
+        name="History"
+        component={HistoryScreen}
+        options={{
+          headerShown: false,
+          tabBarIcon: ({ color, size }) => <HistoryIcon color={color} size={size} />,
+        }}
+      />
+      <Tab.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{
+          title: 'hCRI.io Settings',
+          tabBarIcon: ({ color, size }) => <SettingsIcon color={color} size={size} />,
+        }}
+      />
+    </Tab.Navigator>
+  );
+}
+
+// Pulled out so it can call useTheme() -- that only works BELOW
+// <ThemeProvider>, which is why App() itself (below) doesn't call it
+// directly and instead renders this as ThemeProvider's child.
+function Navigation() {
+  const { colors, scheme } = useTheme();
+
+  return (
+    <NavigationContainer theme={scheme === 'light' ? DefaultTheme : DarkTheme}>
+      {/* Status bar text/icons need to flip too -- dark-on-light is
+          unreadable against a light background, and vice versa. */}
+      <StatusBar barStyle={scheme === 'light' ? 'dark-content' : 'light-content'} />
+      <Stack.Navigator
+        screenOptions={{ headerStyle: { backgroundColor: colors.card }, headerTintColor: colors.text }}
+      >
+        {/* The bottom tab bar IS the app's main shell -- Tabs owns its own
+            headers per-tab, so this outer stack screen has none of its
+            own. ReadingDetail (pushed from History, "open a past
+            reading") sits on top of the tabs as a full-screen push, the
+            same relationship it had to Home before. */}
+        <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
+        <Stack.Screen name="ReadingDetail" component={ReadingDetailScreen} options={{ title: 'Reading' }} />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
 
 export default function App() {
   return (
@@ -31,23 +113,44 @@ export default function App() {
     // (which used to handle this automatically) and draws its own header
     // row instead, so that row has to account for the inset itself.
     <SafeAreaProvider>
-      {/* Wraps EVERYTHING below it -- including navigation itself -- so an
-          uncaught error anywhere in the tree (Home, Settings, any tab) hits
-          this instead of taking the whole app down. See
-          components/ErrorBoundary.tsx for why. */}
-      <ErrorBoundary>
-        {/* Sits above the navigator (every screen, not just Home) so it's
-            impossible to be on ANY screen of a dev-targeted build without
-            seeing it -- a no-op view in a production build, see
-            components/DevBuildBanner.tsx. */}
-        <DevBuildBanner />
-        <NavigationContainer>
-          <Stack.Navigator screenOptions={{ headerStyle: { backgroundColor: '#111' }, headerTintColor: '#eee' }}>
-            <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
-            <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'hCRI.io Settings' }} />
-          </Stack.Navigator>
-        </NavigationContainer>
-      </ErrorBoundary>
+      {/* Resolves the Light/Dark/System preference (see
+          contexts/ThemeContext.tsx) once, here at the root, so every
+          screen below reads the same live theme via useTheme() rather
+          than each one loading/resolving the preference on its own.
+          Has to be the OUTERMOST wrapper, further out than ErrorBoundary
+          -- ErrorBoundary's own functional wrapper (see
+          components/ErrorBoundary.tsx) calls useTheme() itself, to theme
+          its fallback screen. useTheme() throws if there's no
+          ThemeProvider above it in the tree, so with ErrorBoundary on
+          the outside (as this used to be ordered) that throw happened
+          unconditionally on every mount, before ErrorBoundary's own
+          class component ever got a chance to render -- a crash with
+          nothing left to catch it, since the thing that crashed was the
+          catcher itself. */}
+      <ThemeProvider>
+        {/* The debug log (Logs tab, Share Debug Log) -- lives above the
+            tab navigator, not inside HomeScreen, now that History is a
+            sibling tab that also needs to append to it (its own uploads)
+            rather than a panel nested inside Home. See
+            contexts/LogContext.tsx. Ordering relative to ErrorBoundary
+            doesn't matter (ErrorBoundary doesn't read it), but sitting
+            outside it means a caught-and-reset crash doesn't wipe the log
+            you'd want to read to find out what crashed. */}
+        <LogProvider>
+          {/* Wraps EVERYTHING below it -- including navigation itself -- so an
+              uncaught error anywhere in the tree (Home, Settings, any tab) hits
+              this instead of taking the whole app down. See
+              components/ErrorBoundary.tsx for why. */}
+          <ErrorBoundary>
+            {/* Sits above the navigator (every screen, not just Home) so
+                it's impossible to be on ANY screen of a dev-targeted build
+                without seeing it -- a no-op view in a production build, see
+                components/DevBuildBanner.tsx. */}
+            <DevBuildBanner />
+            <Navigation />
+          </ErrorBoundary>
+        </LogProvider>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }

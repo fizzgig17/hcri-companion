@@ -1,19 +1,31 @@
 // src/screens/tabs/DataTab.tsx
 //
-// The "Data" tab: the numeric stat grid (CCT, Ra, Lux, R9, Duv), the full
-// R1-R15 breakdown, chromaticity coordinates, device info -- and the
-// Upload to hCRI.io button, since that acts on this same result data.
+// The "Data" tab: the Upload Title editor, a preview of exactly what will
+// be uploaded, the full R1-R15 breakdown, chromaticity coordinates, and
+// device info -- plus the Upload to hCRI.io and Share CSV buttons, since
+// those act on this same result data. No longer leads with a stat grid
+// (CCT/Ra/Lux/R9/Duv) -- Main's own result card already shows those,
+// customizable, right where the reading is taken; repeating them here
+// was just the same numbers twice.
 
 import React from 'react';
 import { View, Text, TextInput, StyleSheet } from 'react-native';
-import StatCard from '../../components/StatCard';
 import PrimaryButton from '../../components/PrimaryButton';
 import CollapsibleSection from '../../components/CollapsibleSection';
-import { colors } from '../../theme';
+import { useTheme } from '../../contexts/ThemeContext';
 import { MeterResult } from '../../ble/parseResult';
 import { SpectralAnalysis } from '../../utils/spectralAnalysis';
 import { buildCsv, defaultLabel } from '../../hcri/buildCsv';
 import { HCRI_BRAND_HOST } from '../../hcri/buildTarget';
+import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
+
+// The core colorimetric numbers (CCT/Ra/Duv/Lux/Rf/R9/Rg), still worth
+// having right here rather than only on Main -- but as a compact, plain
+// text summary line rather than the big StatCard tiles this tab used to
+// show, which just duplicated Main's own (customizable) result card.
+// Pulled from the same statMetrics.ts registry Main uses, so the
+// formatting (decimal places, units) always matches exactly.
+const SUMMARY_METRIC_IDS = ['cct', 'ra', 'duv', 'lux', 'rf', 'r9', 'rg'];
 
 interface Props {
   result: MeterResult | null;
@@ -50,6 +62,86 @@ export default function DataTab({
   onShareCsv,
   cachedUsername,
 }: Props) {
+  const { colors } = useTheme();
+
+  const styles = StyleSheet.create({
+    empty: { paddingVertical: 40, alignItems: 'center' },
+    emptyText: { color: colors.muted, fontSize: 13 },
+
+    card: {
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      padding: 14,
+      marginBottom: 12,
+    },
+    row: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingVertical: 4,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.cardBorder,
+    },
+    rowLabel: { color: colors.muted, fontSize: 12 },
+    rowValue: { color: colors.text, fontSize: 12, fontFamily: 'monospace' },
+
+    // Compact, plain-text summary of the core colorimetric numbers -- small
+    // and unboxed on purpose (no tile background/border like StatCard),
+    // since this is just a quick-reference recap of what Main's result card
+    // already showed prominently, not a second place to feature them.
+    summaryRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      paddingBottom: 10,
+      marginBottom: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.cardBorder,
+    },
+    summaryItem: { width: '33.33%', marginBottom: 6 },
+    summaryValue: { color: colors.text, fontSize: 13, fontWeight: '600', fontFamily: 'monospace' },
+    summaryUnit: { color: colors.muted, fontSize: 10, fontWeight: '400' },
+    summaryLabel: { color: colors.muted, fontSize: 10 },
+
+    csvPreview: {
+      color: colors.text,
+      fontSize: 10,
+      lineHeight: 14,
+      fontFamily: 'monospace',
+    },
+
+    fieldLabel: { color: colors.muted, fontSize: 11, marginBottom: 4 },
+    // Background/border live on the wrapper, not the TextInput itself, so the
+    // overlaid default-text <Text> (titleInputOverlay) and the real input
+    // share the exact same padding box and line up pixel-for-pixel.
+    titleInputWrap: {
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 8,
+      minHeight: 38,
+      position: 'relative',
+    },
+    titleInputOverlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      color: colors.muted,
+      fontSize: 13,
+    },
+    titleInput: {
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      color: colors.text,
+      fontSize: 13,
+      minHeight: 38,
+    },
+  });
+
   if (!result || !analysis) {
     return (
       <View style={styles.empty}>
@@ -61,12 +153,21 @@ export default function DataTab({
   return (
     <View>
       <View style={styles.card}>
-        <View style={styles.statGrid}>
-          <StatCard label="CCT" value={analysis.cct.toFixed(0)} unit="K" />
-          <StatCard label="Ra (CRI)" value={analysis.ra.toFixed(1)} />
-          <StatCard label="Lux" value={result.lux !== null ? result.lux.toFixed(0) : '—'} />
-          <StatCard label="R9" value={analysis.r9.toFixed(1)} />
-          <StatCard label="Duv" value={analysis.duv.toFixed(5)} />
+        <View style={styles.summaryRow}>
+          {SUMMARY_METRIC_IDS.map((id) => {
+            const metric = STAT_METRIC_BY_ID[id];
+            const out = metric?.format(result, analysis);
+            if (!out) return null;
+            return (
+              <View key={id} style={styles.summaryItem}>
+                <Text style={styles.summaryValue}>
+                  {out.value}
+                  {out.unit ? <Text style={styles.summaryUnit}> {out.unit}</Text> : null}
+                </Text>
+                <Text style={styles.summaryLabel}>{metric.label}</Text>
+              </View>
+            );
+          })}
         </View>
 
         <Text style={styles.fieldLabel}>Upload Title</Text>
@@ -155,66 +256,3 @@ export default function DataTab({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  empty: { paddingVertical: 40, alignItems: 'center' },
-  emptyText: { color: colors.muted, fontSize: 13 },
-
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    padding: 14,
-    marginBottom: 12,
-  },
-  statGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -6 },
-
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.cardBorder,
-  },
-  rowLabel: { color: colors.muted, fontSize: 12 },
-  rowValue: { color: colors.text, fontSize: 12, fontFamily: 'monospace' },
-
-  csvPreview: {
-    color: colors.text,
-    fontSize: 10,
-    lineHeight: 14,
-    fontFamily: 'monospace',
-  },
-
-  fieldLabel: { color: colors.muted, fontSize: 11, marginTop: 10, marginBottom: 4 },
-  // Background/border live on the wrapper, not the TextInput itself, so the
-  // overlaid default-text <Text> (titleInputOverlay) and the real input
-  // share the exact same padding box and line up pixel-for-pixel.
-  titleInputWrap: {
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    borderRadius: 8,
-    minHeight: 38,
-    position: 'relative',
-  },
-  titleInputOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    color: colors.muted,
-    fontSize: 13,
-  },
-  titleInput: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    color: colors.text,
-    fontSize: 13,
-    minHeight: 38,
-  },
-});

@@ -8,7 +8,7 @@
 // of whatever the last reading and log happen to be.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, AppState } from 'react-native';
+import { View, ScrollView, StyleSheet, Alert, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MeterConnection } from '../ble/MeterConnection';
 import { initializeMeter, takeMeasurement } from '../ble/takeMeasurement';
@@ -16,41 +16,47 @@ import { MeterResult } from '../ble/parseResult';
 import { analyzeSpectrum } from '../utils/spectralAnalysis';
 import { buildCsv, defaultLabel } from '../hcri/buildCsv';
 import { uploadToHcri } from '../hcri/uploadToHcri';
-import { loadHcriCredentials } from '../storage/secureStorage';
+import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
 import { loadKeepAwakePreference } from '../storage/preferences';
-import {
-  loadHistory,
-  addReading,
-  renameReading,
-  deleteReading,
-  deleteManyReadings,
-  SavedReading,
-} from '../storage/readingHistory';
-import { METER_NAME_PREFIXES } from '../ble/protocol';
+import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
+import { addReading } from '../storage/readingHistory';
+import { IS_DEV_BUILD } from '../hcri/buildTarget';
 import { shareDebugLog } from '../utils/shareLog';
-import { shareSingleReadingCsv, shareAllReadingsCsv } from '../utils/shareCsv';
+import { shareSingleReadingCsv } from '../utils/shareCsv';
 import { hapticSuccess, hapticFailure } from '../utils/haptics';
 import { enableKeepAwake, disableKeepAwake } from '../utils/keepAwake';
-import { colors } from '../theme';
+import { useTheme } from '../contexts/ThemeContext';
+import { useLog } from '../contexts/LogContext';
+import { withBackgroundDisconnectSuppressed, isBackgroundDisconnectSuppressed } from '../ble/backgroundDisconnectGuard';
 import TabBar from '../components/TabBar';
 import MainTab, { Status, FoundDevice } from './tabs/MainTab';
-import SpectrumTab from './tabs/SpectrumTab';
 import DataTab from './tabs/DataTab';
-import HistoryTab from './tabs/HistoryTab';
-import AboutTab from './tabs/AboutTab';
 import LogsTab from './tabs/LogsTab';
 
-// 'chrom' is gone as its own tab key -- it's now a swipeable sub-page
-// inside SpectrumTab (see SwipablePages), matching how the vendor app
-// visually groups Spec./Chrom. together rather than scattering them
-// across unrelated top-level tabs.
-type TabKey = 'main' | 'spectrum' | 'data' | 'history' | 'about' | 'logs';
+// 'chrom' and 'spectrum' are both gone as their own tab keys -- Spectrum/
+// Chrom/R-Values are now swipeable sub-pages (see SwipablePages) living
+// directly on the Main tab, right below its measurement grid, rather than
+// a separate tab you have to switch to after every reading. ReadingDetail
+// Screen.tsx shows the exact same arrangement for a past reading. 'history'
+// and 'about' are gone too -- History is now its own bottom-nav tab
+// (HistoryScreen.tsx) and About is a section inside Settings, neither of
+// them panels inside Home any more -- see App.tsx for the bottom tab bar.
+type TabKey = 'main' | 'data' | 'logs';
+
+// How long a Connect attempt spends collecting matching advertisements
+// before deciding how many distinct meters are actually out there. Unlike
+// the old scanAndConnect() (gone now -- see MeterConnection.ts), this can't
+// just resolve the instant it hears the first match: the whole point is
+// knowing whether a SECOND one is also in range, which means waiting out a
+// real window rather than racing to the first advertisement.
+const CONNECT_SCAN_WINDOW_MS = 3000;
 
 export default function HomeScreen({ navigation }: any) {
+  const { colors } = useTheme();
+  const { log, appendLog, clearLog, refreshVerboseLogging } = useLog();
   const [activeTab, setActiveTab] = useState<TabKey>('main');
   const [status, setStatus] = useState<Status>('disconnected');
   const [result, setResult] = useState<MeterResult | null>(null);
-  const [log, setLog] = useState<string[]>([]);
   const [deviceName, setDeviceName] = useState<string | null>(null);
   // The upload title/label the person typed on the Data tab. Deliberately
   // lifted up here rather than kept as local state inside DataTab -- state
@@ -72,35 +78,13 @@ export default function HomeScreen({ navigation }: any) {
   // mount and again every time this screen regains focus (e.g. coming
   // back from Settings after adding/changing an account).
   const [cachedUsername, setCachedUsername] = useState<string | null>(null);
+  // Which measurements MainTab's result card shows, and in what order --
+  // the person's own customization from Settings. Starts from the
+  // built-in default (defaultStatDisplayPrefs()) so the very first render
+  // (before AsyncStorage resolves) shows the same stats it always has,
+  // rather than an empty grid for one frame.
+  const [statIds, setStatIds] = useState<string[]>(() => visibleStatIds(defaultStatDisplayPrefs()));
   const connRef = useRef<MeterConnection | null>(null);
-
-  // Every completed measurement, persisted locally (see
-  // ../storage/readingHistory.ts) -- loaded once on mount, then kept in
-  // sync in-memory by every operation that changes it (a new reading,
-  // rename, delete) rather than re-reading from storage after each one.
-  const [history, setHistory] = useState<SavedReading[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(true);
-  // Which saved reading (if any) is currently being uploaded FROM the
-  // History tab -- separate from status === 'uploading', which is only for
-  // the current/latest reading's own upload on the Data tab. Keeping these
-  // separate means uploading an old reading from History doesn't make the
-  // whole app look busy/disable the Main tab's Take Reading button.
-  const [historyUploadingId, setHistoryUploadingId] = useState<string | null>(null);
-  // Separate from historyUploadingId (which row's spinner is showing right
-  // now, moving through the list one at a time during a bulk run) -- this
-  // is just "is a bulk run in progress at all", so HistoryTab can disable
-  // its Select mode controls for the whole duration rather than only
-  // around whichever single row happens to be mid-upload at any instant.
-  const [historyBulkUploading, setHistoryBulkUploading] = useState(false);
-
-  useEffect(() => {
-    loadHistory()
-      .then(setHistory)
-      .catch((e) => appendLog(`Failed to load reading history: ${e.message}`))
-      .finally(() => setHistoryLoading(false));
-    // Intentionally run once on mount only.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   useEffect(() => {
     const loadCachedUsername = () => {
@@ -118,6 +102,35 @@ export default function HomeScreen({ navigation }: any) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigation]);
 
+  useEffect(() => {
+    const loadStatIds = () => {
+      loadStatDisplayPrefs()
+        .then((prefs) => setStatIds(visibleStatIds(prefs)))
+        .catch(() => {});
+    };
+    loadStatIds();
+    // Refresh on focus, same reasoning as cachedUsername above -- this
+    // screen needs to pick up whatever the person just changed in
+    // Settings (reordered/toggled measurements) the moment they come
+    // back, not only on the next app launch.
+    const unsubscribe = navigation.addListener('focus', loadStatIds);
+    return unsubscribe;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigation]);
+
+  // Whether to keep the verbose-only log lines (BLE hex dumps, the raw
+  // result body -- see MeterConnection.ts/takeMeasurement.ts's `verbose`
+  // flag) when they reach appendLog -- the preference itself now lives in
+  // LogContext (shared with HistoryScreen's own appendLog calls), but each
+  // screen that cares still refreshes it on focus, same reasoning as
+  // cachedUsername/statIds above: picks up a toggle flipped in Settings
+  // without needing an app restart.
+  useEffect(() => {
+    refreshVerboseLogging();
+    const unsubscribe = navigation.addListener('focus', refreshVerboseLogging);
+    return unsubscribe;
+  }, [navigation, refreshVerboseLogging]);
+
   // Computed ONCE per reading, here, and threaded down to every tab that
   // shows a colorimetric number (Main, Spectrum, Data) -- rather than each
   // tab importing spectralAnalysis and calling analyzeSpectrum() on its own.
@@ -127,20 +140,6 @@ export default function HomeScreen({ navigation }: any) {
   // app grows -- there is exactly one CCT/Duv/Ra/R9 number in memory for a
   // given result, not three independent calls that happen to agree today.
   const analysis = useMemo(() => (result ? analyzeSpectrum(result.spectrum) : null), [result]);
-
-  const appendLog = useCallback((msg: string) => {
-    // Also mirror to console.log -- React Native forwards this straight to
-    // the Metro terminal on the PC whenever the app is connected in debug
-    // mode, so you can copy/paste log lines from there without needing to
-    // screen-mirror or copy text off the phone itself.
-    console.log(`[meter] ${msg}`);
-    setLog((prev) => [...prev.slice(-99), msg]);
-  }, []);
-
-  /** Clears the in-memory debug log shown on the Logs tab -- this log was never persisted (see the `log`/`setLog` state above), so this just empties what's currently on screen; it doesn't affect history or anything already shared via "Share Debug Log". */
-  const clearLog = useCallback(() => {
-    setLog([]);
-  }, []);
 
   // Reuse a single MeterConnection (and the native BleManager it owns)
   // across every Connect attempt. Creating a fresh one each press left the
@@ -162,25 +161,121 @@ export default function HomeScreen({ navigation }: any) {
     return connRef.current;
   }, [appendLog]);
 
-  const connect = useCallback(async () => {
-    setStatus('connecting');
-    try {
-      const conn = getConnection();
-      // Clears any BLE connection to the meter left over from a previous
-      // app/JS session (see MeterConnection.resetStaleConnection() for why
-      // this is needed -- it's what used to require a power cycle after
-      // reloading the app with the meter still connected). Cheap/harmless
-      // when there's nothing stale to clear.
-      await conn.resetStaleConnection();
-      await conn.scanAndConnect();
-      await initializeMeter(conn);
-      setDeviceName(conn.getDeviceName());
-      setStatus('connected');
-    } catch (e: any) {
-      appendLog(`Connect failed: ${e.message}`);
-      setStatus('disconnected');
-    }
-  }, [appendLog, getConnection]);
+  // The candidates from the most recent scan that found more than one
+  // matching meter -- kept around even after connecting (NOT cleared the
+  // moment a device is picked/auto-chosen), so MainTab's "switch meter"
+  // icon can reopen the exact same list later without a fresh scan. Reset
+  // to null whenever a scan comes back with 0 or 1 matches, since then
+  // there's nothing to switch between. `devicePickerVisible` is the
+  // separate, short-lived flag for whether the overlay itself is up right
+  // now -- it starts true the moment multiMeterCandidates is first set
+  // (from connect()'s own scan) and goes false on a pick/dismiss, while
+  // multiMeterCandidates itself lives on for the icon.
+  const [multiMeterCandidates, setMultiMeterCandidates] = useState<FoundDevice[] | null>(null);
+  const [devicePickerVisible, setDevicePickerVisible] = useState(false);
+
+  /**
+   * `preferLastDeviceOnMultiple`: used by the "app came back to the
+   * foreground after we auto-disconnected it" path below, NOT by a fresh
+   * app launch or a manual tap on Connect. In that one case, popping up a
+   * picker the person didn't ask for every time they switch back to the
+   * app (with some other meter now also in range) would be more annoying
+   * than useful -- reconnecting to whichever meter was connected right
+   * before backgrounding is almost always what's actually wanted. If that
+   * meter isn't among what's currently in range (out of range now, or this
+   * is the very first connect of the session with nothing recorded yet),
+   * this still falls back to the normal picker rather than guessing.
+   */
+  const connect = useCallback(
+    async (opts?: { preferLastDeviceOnMultiple?: boolean }) => {
+      setStatus('connecting');
+      try {
+        const conn = getConnection();
+        // Clears any BLE connection to the meter left over from a previous
+        // app/JS session (see MeterConnection.resetStaleConnection() for why
+        // this is needed -- it's what used to require a power cycle after
+        // reloading the app with the meter still connected). Cheap/harmless
+        // when there's nothing stale to clear.
+        await conn.resetStaleConnection();
+        const candidates = await conn.scanForKnownMeters(CONNECT_SCAN_WINDOW_MS);
+
+        if (candidates.length === 0) {
+          setMultiMeterCandidates(null);
+          throw new Error('Meter not found -- make sure it is powered on and in range');
+        }
+
+        if (candidates.length === 1) {
+          setMultiMeterCandidates(null);
+          await conn.connectToDevice(candidates[0].id);
+          await initializeMeter(conn);
+          setDeviceName(conn.getDeviceName());
+          setStatus('connected');
+          return;
+        }
+
+        // More than one match -- remember the list either way (so the
+        // switch-meter icon works later even if we silently pick one
+        // below), then decide whether that's a silent pick or a picker.
+        const mapped = candidates.map((d) => ({ id: d.id, name: d.name, rssi: d.rssi }));
+        setMultiMeterCandidates(mapped);
+
+        const lastId = opts?.preferLastDeviceOnMultiple ? await loadLastDeviceId().catch(() => null) : null;
+        const lastMatch = lastId ? candidates.find((d) => d.id === lastId) : undefined;
+        if (lastMatch) {
+          await conn.connectToDevice(lastMatch.id);
+          await initializeMeter(conn);
+          setDeviceName(conn.getDeviceName());
+          setStatus('connected');
+          return;
+        }
+
+        // Either this is a fresh launch/manual Connect (always asks when
+        // there's more than one), or it's a foreground-reconnect that
+        // couldn't find the previously-connected meter among what's in
+        // range now -- either way, nothing safe to guess, so ask.
+        setDevicePickerVisible(true);
+        setStatus('disconnected');
+      } catch (e: any) {
+        appendLog(`Connect failed: ${e.message}`);
+        setStatus('disconnected');
+      }
+    },
+    [appendLog, getConnection]
+  );
+
+  /** Called when the person taps a device in the picker overlay -- whether it just opened from connect()'s own scan, or was reopened later via the "switch meter" icon while already connected to a different one of the same candidates. */
+  const selectDeviceFromPicker = useCallback(
+    async (deviceId: string) => {
+      setDevicePickerVisible(false);
+      setStatus('connecting');
+      try {
+        const conn = getConnection();
+        // Only relevant for the switch-meter case: a previous meter may
+        // still be connected, and connectToDevice() doesn't drop an
+        // existing connection on its own before opening a new one.
+        if (conn.isConnected()) {
+          await conn.disconnect();
+        }
+        await conn.connectToDevice(deviceId);
+        await initializeMeter(conn);
+        setDeviceName(conn.getDeviceName());
+        setStatus('connected');
+      } catch (e: any) {
+        appendLog(`Connect failed: ${e.message}`);
+        setStatus('disconnected');
+      }
+    },
+    [appendLog, getConnection]
+  );
+
+  /** The "switch meter" icon next to the status row -- reopens the overlay with the already-known candidate list, no rescan. Only ever enabled (see MainTab) when multiMeterCandidates actually has 2+ entries. */
+  const openDevicePicker = useCallback(() => {
+    setDevicePickerVisible(true);
+  }, []);
+
+  const dismissDevicePicker = useCallback(() => {
+    setDevicePickerVisible(false);
+  }, []);
 
   // Try to connect automatically as soon as the app opens, rather than
   // requiring a manual tap on "Connect to Meter" every time -- if the
@@ -188,7 +283,10 @@ export default function HomeScreen({ navigation }: any) {
   // "Connected" with no user action needed. If it's not found (meter off,
   // out of range, etc.) this just fails quietly into the normal
   // disconnected state, same as if Connect had been pressed and timed out;
-  // the button is still there to retry manually.
+  // the button is still there to retry manually. No preferLastDeviceOnMultiple
+  // here -- this is a fresh app launch, not a reconnect, so if more than one
+  // meter is in range it should pop up the picker same as a manual tap
+  // would, not silently guess.
   useEffect(() => {
     connect();
     // Intentionally run once on mount only.
@@ -225,70 +323,6 @@ export default function HomeScreen({ navigation }: any) {
     return () => disableKeepAwake();
   }, []);
 
-  // Diagnostic: list nearby BLE devices that look like a Hopoocolor meter
-  // (name starts with a known prefix, e.g. "HPCS") -- filters out all the
-  // other unrelated BLE noise (headphones, watches, etc.) a raw scan picks
-  // up, since the only thing worth surfacing here is "is a meter actually
-  // advertising, and under what name/RSSI."
-  const [scanning, setScanning] = useState(false);
-  const [foundDevices, setFoundDevices] = useState<FoundDevice[]>([]);
-  const stopScanRef = useRef<(() => void) | null>(null);
-
-  const toggleScan = useCallback(() => {
-    if (scanning) {
-      stopScanRef.current?.();
-      stopScanRef.current = null;
-      setScanning(false);
-      return;
-    }
-
-    setFoundDevices([]);
-    setScanning(true);
-    const conn = getConnection();
-    stopScanRef.current = conn.scanForAllDevices((device) => {
-      const name = device.name;
-      if (!name || !METER_NAME_PREFIXES.some((prefix) => name.startsWith(prefix))) {
-        return; // not a meter -- ignore
-      }
-      setFoundDevices((prev) => {
-        const existing = prev.findIndex((d) => d.id === device.id);
-        const entry = { id: device.id, name: device.name, rssi: device.rssi };
-        if (existing >= 0) {
-          const next = [...prev];
-          next[existing] = entry;
-          return next;
-        }
-        return [...prev, entry];
-      });
-    }, 15000);
-
-    // Auto-flip the button back after the scan's own timeout elapses.
-    setTimeout(() => setScanning(false), 15000);
-  }, [scanning, getConnection]);
-
-  /** Connect directly to a device tapped in the "Nearby Meters" list, instead of re-running the generic scan-and-match-by-name. */
-  const connectToFoundDevice = useCallback(
-    async (deviceId: string) => {
-      stopScanRef.current?.();
-      stopScanRef.current = null;
-      setScanning(false);
-
-      setStatus('connecting');
-      try {
-        const conn = getConnection();
-        await conn.resetStaleConnection();
-        await conn.connectToDevice(deviceId);
-        await initializeMeter(conn);
-        setDeviceName(conn.getDeviceName());
-        setStatus('connected');
-      } catch (e: any) {
-        appendLog(`Connect failed: ${e.message}`);
-        setStatus('disconnected');
-      }
-    },
-    [appendLog, getConnection]
-  );
-
   // Manual escape hatch for the same stale-connection problem connect()
   // already guards against automatically -- for the case where it still
   // doesn't help on its own (e.g. this is the very first launch after
@@ -318,12 +352,14 @@ export default function HomeScreen({ navigation }: any) {
       // back to, so a reading you never got around to renaming still
       // uploads under something identifiable rather than a bare
       // timestamp -- renaming (from the History tab) is still how you give
-      // it a more meaningful name.
+      // it a more meaningful name. History is now its own top-level screen
+      // (HistoryScreen.tsx) with its own copy of the saved list, loaded
+      // fresh from storage on focus -- so this just persists the reading;
+      // it doesn't need to update any local list here.
       try {
         const creds = await loadHcriCredentials();
         const label = defaultLabel(creds?.username ?? null, r.deviceName);
-        const saved = await addReading(r, label);
-        setHistory((prev) => [saved, ...prev]);
+        await addReading(r, label);
       } catch (e: any) {
         // Don't let a storage hiccup here look like the measurement itself
         // failed -- the reading is still shown/usable, it just didn't get
@@ -392,16 +428,18 @@ export default function HomeScreen({ navigation }: any) {
   // person just chose to do, the moment they switch back to the app.
   const autoDisconnectedRef = useRef(false);
 
-  // Set while a share sheet (or anything else that briefly hands control to
-  // the OS) is up -- see withBackgroundDisconnectSuppressed() below. Sharing
-  // a CSV (shareCsv.ts's RNShare.open) puts up the native share sheet,
-  // which iOS reports as the app going 'inactive' -- the exact same
+  // Whether a share sheet (or anything else that briefly hands control to
+  // the OS) is up right now -- see ../ble/backgroundDisconnectGuard.ts.
+  // Sharing a CSV (shareCsv.ts's RNShare.open) puts up the native share
+  // sheet, which iOS reports as the app going 'inactive' -- the exact same
   // AppState transition as the app switcher or an incoming call, which is
   // genuinely supposed to disconnect per the comment above. Without this,
   // every single CSV share disconnected the meter, which isn't "the person
   // switched away from the app" at all -- they're still looking at it,
-  // just with a system sheet over it.
-  const suppressAutoDisconnectRef = useRef(false);
+  // just with a system sheet over it. Lives in a shared module, not a ref
+  // here, because History (its own top-level tab now, not a panel inside
+  // Home) can also put up a share sheet and needs to be able to set this
+  // same flag.
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
@@ -411,7 +449,12 @@ export default function HomeScreen({ navigation }: any) {
         if (autoDisconnectedRef.current) {
           autoDisconnectedRef.current = false;
           appendLog('App back in foreground -- reconnecting to meter...');
-          connect();
+          // preferLastDeviceOnMultiple: true -- this is a reconnect, not a
+          // fresh choice, so if more than one meter happens to be in range
+          // right now, silently go back to the one that was connected
+          // before backgrounding rather than popping up a picker the
+          // person didn't ask for (see connect()'s own comment on this).
+          connect({ preferLastDeviceOnMultiple: true });
         }
         return;
       }
@@ -420,7 +463,7 @@ export default function HomeScreen({ navigation }: any) {
       // for things like the app switcher or an incoming call, which should
       // disconnect same as a real background) -- EXCEPT when it's our own
       // share sheet doing that, which isn't the person leaving the app.
-      if (suppressAutoDisconnectRef.current) {
+      if (isBackgroundDisconnectSuppressed()) {
         appendLog(`App moved to ${nextAppState} during a share -- not disconnecting.`);
         return;
       }
@@ -432,20 +475,6 @@ export default function HomeScreen({ navigation }: any) {
     });
     return () => subscription.remove();
   }, [appendLog, connect, disconnect]);
-
-  /** Wraps an async action (sharing a CSV, so far) that's expected to
-   * briefly take the app out of the foreground on its own -- presenting a
-   * native share sheet, say -- so the AppState listener above doesn't treat
-   * that as the person switching away and disconnect the meter out from
-   * under them. */
-  const withBackgroundDisconnectSuppressed = useCallback(async (action: () => Promise<void>) => {
-    suppressAutoDisconnectRef.current = true;
-    try {
-      await action();
-    } finally {
-      suppressAutoDisconnectRef.current = false;
-    }
-  }, []);
 
   const upload = useCallback(async () => {
     if (!result) return;
@@ -469,7 +498,7 @@ export default function HomeScreen({ navigation }: any) {
     // The raw server response (res.message -- hCRI.io's API returns JSON)
     // still goes to Logs for anyone actually debugging an upload; the
     // popup itself just says what happened, same plain-language style as
-    // the bulk-upload summary in uploadManyFromHistory below.
+    // HistoryScreen's own bulk-upload summary.
     appendLog(res.message);
     Alert.alert(
       res.success ? 'Uploaded' : 'Upload failed',
@@ -478,131 +507,11 @@ export default function HomeScreen({ navigation }: any) {
     setStatus('connected');
   }, [result, navigation, appendLog, uploadTitle]);
 
-  /** Renames a History entry by itself -- no upload involved (e.g. committed on blur in HistoryTab). */
-  const renameFromHistory = useCallback(async (id: string, label: string) => {
-    await renameReading(id, label);
-    setHistory((prev) => prev.map((r) => (r.id === id ? { ...r, label } : r)));
-  }, []);
-
-  const deleteFromHistory = useCallback(async (id: string) => {
-    await deleteReading(id);
-    setHistory((prev) => prev.filter((r) => r.id !== id));
-  }, []);
-
-  /** Bulk/"delete all" version of deleteFromHistory, for HistoryTab's Select mode -- one storage write for the whole batch (see deleteManyReadings) instead of one deleteReading call per id. */
-  const deleteManyFromHistory = useCallback(async (ids: string[]) => {
-    await deleteManyReadings(ids);
-    const idSet = new Set(ids);
-    setHistory((prev) => prev.filter((r) => !idSet.has(r.id)));
-  }, []);
-
-  /**
-   * Uploads a past reading from History under whatever label is passed in
-   * (which may be freshly edited, not yet committed to storage). The label
-   * is persisted first -- "if you rename them to upload, it should save
-   * them with that name as well" -- so it sticks around in History even if
-   * the upload itself then fails, rather than the rename only ever having
-   * existed transiently as part of one upload request.
-   */
-  const uploadFromHistory = useCallback(
-    async (id: string, label: string) => {
-      const entry = history.find((r) => r.id === id);
-      if (!entry) return;
-
-      const creds = await loadHcriCredentials();
-      if (!creds) {
-        Alert.alert('No hCRI.io account set up', 'Add your username and API token first.', [
-          { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') },
-          { text: 'Cancel', style: 'cancel' },
-        ]);
-        return;
-      }
-
-      if (label !== entry.label) {
-        await renameFromHistory(id, label);
-      }
-
-      setHistoryUploadingId(id);
-      try {
-        const csv = buildCsv(entry.result);
-        const res = await uploadToHcri(csv, label, creds.token, appendLog);
-        appendLog(res.message);
-        Alert.alert(
-          res.success ? 'Uploaded' : 'Upload failed',
-          res.success ? `Uploaded "${label}".` : `Could not upload "${label}". Check Logs for details.`
-        );
-      } finally {
-        setHistoryUploadingId(null);
-      }
-    },
-    [history, navigation, appendLog, renameFromHistory]
-  );
-
-  /**
-   * Uploads several History entries in one go (HistoryTab's Select mode),
-   * each under its own already-saved label -- unlike uploadFromHistory,
-   * this never renames anything itself, so if a bulk selection still has
-   * generic "Reading <date/time>" labels on it, that's what goes up. Fix
-   * the name first (same inline field, before switching into Select mode)
-   * if that's not what you want.
-   *
-   * Sequential on purpose, not Promise.all -- keeps historyUploadingId
-   * meaningful as "which one is going up right now" (so HistoryTab can show
-   * a single moving spinner instead of N at once), and avoids firing a
-   * burst of simultaneous requests at hCRI.io for what could be a large
-   * selection. Credentials are checked once up front rather than once per
-   * item, so a missing account fails fast instead of after already
-   * uploading a few.
-   */
-  const uploadManyFromHistory = useCallback(
-    async (ids: string[]) => {
-      if (ids.length === 0) return;
-
-      const creds = await loadHcriCredentials();
-      if (!creds) {
-        Alert.alert('No hCRI.io account set up', 'Add your username and API token first.', [
-          { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') },
-          { text: 'Cancel', style: 'cancel' },
-        ]);
-        return;
-      }
-
-      setHistoryBulkUploading(true);
-      let okCount = 0;
-      let failCount = 0;
-      try {
-        for (const id of ids) {
-          const entry = history.find((r) => r.id === id);
-          if (!entry) continue;
-          setHistoryUploadingId(id);
-          try {
-            const csv = buildCsv(entry.result);
-            const res = await uploadToHcri(csv, entry.label, creds.token, appendLog);
-            appendLog(res.message);
-            if (res.success) {
-              okCount += 1;
-            } else {
-              failCount += 1;
-            }
-          } catch (e: any) {
-            failCount += 1;
-            appendLog(`Upload failed for "${entry.label}": ${e.message}`);
-          }
-        }
-      } finally {
-        setHistoryUploadingId(null);
-        setHistoryBulkUploading(false);
-      }
-
-      Alert.alert(
-        failCount === 0 ? 'Uploaded' : okCount === 0 ? 'Upload failed' : 'Upload finished',
-        failCount === 0
-          ? `Uploaded ${okCount} reading${okCount === 1 ? '' : 's'}.`
-          : `${okCount} succeeded, ${failCount} failed. Check Logs for details.`
-      );
-    },
-    [history, navigation, appendLog]
-  );
+  // History's own rename/delete/upload/share handlers now live in
+  // HistoryScreen.tsx -- History is its own top-level tab, not a panel
+  // inside Home, so it owns its own copy of the saved-reading list (loaded
+  // fresh from storage on focus) rather than reaching back into this
+  // screen's state.
 
   const shareCurrentCsv = useCallback(() => {
     if (!result) return;
@@ -610,67 +519,92 @@ export default function HomeScreen({ navigation }: any) {
     // "upload" always agree on what this reading is called.
     const label = uploadTitle.trim() || defaultLabel(cachedUsername, result.deviceName);
     withBackgroundDisconnectSuppressed(() => shareSingleReadingCsv(result, label));
-  }, [result, uploadTitle, cachedUsername, withBackgroundDisconnectSuppressed]);
-
-  const shareOneFromHistory = useCallback((reading: SavedReading) => {
-    withBackgroundDisconnectSuppressed(() => shareSingleReadingCsv(reading.result, reading.label));
-  }, [withBackgroundDisconnectSuppressed]);
-
-  const shareAllFromHistory = useCallback(() => {
-    withBackgroundDisconnectSuppressed(() => shareAllReadingsCsv(history));
-  }, [history, withBackgroundDisconnectSuppressed]);
+  }, [result, uploadTitle, cachedUsername]);
 
   const shareLog = useCallback(() => {
     withBackgroundDisconnectSuppressed(() => shareDebugLog(log));
-  }, [log, withBackgroundDisconnectSuppressed]);
+  }, [log]);
 
   const isBusy = status === 'connecting' || status === 'measuring' || status === 'uploading';
 
-  return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.headerRow}>
-          <View>
-            <Text style={styles.title}>hCRI Companion</Text>
-            {deviceName && <Text style={styles.deviceSubtitle}>{deviceName}</Text>}
-          </View>
-          <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
-            <Text style={styles.settingsGear}>⚙︎</Text>
-          </TouchableOpacity>
-        </View>
+  const styles = StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    // paddingBottom is extra-generous (not just enough to clear the home
+    // indicator/nav bar) because this ScrollView is shared by every tab --
+    // Data's own content (collapsible sections expanded) can run
+    // considerably taller than Main's, and this is the one padding value
+    // that has to leave room for that without the bottom-most content ever
+    // crowding the edge of the screen.
+    //
+    // paddingTop isn't needed any more at all -- it used to be the gap
+    // under the "hCRI Companion" title/gear header, then (once that was
+    // dropped) the gap under the safe-area inset; now tabBarWrap below
+    // supplies its own bottom padding as the gap between the docked tab
+    // bar and the first bit of scrolling content, so this would just be a
+    // second gap stacked on top of that one.
+    content: { paddingHorizontal: 16, paddingBottom: 56 },
+    // The docked header sitting above the ScrollView -- NOT inside its
+    // contentContainerStyle any more (see the TabBar render below): a
+    // sibling View here can't scroll away with the rest of the content,
+    // which is the whole point of docking it (made it possible to jump to
+    // Logs/Data without scrolling back to the top of a long tab first).
+    // Carries the horizontal padding content's contentContainerStyle also
+    // has, since this View is now a sibling of the ScrollView rather than
+    // living inside its padded content area.
+    tabBarWrap: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
+  });
 
+  return (
+    // 'top' dropped from edges when a dev build's orange banner (see
+    // App.tsx/DevBuildBanner.tsx) is showing -- it sits directly above
+    // this screen and already has its OWN SafeAreaView reserving the
+    // status-bar/notch inset for itself. react-native-safe-area-context's
+    // insets are a fixed measurement of the device's physical safe area,
+    // not a shrinking budget that accounts for how much of it a sibling
+    // already used -- so with both this screen AND the banner each
+    // requesting the 'top' edge, the inset got reserved twice, stacking
+    // into a large dead gap above the tab bar that's only there in dev
+    // builds. Production builds have no banner, so 'top' is still needed
+    // there to clear the status bar/notch directly.
+    <SafeAreaView style={styles.container} edges={IS_DEV_BUILD ? ['left', 'right'] : ['top', 'left', 'right']}>
+      {/* Docked -- a sibling of the ScrollView below, not inside it, so it
+          stays on screen no matter how far down a long Data tab you've
+          scrolled. No title/gear header any more -- "hCRI Companion" was
+          just branding, not information, and Settings is now its own
+          bottom tab rather than a button here (see App.tsx). */}
+      <View style={styles.tabBarWrap}>
         <TabBar
           tabs={[
             { key: 'main', label: 'Main' },
-            { key: 'spectrum', label: 'Spectrum' },
             { key: 'data', label: 'Data' },
-            { key: 'history', label: 'History' },
-            { key: 'about', label: 'About' },
             { key: 'logs', label: 'Logs' },
           ]}
           active={activeTab}
           onChange={setActiveTab}
         />
-
+      </View>
+      <ScrollView contentContainerStyle={styles.content}>
         {activeTab === 'main' && (
           <MainTab
             status={status}
             isBusy={isBusy}
             result={result}
             analysis={analysis}
-            connect={connect}
+            connect={() => connect()}
             measure={measure}
             disconnect={disconnect}
             resetConnection={resetConnection}
-            scanning={scanning}
-            foundDevices={foundDevices}
-            toggleScan={toggleScan}
-            connectToFoundDevice={connectToFoundDevice}
+            devicePickerDevices={multiMeterCandidates}
+            devicePickerVisible={devicePickerVisible}
+            onOpenDevicePicker={openDevicePicker}
+            onSelectDevice={selectDeviceFromPicker}
+            onDismissDevicePicker={dismissDevicePicker}
             onUpload={upload}
             uploading={status === 'uploading'}
+            statIds={statIds}
+            connectedDeviceName={deviceName}
           />
         )}
-        {activeTab === 'spectrum' && <SpectrumTab result={result} analysis={analysis} />}
         {activeTab === 'data' && (
           <DataTab
             result={result}
@@ -683,39 +617,8 @@ export default function HomeScreen({ navigation }: any) {
             cachedUsername={cachedUsername}
           />
         )}
-        {activeTab === 'history' && (
-          <HistoryTab
-            history={history}
-            loading={historyLoading}
-            onRename={renameFromHistory}
-            onUploadWithLabel={uploadFromHistory}
-            onUploadMany={uploadManyFromHistory}
-            onDelete={deleteFromHistory}
-            onDeleteMany={deleteManyFromHistory}
-            onShareOne={shareOneFromHistory}
-            onShareAll={shareAllFromHistory}
-            uploadingId={historyUploadingId}
-            bulkUploading={historyBulkUploading}
-          />
-        )}
-        {activeTab === 'about' && <AboutTab />}
         {activeTab === 'logs' && <LogsTab log={log} onShare={shareLog} onClear={clearLog} />}
       </ScrollView>
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: 16, paddingBottom: 40 },
-
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  title: { fontSize: 22, fontWeight: '700', color: colors.text },
-  deviceSubtitle: { fontSize: 12, color: colors.muted, marginTop: 1 },
-  settingsGear: { fontSize: 22, color: colors.muted },
-});

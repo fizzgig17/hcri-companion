@@ -87,9 +87,13 @@ interface Props {
   height?: number;
 }
 
-// Extra room on the right for the plain stacked CCT-label column, and a
-// little extra on top for the "CIE 1931" title.
-const PADDING = { top: 26, right: 34, bottom: 24, left: 32 };
+// Extra room on the right for the plain stacked CCT-label column, and
+// enough on top to hold the x/y annotation (see below) ABOVE the plot box
+// entirely, rather than inset into its top-left corner -- that's what
+// "higher" actually needed: sitting inset a few px into the box still read
+// as low/crowded against the horseshoe fill, no matter how far up within
+// the box it went.
+const PADDING = { top: 34, right: 34, bottom: 24, left: 32 };
 
 const X_DOMAIN: [number, number] = [0.0, 0.8];
 const Y_DOMAIN: [number, number] = [0.0, 0.9];
@@ -335,6 +339,24 @@ export default function ChromaticityChart({ x, y, cct, height = 300 }: Props) {
               </SvgText>
             );
           })}
+
+          {/* The reading's own x/y, pinned above the top-left corner of the
+              plot box, in the chart's own top margin -- not inset into the
+              box itself (that read as "too low", crowded against the
+              horseshoe fill, no matter how far up within the box it went).
+              Up here there's nothing underneath but blank white canvas, so
+              no backing card is needed to keep it legible the way the old
+              in-box placement did. */}
+          {Number.isFinite(x) && Number.isFinite(y) && (
+            <>
+              <SvgText x={PADDING.left} y={12} fontSize={10} fill="#333" fontFamily="monospace">
+                x {x.toFixed(4)}
+              </SvgText>
+              <SvgText x={PADDING.left} y={24} fontSize={10} fill="#333" fontFamily="monospace">
+                y {y.toFixed(4)}
+              </SvgText>
+            </>
+          )}
         </Svg>
       )}
     </View>

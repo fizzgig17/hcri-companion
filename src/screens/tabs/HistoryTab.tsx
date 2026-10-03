@@ -23,7 +23,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import PrimaryButton from '../../components/PrimaryButton';
-import { colors } from '../../theme';
+import CollapsibleSection from '../../components/CollapsibleSection';
+import { useTheme } from '../../contexts/ThemeContext';
 import { SavedReading } from '../../storage/readingHistory';
 import { analyzeSpectrum } from '../../utils/spectralAnalysis';
 
@@ -41,6 +42,8 @@ interface Props {
   onDeleteMany: (ids: string[]) => void | Promise<void>;
   onShareOne: (reading: SavedReading) => void;
   onShareAll: () => void;
+  /** Opens ReadingDetailScreen for one saved reading -- the same measurement grid and Spectrum/Chrom/R-Values pages the Main/Spectrum tabs show for the current reading, just fed this past one instead (see ReadingDetailScreen.tsx). */
+  onOpen: (reading: SavedReading) => void;
   /** Which reading (if any) is currently mid-upload, so only ITS button shows a spinner/disables -- the others stay usable. Also used to show progress during a bulk upload, since that walks this same id through the list one at a time. */
   uploadingId: string | null;
   /** True while a bulk upload (onUploadMany) is in progress -- distinct from uploadingId being set for a single-row upload, so Select mode can be locked while it runs without also disabling the single-row buttons on every other screen. */
@@ -52,6 +55,25 @@ function formatSavedAt(ms: number): string {
   return d.toLocaleString();
 }
 
+/** Midnight (local time) of the day `ms` falls on -- used as the grouping
+ * key so two readings taken on the same calendar day always land in the
+ * same group regardless of what time of day each one happened. */
+function startOfDay(ms: number): number {
+  const d = new Date(ms);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+/** "Yesterday", or the weekday+date for anything older -- `dayStart` is
+ * already a startOfDay() value, same as `todayStart`, so this is just
+ * counting whole days between them rather than reasoning about times. */
+function dateGroupLabel(dayStart: number, todayStart: number): string {
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+  const diffDays = Math.round((todayStart - dayStart) / ONE_DAY_MS);
+  if (diffDays === 1) return 'Yesterday';
+  return new Date(dayStart).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
 function HistoryRow({
   reading,
   uploading,
@@ -59,6 +81,7 @@ function HistoryRow({
   onUploadWithLabel,
   onDelete,
   onShareOne,
+  onOpen,
   selectMode,
   selected,
   onToggleSelected,
@@ -69,10 +92,12 @@ function HistoryRow({
   onUploadWithLabel: (id: string, label: string) => void;
   onDelete: (id: string) => void;
   onShareOne: (reading: SavedReading) => void;
+  onOpen: (reading: SavedReading) => void;
   selectMode: boolean;
   selected: boolean;
   onToggleSelected: (id: string) => void;
 }) {
+  const { colors } = useTheme();
   const [text, setText] = useState(reading.label);
 
   // Spectrum-derived CCT/Ra for the row summary below, same values
@@ -108,14 +133,95 @@ function HistoryRow({
     }
   };
 
+  const styles = StyleSheet.create({
+    row: {
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      padding: 10,
+      marginBottom: 8,
+    },
+    rowSelectable: { paddingVertical: 10 },
+    rowSelected: { borderColor: colors.accent },
+    selectRow: { flexDirection: 'row', alignItems: 'flex-start' },
+    checkboxCol: { width: 30, alignItems: 'center', justifyContent: 'center', paddingTop: 2 },
+    checkbox: {
+      width: 20,
+      height: 20,
+      borderRadius: 5,
+      borderWidth: 1.5,
+      borderColor: colors.cardBorder,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    checkboxChecked: { backgroundColor: colors.accent, borderColor: colors.accent },
+    checkboxMark: { color: colors.text, fontSize: 13, fontWeight: '700' },
+    selectRowBody: { flex: 1 },
+    rowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+    rowHeaderLeft: { flexDirection: 'row', alignItems: 'baseline', flexShrink: 1, flexWrap: 'wrap' },
+    rowMeta: { color: colors.muted, fontSize: 11, fontFamily: 'monospace' },
+    rowSummaryInline: { color: colors.text, fontSize: 11, fontWeight: '600', marginLeft: 8 },
+    rowHeaderButtons: { flexDirection: 'row', alignItems: 'center' },
+    viewText: { color: colors.info, fontSize: 12, fontWeight: '600', marginRight: 14 },
+    deleteText: { color: colors.danger, fontSize: 12 },
+
+    labelInput: {
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      color: colors.text,
+      fontSize: 13,
+      minHeight: 32,
+      marginBottom: 6,
+    },
+
+    rowActions: { flexDirection: 'row', marginHorizontal: -4 },
+    actionButton: {
+      flex: 1,
+      marginHorizontal: 4,
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 8,
+      paddingVertical: 8,
+      alignItems: 'center',
+    },
+    actionButtonDisabled: { opacity: 0.6 },
+    actionButtonText: { color: colors.text, fontSize: 13, fontWeight: '600' },
+  });
+
   const rowInner = (
     <>
       <View style={styles.rowHeader}>
-        <Text style={styles.rowMeta}>{formatSavedAt(reading.savedAt)}</Text>
+        <View style={styles.rowHeaderLeft}>
+          <Text style={styles.rowMeta}>{formatSavedAt(reading.savedAt)}</Text>
+          {/* Spectrum-derived CCT/Ra (see the `analysis` memo above) --
+              matches what Main/Spectrum/Data show for this same reading,
+              and doesn't depend on the device's own metrics-block offsets
+              being right for whatever model/firmware took it. Right next
+              to the date/time rather than its own line below the label
+              field -- that extra line was most of why these rows felt so
+              tall. Lux is the one number on this app that's still
+              genuinely device-reported elsewhere (no spectral equivalent
+              exists to compute it from), which is why only CCT/Ra show up
+              in this summary. */}
+          <Text style={styles.rowSummaryInline}>
+            {analysis.cct.toFixed(0)}K · Ra {analysis.ra.toFixed(1)}
+          </Text>
+        </View>
         {!selectMode && (
-          <TouchableOpacity onPress={() => onDelete(reading.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={styles.deleteText}>Delete</Text>
-          </TouchableOpacity>
+          <View style={styles.rowHeaderButtons}>
+            <TouchableOpacity onPress={() => onOpen(reading)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.viewText}>View</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => onDelete(reading.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.deleteText}>Delete</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
 
@@ -134,17 +240,6 @@ function HistoryRow({
         multiline
         textAlignVertical="top"
       />
-
-      {/* Spectrum-derived CCT/Ra (see the `analysis` memo above) -- matches
-          what Main/Spectrum/Data show for this same reading, and doesn't
-          depend on the device's own metrics-block offsets being right for
-          whatever model/firmware took it. Lux is the one number on this
-          app that's still genuinely device-reported elsewhere (no spectral
-          equivalent exists to compute it from), which is why only CCT/Ra
-          show up in this summary. */}
-      <Text style={styles.rowSummary}>
-        {analysis.cct.toFixed(0)}K · Ra {analysis.ra.toFixed(1)}
-      </Text>
 
       {!selectMode && (
         <View style={styles.rowActions}>
@@ -208,9 +303,11 @@ export default function HistoryTab({
   onDeleteMany,
   onShareOne,
   onShareAll,
+  onOpen,
   uploadingId,
   bulkUploading,
 }: Props) {
+  const { colors } = useTheme();
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // Local only -- onDeleteMany itself awaits nothing (HomeScreen's version
@@ -240,6 +337,43 @@ export default function HistoryTab({
   };
 
   const selectAll = () => setSelected(new Set(history.map((r) => r.id)));
+
+  // Split into today's readings (shown flat, same as always -- these are
+  // the ones still actively being worked with this session) and every
+  // other day's readings, bucketed into a collapsed-by-default section
+  // per calendar day. `history` already arrives most-recent-first, so
+  // walking it in order and only ever appending to the LAST day-bucket
+  // seen keeps each bucket's own readings in that same order, and the
+  // buckets themselves come out newest-first too (today's readings aside,
+  // that starts with Yesterday) with no separate sort needed.
+  const { todayReadings, pastGroups } = useMemo(() => {
+    const todayStart = startOfDay(Date.now());
+    const today: SavedReading[] = [];
+    const order: number[] = [];
+    const byDay = new Map<number, SavedReading[]>();
+    for (const r of history) {
+      const dayStart = startOfDay(r.savedAt);
+      if (dayStart === todayStart) {
+        today.push(r);
+        continue;
+      }
+      let bucket = byDay.get(dayStart);
+      if (!bucket) {
+        bucket = [];
+        byDay.set(dayStart, bucket);
+        order.push(dayStart);
+      }
+      bucket.push(r);
+    }
+    return {
+      todayReadings: today,
+      pastGroups: order.map((dayStart) => ({
+        key: String(dayStart),
+        label: dateGroupLabel(dayStart, todayStart),
+        readings: byDay.get(dayStart)!,
+      })),
+    };
+  }, [history]);
 
   const handleUploadSelected = () => {
     if (selected.size === 0) return;
@@ -275,6 +409,47 @@ export default function HistoryTab({
       ]
     );
   };
+
+  const styles = StyleSheet.create({
+    empty: { paddingVertical: 40, alignItems: 'center' },
+    emptyText: { color: colors.muted, fontSize: 13, textAlign: 'center', paddingHorizontal: 20 },
+
+    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 8 },
+    headerTitle: { color: colors.muted, fontSize: 12, marginBottom: 4, flexShrink: 1 },
+    headerButtons: { flexDirection: 'row', alignItems: 'center' },
+    selectText: { color: colors.accent, fontSize: 13, fontWeight: '600', marginRight: 16, marginBottom: 4 },
+    cancelText: { color: colors.muted, fontSize: 13, fontWeight: '600', marginBottom: 4 },
+
+    selectBar: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      marginBottom: 10,
+    },
+    selectAllText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
+    selectBarButtons: { flexDirection: 'row' },
+    // Overrides PrimaryButton's default marginTop:8 (meant for a full-width
+    // button stacked below other content) -- here it sits inline next to
+    // "Select All" text, so that top margin would push it visibly lower than
+    // its sibling instead of centering with it.
+    selectBarButton: { marginTop: 0, marginLeft: 8 },
+
+    dateGroup: { marginBottom: 2 },
+    todayLabel: {
+      color: colors.mutedFaint,
+      fontSize: 10.5,
+      fontWeight: '700',
+      letterSpacing: 1,
+      textTransform: 'uppercase',
+      marginBottom: 6,
+    },
+  });
 
   if (loading) {
     return (
@@ -341,7 +516,14 @@ export default function HistoryTab({
         </View>
       )}
 
-      {history.map((r) => (
+      {/* Today's readings stay flat, right at the top, same as this list
+          has always shown them -- these are the ones still actively being
+          worked with this session, not something to tuck away. Only
+          labeled "Today" when there's also at least one collapsed day
+          below it to distinguish from; with nothing but today's readings,
+          a label would just be noise. */}
+      {pastGroups.length > 0 && todayReadings.length > 0 && <Text style={styles.todayLabel}>Today</Text>}
+      {todayReadings.map((r) => (
         <HistoryRow
           key={r.id}
           reading={r}
@@ -350,98 +532,38 @@ export default function HistoryTab({
           onUploadWithLabel={onUploadWithLabel}
           onDelete={onDelete}
           onShareOne={onShareOne}
+          onOpen={onOpen}
           selectMode={selectMode}
           selected={selected.has(r.id)}
           onToggleSelected={toggleSelected}
         />
       ))}
+
+      {/* Every other day's readings, one collapsed-by-default section per
+          calendar day -- this is what actually keeps a history of any
+          real size from turning into a wall of rows; only the readings
+          from a day you actually tap open ever render expanded. */}
+      {pastGroups.map((group) => (
+        <CollapsibleSection key={group.key} title={group.label} count={group.readings.length}>
+          <View style={styles.dateGroup}>
+            {group.readings.map((r) => (
+              <HistoryRow
+                key={r.id}
+                reading={r}
+                uploading={uploadingId === r.id}
+                onRename={onRename}
+                onUploadWithLabel={onUploadWithLabel}
+                onDelete={onDelete}
+                onShareOne={onShareOne}
+                onOpen={onOpen}
+                selectMode={selectMode}
+                selected={selected.has(r.id)}
+                onToggleSelected={toggleSelected}
+              />
+            ))}
+          </View>
+        </CollapsibleSection>
+      ))}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  empty: { paddingVertical: 40, alignItems: 'center' },
-  emptyText: { color: colors.muted, fontSize: 13, textAlign: 'center', paddingHorizontal: 20 },
-
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 8 },
-  headerTitle: { color: colors.muted, fontSize: 12, marginBottom: 4, flexShrink: 1 },
-  headerButtons: { flexDirection: 'row', alignItems: 'center' },
-  selectText: { color: colors.accent, fontSize: 13, fontWeight: '600', marginRight: 16, marginBottom: 4 },
-  cancelText: { color: colors.muted, fontSize: 13, fontWeight: '600', marginBottom: 4 },
-
-  selectBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 10,
-  },
-  selectAllText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
-  selectBarButtons: { flexDirection: 'row' },
-  // Overrides PrimaryButton's default marginTop:8 (meant for a full-width
-  // button stacked below other content) -- here it sits inline next to
-  // "Select All" text, so that top margin would push it visibly lower than
-  // its sibling instead of centering with it.
-  selectBarButton: { marginTop: 0, marginLeft: 8 },
-
-  row: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    padding: 12,
-    marginBottom: 10,
-  },
-  rowSelectable: { paddingVertical: 12 },
-  rowSelected: { borderColor: colors.accent },
-  selectRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  checkboxCol: { width: 30, alignItems: 'center', justifyContent: 'center', paddingTop: 2 },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 5,
-    borderWidth: 1.5,
-    borderColor: colors.cardBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxChecked: { backgroundColor: colors.accent, borderColor: colors.accent },
-  checkboxMark: { color: colors.text, fontSize: 13, fontWeight: '700' },
-  selectRowBody: { flex: 1 },
-  rowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  rowMeta: { color: colors.muted, fontSize: 11, fontFamily: 'monospace' },
-  deleteText: { color: colors.danger, fontSize: 12 },
-
-  labelInput: {
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    color: colors.text,
-    fontSize: 13,
-    minHeight: 38,
-    marginBottom: 6,
-  },
-  rowSummary: { color: colors.text, fontSize: 12, marginBottom: 10 },
-
-  rowActions: { flexDirection: 'row', marginHorizontal: -4 },
-  actionButton: {
-    flex: 1,
-    marginHorizontal: 4,
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  actionButtonDisabled: { opacity: 0.6 },
-  actionButtonText: { color: colors.text, fontSize: 13, fontWeight: '600' },
-});

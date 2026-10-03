@@ -9,10 +9,36 @@
 
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors } from '../../theme';
+import { useTheme } from '../../contexts/ThemeContext';
 import { SUPPORTED_DEVICES } from '../../ble/supportedDevices';
 
 export default function AboutTab() {
+  const { colors } = useTheme();
+
+  const styles = StyleSheet.create({
+    card: {
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      padding: 14,
+      marginBottom: 12,
+    },
+    heading: { color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: 4 },
+    subheading: { color: colors.muted, fontSize: 12, lineHeight: 17 },
+
+    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    model: { color: colors.text, fontSize: 15, fontWeight: '700' },
+    matchedBy: { color: colors.muted, fontSize: 11, fontFamily: 'monospace', marginTop: 3, marginBottom: 6 },
+    verifiedDate: { color: colors.mutedFaint, fontSize: 11, marginBottom: 6 },
+    note: { color: colors.muted, fontSize: 12, lineHeight: 17, marginTop: 2 },
+
+    badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+    badgeVerified: { backgroundColor: 'rgba(47,168,122,0.18)' },
+    badgeUnverified: { backgroundColor: 'rgba(209,85,74,0.18)' },
+    badgeText: { fontSize: 10, fontWeight: '700', color: colors.text },
+  });
+
   return (
     <View>
       <View style={styles.card}>
@@ -43,27 +69,3 @@ export default function AboutTab() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    padding: 14,
-    marginBottom: 12,
-  },
-  heading: { color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: 4 },
-  subheading: { color: colors.muted, fontSize: 12, lineHeight: 17 },
-
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  model: { color: colors.text, fontSize: 15, fontWeight: '700' },
-  matchedBy: { color: colors.muted, fontSize: 11, fontFamily: 'monospace', marginTop: 3, marginBottom: 6 },
-  verifiedDate: { color: colors.mutedFaint, fontSize: 11, marginBottom: 6 },
-  note: { color: colors.muted, fontSize: 12, lineHeight: 17, marginTop: 2 },
-
-  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
-  badgeVerified: { backgroundColor: 'rgba(47,168,122,0.18)' },
-  badgeUnverified: { backgroundColor: 'rgba(209,85,74,0.18)' },
-  badgeText: { fontSize: 10, fontWeight: '700', color: colors.text },
-});

@@ -6,7 +6,7 @@
 
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { colors } from '../theme';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface Props {
   title: string;
@@ -17,7 +17,35 @@ interface Props {
 }
 
 export default function CollapsibleSection({ title, count, defaultExpanded = false, children }: Props) {
+  const { colors } = useTheme();
   const [expanded, setExpanded] = useState(defaultExpanded);
+
+  const styles = StyleSheet.create({
+    card: {
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      marginTop: 12,
+      overflow: 'hidden',
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+    },
+    title: { color: colors.text, fontSize: 14, fontWeight: '600' },
+    count: { color: colors.muted, fontWeight: '400' },
+    chevron: { color: colors.muted, fontSize: 14 },
+    body: {
+      paddingHorizontal: 14,
+      paddingBottom: 12,
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+    },
+  });
 
   return (
     <View style={styles.card}>
@@ -32,30 +60,3 @@ export default function CollapsibleSection({ title, count, defaultExpanded = fal
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    marginTop: 12,
-    overflow: 'hidden',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-  },
-  title: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  count: { color: colors.muted, fontWeight: '400' },
-  chevron: { color: colors.muted, fontSize: 14 },
-  body: {
-    paddingHorizontal: 14,
-    paddingBottom: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.cardBorder,
-  },
-});

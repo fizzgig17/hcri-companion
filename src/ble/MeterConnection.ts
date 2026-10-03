@@ -104,7 +104,17 @@ async function requestBlePermissions(): Promise<boolean> {
   return granted === PermissionsAndroid.RESULTS.GRANTED;
 }
 
-export type LogFn = (msg: string) => void;
+/**
+ * `verbose` marks a log line that's only worth keeping when the person has
+ * turned on Verbose Logging in Settings (default off) -- the raw per-write/
+ * per-notification BLE hex dumps here, and takeMeasurement.ts's raw-result-
+ * body dump, which are the two categories almost nobody troubleshooting a
+ * failed connect/measurement actually needs. Omitted (or false) means
+ * "always show" -- every connect/measure milestone, retry, and error stays
+ * visible in the standard log. See HomeScreen.tsx's appendLog for where
+ * this flag is actually applied.
+ */
+export type LogFn = (msg: string, verbose?: boolean) => void;
 
 /** A single reassembled notification, already stripped of the 4-byte echo+length header when it's a length-prefixed (8C 13) response. Short replies (8C 03 / 8C 05 / 8C 00) are passed through whole, unstripped -- there's no header to strip. */
 export interface MeterMessage {
@@ -160,8 +170,23 @@ export class MeterConnection {
     };
   }
 
-  /** Scans for a device whose name matches any known meter model prefix and connects to it. Resolves with the connected Device. */
-  async scanAndConnect(timeoutMs = 15000): Promise<Device> {
+  /**
+   * Scans for `windowMs` and resolves with every device whose name matches
+   * a known meter model prefix, deduped by id (RSSI updated to whatever was
+   * last heard), sorted strongest-signal first. Always waits out the full
+   * window rather than resolving on the first match -- the caller needs an
+   * accurate count (one meter -> connect straight to it; more than one ->
+   * let the person pick, see HomeScreen.tsx's connect()/the device-picker
+   * overlay) and the only way to know "is there a second one out there" is
+   * to keep listening for the whole window rather than stopping at the
+   * first advertisement seen.
+   *
+   * Replaces the old scanAndConnect(), which connected to whichever
+   * matching device it heard first -- fine when there's only ever one
+   * meter around, but it had no way to notice (or offer a choice) when
+   * there were several.
+   */
+  async scanForKnownMeters(windowMs = 3000): Promise<Device[]> {
     const authorized = await requestBlePermissions();
     if (!authorized) {
       throw new Error(
@@ -171,39 +196,40 @@ export class MeterConnection {
 
     this.log(`Scanning for known meter models (${METER_NAME_PREFIXES.join(', ')})...`);
 
-    const found = await new Promise<Device>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.manager.stopDeviceScan();
-        reject(new Error('Scan timed out -- meter not found'));
-      }, timeoutMs);
-
+    const found = new Map<string, Device>();
+    await new Promise<void>((resolve) => {
       this.manager.startDeviceScan(null, { allowDuplicates: false }, (error, device) => {
         if (error) {
-          clearTimeout(timeout);
-          this.manager.stopDeviceScan();
-          reject(error);
+          this.log(`Scan error: ${error.message}`);
           return;
         }
         if (matchesKnownMeter(device?.name)) {
-          clearTimeout(timeout);
-          this.manager.stopDeviceScan();
-          this.log(`Found ${device!.name} (${device!.id})`);
-          resolve(device!);
+          found.set(device!.id, device!);
         }
       });
+      setTimeout(() => {
+        this.manager.stopDeviceScan();
+        resolve();
+      }, windowMs);
     });
 
-    this.log('Connecting...');
-    const device = await found.connect();
-    return this.finishConnecting(device);
+    const devices = Array.from(found.values()).sort((a, b) => (b.rssi ?? -999) - (a.rssi ?? -999));
+    this.log(
+      devices.length === 0
+        ? 'No known meter models found.'
+        : `Found ${devices.length} meter-like device(s): ${devices
+            .map((d) => `${d.name} (${d.id})`)
+            .join(', ')}`
+    );
+    return devices;
   }
 
   /**
-   * Connects directly to a device you already have the ID for -- e.g. one
-   * picked from the "Scan for Nearby Meters" list -- skipping the
-   * scan-and-match-by-name step entirely. Useful when you already know
-   * which device you want (and lets you connect to a meter whose name
-   * doesn't happen to match METER_NAME_PREFIXES, too).
+   * Connects directly to a device you already have the ID for -- e.g. the
+   * single match scanForKnownMeters() found, or whichever one the person
+   * picked from the device-picker overlay when it found more than one.
+   * Skips the scan-and-match-by-name step entirely, so this also works for
+   * a meter whose name doesn't happen to match METER_NAME_PREFIXES.
    */
   async connectToDevice(deviceId: string): Promise<Device> {
     const authorized = await requestBlePermissions();
@@ -213,8 +239,9 @@ export class MeterConnection {
       );
     }
 
-    // A scan may still be running (e.g. the "Scan for Nearby Meters" list
-    // is open) -- stop it before connecting, since some Android BLE stacks
+    // A scan may still be running (e.g. scanForKnownMeters() just resolved
+    // with more than one candidate, and the person is now picking from the
+    // overlay) -- stop it before connecting, since some Android BLE stacks
     // get flaky about connecting while a scan is still active.
     this.manager.stopDeviceScan();
 
@@ -223,7 +250,7 @@ export class MeterConnection {
     return this.finishConnecting(device);
   }
 
-  /** Shared post-connect setup: service/characteristic discovery, MTU request, subscribing, and wiring the disconnect listener. Used by both scanAndConnect and connectToDevice. */
+  /** Shared post-connect setup: service/characteristic discovery, MTU request, subscribing, and wiring the disconnect listener. Called from connectToDevice() -- the only way to connect now, whether it's the single match scanForKnownMeters() found or a pick from the device-picker overlay. */
   private async finishConnecting(found: Device): Promise<Device> {
     this.log('Discovering services...');
     let connected = await found.discoverAllServicesAndCharacteristics();
@@ -275,7 +302,9 @@ export class MeterConnection {
    * UUID the device exposes, along with its properties (write/notify/etc),
    * then picks the one that looks like the data channel: writable AND
    * notifying. This is how you find the real UUIDs to hardcode in
-   * protocol.ts -- read the logs after your first successful connection.
+   * protocol.ts -- read the logs after your first successful connection
+   * (turn on Verbose Logging in Settings first; the per-characteristic
+   * list below is logged as verbose).
    *
    * If METER_SERVICE_UUID_PLACEHOLDER / METER_CHARACTERISTIC_UUID_PLACEHOLDER
    * have already been replaced with real values in protocol.ts, this still
@@ -303,7 +332,7 @@ export class MeterConnection {
         ]
           .filter(Boolean)
           .join('+');
-        this.log(`  service ${service.uuid} / char ${c.uuid} [${props}]`);
+        this.log(`  service ${service.uuid} / char ${c.uuid} [${props}]`, true);
 
         if (
           service.uuid.toLowerCase() === this.serviceUuid.toLowerCase() &&
@@ -374,7 +403,7 @@ export class MeterConnection {
       // logs can never show: whether the meter is replying AT ALL, and
       // with what actual bytes, independent of whatever this app's own
       // parsing thinks those bytes mean.
-      this.log(`<- notify [${this.characteristicUuid.slice(4, 8)}] (${arr.length}B): ${toHex(arr)}`);
+      this.log(`<- notify [${this.characteristicUuid.slice(4, 8)}] (${arr.length}B): ${toHex(arr)}`, true);
       this.handleNotification(arr);
     });
 
@@ -396,7 +425,7 @@ export class MeterConnection {
         if (!char?.value) return;
         const bytes = Buffer.from(char.value, 'base64');
         const arr = new Uint8Array(bytes);
-        this.log(`<- notify [${c.uuid.slice(4, 8)}] (SIBLING, not used by app) (${arr.length}B): ${toHex(arr)}`);
+        this.log(`<- notify [${c.uuid.slice(4, 8)}] (SIBLING, not used by app) (${arr.length}B): ${toHex(arr)}`, true);
       })
     );
   }
@@ -462,7 +491,7 @@ export class MeterConnection {
     // e.g. if 8C 0E 01 (start test) never gets so much as one notify back
     // at all, that's a very different problem (and points somewhere very
     // different) than getting 8C 05 replies that just never stabilize.
-    this.log(`-> write (${bytes.length}B): ${toHex(bytes)}`);
+    this.log(`-> write (${bytes.length}B): ${toHex(bytes)}`, true);
     await this.characteristic.writeWithoutResponse(base64);
   }
 
@@ -478,36 +507,6 @@ export class MeterConnection {
   /** The connected device's BLE identifier, or null if not connected. Used by takeMeasurement()'s reconnect-per-reading experiment to reconnect to the SAME physical meter via connectToDevice() rather than re-running the name-prefix scan. */
   getDeviceId(): string | null {
     return this.device?.id ?? null;
-  }
-
-  /**
-   * Scans for ANY nearby BLE device, not just ones matching a known meter
-   * prefix -- useful as a diagnostic: confirms whether the meter is
-   * actually advertising at all, and shows its real advertised name/RSSI
-   * even if it doesn't match METER_NAME_PREFIXES (e.g. a brand new model
-   * you haven't added yet). Deliberately reuses this.manager rather than
-   * creating a new BleManager, for the same reason scanAndConnect does --
-   * multiple live BleManager instances is what caused reconnects to
-   * silently stop working until an app restart.
-   *
-   * Calls onDevice once per advertisement seen (a device may fire
-   * repeatedly as its RSSI updates). Returns a stop function; scanning
-   * also auto-stops after timeoutMs if you don't call it first.
-   */
-  scanForAllDevices(onDevice: (device: Device) => void, timeoutMs = 15000): () => void {
-    this.manager.startDeviceScan(null, { allowDuplicates: false }, (error, device) => {
-      if (error) {
-        this.log(`Scan error: ${error.message}`);
-        return;
-      }
-      if (device) onDevice(device);
-    });
-
-    const timeout = setTimeout(() => this.manager.stopDeviceScan(), timeoutMs);
-    return () => {
-      clearTimeout(timeout);
-      this.manager.stopDeviceScan();
-    };
   }
 
   /**
@@ -548,7 +547,7 @@ export class MeterConnection {
    * connections this object never itself established. Safe to call even
    * when there's nothing stale to clean up; failures here are the
    * expected, harmless common case and are swallowed rather than surfaced
-   * as real errors. Call this BEFORE scanAndConnect()/connectToDevice(),
+   * as real errors. Call this BEFORE scanForKnownMeters()/connectToDevice(),
    * not after.
    */
   async resetStaleConnection(): Promise<void> {

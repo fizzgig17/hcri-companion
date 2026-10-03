@@ -19,7 +19,8 @@
 
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { colors } from '../theme';
+import { useTheme } from '../contexts/ThemeContext';
+import { ThemeColors } from '../theme';
 
 interface Props {
   children: React.ReactNode;
@@ -29,7 +30,12 @@ interface State {
   error: Error | null;
 }
 
-export default class ErrorBoundary extends React.Component<Props, State> {
+// Class component because React's error boundary API has no hook
+// equivalent (see the file-level comment) -- so it can't call useTheme()
+// itself. The colors it needs are resolved by the thin functional wrapper
+// at the bottom of this file (the actual default export) and passed in as
+// a prop instead.
+class ErrorBoundaryImpl extends React.Component<Props & { colors: ThemeColors }, State> {
   state: State = { error: null };
 
   static getDerivedStateFromError(error: Error): State {
@@ -50,6 +56,17 @@ export default class ErrorBoundary extends React.Component<Props, State> {
   };
 
   render() {
+    const { colors } = this.props;
+    const styles = StyleSheet.create({
+      container: { flex: 1, backgroundColor: colors.background },
+      scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
+      title: { color: colors.danger, fontSize: 20, fontWeight: '700', marginBottom: 12, textAlign: 'center' },
+      message: { color: colors.text, fontSize: 14, marginBottom: 16, textAlign: 'center', fontFamily: 'monospace' },
+      hint: { color: colors.muted, fontSize: 12, marginBottom: 24, textAlign: 'center' },
+      button: { backgroundColor: colors.accent, borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
+      buttonText: { color: colors.text, fontSize: 15, fontWeight: '700' },
+    });
+
     if (this.state.error) {
       return (
         <View style={styles.container}>
@@ -70,12 +87,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
   }
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
-  title: { color: colors.danger, fontSize: 20, fontWeight: '700', marginBottom: 12, textAlign: 'center' },
-  message: { color: colors.text, fontSize: 14, marginBottom: 16, textAlign: 'center', fontFamily: 'monospace' },
-  hint: { color: colors.muted, fontSize: 12, marginBottom: 24, textAlign: 'center' },
-  button: { backgroundColor: colors.accent, borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
-  buttonText: { color: colors.text, fontSize: 15, fontWeight: '700' },
-});
+export default function ErrorBoundary(props: Props) {
+  const { colors } = useTheme();
+  return <ErrorBoundaryImpl {...props} colors={colors} />;
+}
