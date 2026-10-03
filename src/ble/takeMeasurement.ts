@@ -26,7 +26,10 @@ import {
 } from './protocol';
 import { parseResult, peekFirmwareVersion, MeterResult } from './parseResult';
 
-export type LogFn = (msg: string) => void;
+// See MeterConnection.ts's LogFn for what the `verbose` flag means -- same
+// type, duplicated here rather than imported since this file already takes
+// its own `log` parameter independent of any MeterConnection instance.
+export type LogFn = (msg: string, verbose?: boolean) => void;
 
 // See the fallback-completion comment inside takeMeasurement() for what
 // these gate. MIN_SETTLE is a small buffer against acting on a single
@@ -312,7 +315,13 @@ export async function takeMeasurement(
           // against what CCT/Lux/etc. SHOULD read for a known light source
           // to spot where the real values actually live. Safe to remove
           // once a model's offsets are confirmed and stable.
-          log(`Raw result body (${msg.body.length} bytes): ${hexDump(msg.body)}`);
+          //
+          // Verbose-only: this is the full raw body, which includes every
+          // wavelength's raw bytes (the "full wavelength list" the standard
+          // log deliberately leaves out) alongside the header/metrics
+          // fields -- long and rarely needed unless you're hunting a field
+          // offset or a corrupted reply.
+          log(`Raw result body (${msg.body.length} bytes): ${hexDump(msg.body)}`, true);
 
           try {
             // Peeking firmwareVersion straight from the raw body (rather

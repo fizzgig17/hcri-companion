@@ -1,8 +1,9 @@
 // src/utils/shareLog.ts
 //
-// Gets the debug log (including any raw hex dumps takeMeasurement.ts
-// logged) off the phone and to the developer, without assuming the phone
-// has any particular app installed.
+// Gets the debug log (including any raw hex dumps takeMeasurement.ts/
+// MeterConnection.ts logged, if Verbose Logging was turned on in Settings
+// at the time -- see HomeScreen.tsx's appendLog) off the phone and to the
+// developer, without assuming the phone has any particular app installed.
 //
 // Originally this opened a mailto: link, but that silently fails on any
 // phone with no mail app configured (increasingly common -- lots of people

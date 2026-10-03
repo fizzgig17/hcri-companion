@@ -17,7 +17,7 @@ import { analyzeSpectrum } from '../utils/spectralAnalysis';
 import { buildCsv, defaultLabel } from '../hcri/buildCsv';
 import { uploadToHcri } from '../hcri/uploadToHcri';
 import { loadHcriCredentials } from '../storage/secureStorage';
-import { loadKeepAwakePreference } from '../storage/preferences';
+import { loadKeepAwakePreference, loadVerboseLoggingPreference } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
 import {
   loadHistory,
@@ -141,6 +141,29 @@ export default function HomeScreen({ navigation }: any) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigation]);
 
+  // Whether to keep the verbose-only log lines (BLE hex dumps, the raw
+  // result body -- see MeterConnection.ts/takeMeasurement.ts's `verbose`
+  // flag) when they reach appendLog below. A ref, not state: appendLog is
+  // called at BLE wire-traffic frequency and is deliberately kept at a
+  // stable identity (empty useCallback deps -- see below) so it never
+  // forces getConnection/MeterConnection to be recreated; reading a ref
+  // lets this setting apply live without appendLog needing to depend on
+  // it. Refreshed on focus, same reasoning as cachedUsername/statIds above.
+  const verboseLoggingRef = useRef(false);
+  useEffect(() => {
+    const loadVerboseLogging = () => {
+      loadVerboseLoggingPreference()
+        .then((enabled) => {
+          verboseLoggingRef.current = enabled;
+        })
+        .catch(() => {});
+    };
+    loadVerboseLogging();
+    const unsubscribe = navigation.addListener('focus', loadVerboseLogging);
+    return unsubscribe;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigation]);
+
   // Computed ONCE per reading, here, and threaded down to every tab that
   // shows a colorimetric number (Main, Spectrum, Data) -- rather than each
   // tab importing spectralAnalysis and calling analyzeSpectrum() on its own.
@@ -151,12 +174,20 @@ export default function HomeScreen({ navigation }: any) {
   // given result, not three independent calls that happen to agree today.
   const analysis = useMemo(() => (result ? analyzeSpectrum(result.spectrum) : null), [result]);
 
-  const appendLog = useCallback((msg: string) => {
+  const appendLog = useCallback((msg: string, verbose?: boolean) => {
     // Also mirror to console.log -- React Native forwards this straight to
     // the Metro terminal on the PC whenever the app is connected in debug
     // mode, so you can copy/paste log lines from there without needing to
-    // screen-mirror or copy text off the phone itself.
+    // screen-mirror or copy text off the phone itself. Deliberately
+    // unfiltered: Metro is a developer-only audience that already sees
+    // everything regardless of this app's own Verbose Logging setting.
     console.log(`[meter] ${msg}`);
+    // The Logs tab / Share Debug Log, on the other hand, is what the
+    // Verbose Logging setting actually controls -- a verbose-flagged line
+    // (BLE hex dumps, the raw result body) only gets added here, and so
+    // only shows up on-screen or in a shared report, once that setting is
+    // on. Off by default (see preferences.ts).
+    if (verbose && !verboseLoggingRef.current) return;
     setLog((prev) => [...prev.slice(-99), msg]);
   }, []);
 

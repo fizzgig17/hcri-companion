@@ -104,7 +104,17 @@ async function requestBlePermissions(): Promise<boolean> {
   return granted === PermissionsAndroid.RESULTS.GRANTED;
 }
 
-export type LogFn = (msg: string) => void;
+/**
+ * `verbose` marks a log line that's only worth keeping when the person has
+ * turned on Verbose Logging in Settings (default off) -- the raw per-write/
+ * per-notification BLE hex dumps here, and takeMeasurement.ts's raw-result-
+ * body dump, which are the two categories almost nobody troubleshooting a
+ * failed connect/measurement actually needs. Omitted (or false) means
+ * "always show" -- every connect/measure milestone, retry, and error stays
+ * visible in the standard log. See HomeScreen.tsx's appendLog for where
+ * this flag is actually applied.
+ */
+export type LogFn = (msg: string, verbose?: boolean) => void;
 
 /** A single reassembled notification, already stripped of the 4-byte echo+length header when it's a length-prefixed (8C 13) response. Short replies (8C 03 / 8C 05 / 8C 00) are passed through whole, unstripped -- there's no header to strip. */
 export interface MeterMessage {
@@ -275,7 +285,9 @@ export class MeterConnection {
    * UUID the device exposes, along with its properties (write/notify/etc),
    * then picks the one that looks like the data channel: writable AND
    * notifying. This is how you find the real UUIDs to hardcode in
-   * protocol.ts -- read the logs after your first successful connection.
+   * protocol.ts -- read the logs after your first successful connection
+   * (turn on Verbose Logging in Settings first; the per-characteristic
+   * list below is logged as verbose).
    *
    * If METER_SERVICE_UUID_PLACEHOLDER / METER_CHARACTERISTIC_UUID_PLACEHOLDER
    * have already been replaced with real values in protocol.ts, this still
@@ -303,7 +315,7 @@ export class MeterConnection {
         ]
           .filter(Boolean)
           .join('+');
-        this.log(`  service ${service.uuid} / char ${c.uuid} [${props}]`);
+        this.log(`  service ${service.uuid} / char ${c.uuid} [${props}]`, true);
 
         if (
           service.uuid.toLowerCase() === this.serviceUuid.toLowerCase() &&
@@ -374,7 +386,7 @@ export class MeterConnection {
       // logs can never show: whether the meter is replying AT ALL, and
       // with what actual bytes, independent of whatever this app's own
       // parsing thinks those bytes mean.
-      this.log(`<- notify [${this.characteristicUuid.slice(4, 8)}] (${arr.length}B): ${toHex(arr)}`);
+      this.log(`<- notify [${this.characteristicUuid.slice(4, 8)}] (${arr.length}B): ${toHex(arr)}`, true);
       this.handleNotification(arr);
     });
 
@@ -396,7 +408,7 @@ export class MeterConnection {
         if (!char?.value) return;
         const bytes = Buffer.from(char.value, 'base64');
         const arr = new Uint8Array(bytes);
-        this.log(`<- notify [${c.uuid.slice(4, 8)}] (SIBLING, not used by app) (${arr.length}B): ${toHex(arr)}`);
+        this.log(`<- notify [${c.uuid.slice(4, 8)}] (SIBLING, not used by app) (${arr.length}B): ${toHex(arr)}`, true);
       })
     );
   }
@@ -462,7 +474,7 @@ export class MeterConnection {
     // e.g. if 8C 0E 01 (start test) never gets so much as one notify back
     // at all, that's a very different problem (and points somewhere very
     // different) than getting 8C 05 replies that just never stabilize.
-    this.log(`-> write (${bytes.length}B): ${toHex(bytes)}`);
+    this.log(`-> write (${bytes.length}B): ${toHex(bytes)}`, true);
     await this.characteristic.writeWithoutResponse(base64);
   }
 

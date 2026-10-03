@@ -12,7 +12,12 @@ import {
   saveHcriCredentials,
   clearHcriCredentials,
 } from '../storage/secureStorage';
-import { loadKeepAwakePreference, saveKeepAwakePreference } from '../storage/preferences';
+import {
+  loadKeepAwakePreference,
+  saveKeepAwakePreference,
+  loadVerboseLoggingPreference,
+  saveVerboseLoggingPreference,
+} from '../storage/preferences';
 import {
   StatDisplayPrefs,
   loadStatDisplayPrefs,
@@ -33,6 +38,11 @@ export default function SettingsScreen() {
   // below: the two are never shown/editable at the same time).
   const [loadedToken, setLoadedToken] = useState('');
   const [keepAwake, setKeepAwake] = useState(false);
+  // Default OFF -- see preferences.ts's loadVerboseLoggingPreference/
+  // HomeScreen.tsx's appendLog for what this actually gates (the BLE hex
+  // dumps and full raw-result-body dump, not the ordinary connect/measure
+  // milestones and errors, which always show regardless of this setting).
+  const [verboseLogging, setVerboseLogging] = useState(false);
   // Which measurements show on the Main tab's result card, and in what
   // order -- starts from the built-in default so the list renders
   // immediately (not empty) while loadStatDisplayPrefs() resolves.
@@ -52,6 +62,7 @@ export default function SettingsScreen() {
       }
     });
     loadKeepAwakePreference().then(setKeepAwake);
+    loadVerboseLoggingPreference().then(setVerboseLogging);
     loadStatDisplayPrefs().then(setStatPrefs);
     // Intentionally run once on mount only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -96,6 +107,16 @@ export default function SettingsScreen() {
     // be told about this change directly.
     setKeepAwake(value);
     await saveKeepAwakePreference(value);
+  };
+
+  const toggleVerboseLogging = async (value: boolean) => {
+    // Same "feel instant" reasoning as toggleKeepAwake above. Unlike
+    // keepAwake, nothing needs to react to this mid-connection -- it's read
+    // via a ref the next time appendLog is called (see HomeScreen.tsx),
+    // not consulted once at connect/disconnect time -- so there's nothing
+    // else to notify here.
+    setVerboseLogging(value);
+    await saveVerboseLoggingPreference(value);
   };
 
   const save = async () => {
@@ -193,6 +214,18 @@ export default function SettingsScreen() {
           </Text>
         </View>
         <Switch value={keepAwake} onValueChange={toggleKeepAwake} trackColor={{ true: colors.accent }} />
+      </View>
+
+      <View style={styles.toggleRow}>
+        <View style={styles.toggleTextWrap}>
+          <Text style={styles.toggleLabel}>Verbose logging</Text>
+          <Text style={styles.toggleHint}>
+            Adds full wavelength-by-wavelength data and Bluetooth connection/transmission details to the
+            debug log, for troubleshooting a specific problem with Share Debug Log. Off by default -- the
+            standard log already covers connection and measurement status.
+          </Text>
+        </View>
+        <Switch value={verboseLogging} onValueChange={toggleVerboseLogging} trackColor={{ true: colors.accent }} />
       </View>
 
       <View style={styles.statsSection}>
