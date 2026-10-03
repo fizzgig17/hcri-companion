@@ -1,17 +1,26 @@
 // src/screens/tabs/SpectrumTab.tsx
 //
-// The "Spectrum" tab: two swipeable sub-pages sharing one top-level tab --
-// the wavelength-colored SPD graph (+ raw per-nm values) and the CIE 1931
-// chromaticity diagram, matching how the vendor app visually groups
-// Spec./Chrom. as adjacent tabs. Swipe between them, or tap the dot
-// indicator. Chrom used to be its own top-level tab; merged in here since
-// they're both "what does this reading's color/spectrum look like" views
-// on the exact same result, not separate concerns the way Data/Logs are.
+// The "Spectrum" tab: three swipeable sub-pages sharing one top-level tab --
+// the wavelength-colored SPD graph (+ raw per-nm values), the CIE 1931
+// chromaticity diagram, and the CRI R1-R15 bar chart, matching how the
+// vendor app visually groups Spec./Chrom. as adjacent tabs (R-Values is
+// this app's own addition, ported from hCRI.io's own report page -- see
+// RValuesBarChart.tsx). Swipe between them, or tap the dot indicator.
+// Chrom used to be its own top-level tab; merged in here since all three
+// are "what does this reading's color/spectrum look like" views on the
+// exact same result, not separate concerns the way Data/Logs are.
+//
+// This same component is reused, unchanged, by ReadingDetailScreen (the
+// History tab's "View" -> past-reading detail screen) -- a saved
+// reading's result/analysis are the exact same shape as a live one, so
+// there's exactly one implementation of "Spectrum/Chrom/R-Values" to keep
+// in sync rather than two that could drift apart.
 
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import SpectrumChart from '../../components/SpectrumChart';
 import ChromaticityChart from '../../components/ChromaticityChart';
+import RValuesBarChart from '../../components/RValuesBarChart';
 import CollapsibleSection from '../../components/CollapsibleSection';
 import StatCard from '../../components/StatCard';
 import SwipablePages from '../../components/SwipablePages';
@@ -74,6 +83,16 @@ export default function SpectrumTab({ result, analysis }: Props) {
             </View>
           ),
         },
+        {
+          key: 'rvalues',
+          label: 'R-Values',
+          content: (
+            <View style={styles.chartCard}>
+              <Text style={styles.rvaluesTitle}>CRI R1-R15</Text>
+              <RValuesBarChart ri={analysis.ri} />
+            </View>
+          ),
+        },
       ]}
     />
   );
@@ -96,4 +115,5 @@ const styles = StyleSheet.create({
   spectrumValue: { color: colors.text, fontSize: 12, fontFamily: 'monospace' },
 
   statGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -6, marginTop: 10 },
+  rvaluesTitle: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
 });

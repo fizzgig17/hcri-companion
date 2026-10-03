@@ -718,6 +718,7 @@ export default function HomeScreen({ navigation }: any) {
             onDeleteMany={deleteManyFromHistory}
             onShareOne={shareOneFromHistory}
             onShareAll={shareAllFromHistory}
+            onOpen={(reading) => navigation.navigate('ReadingDetail', { reading })}
             uploadingId={historyUploadingId}
             bulkUploading={historyBulkUploading}
           />

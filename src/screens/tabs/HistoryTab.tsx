@@ -41,6 +41,8 @@ interface Props {
   onDeleteMany: (ids: string[]) => void | Promise<void>;
   onShareOne: (reading: SavedReading) => void;
   onShareAll: () => void;
+  /** Opens ReadingDetailScreen for one saved reading -- the same measurement grid and Spectrum/Chrom/R-Values pages the Main/Spectrum tabs show for the current reading, just fed this past one instead (see ReadingDetailScreen.tsx). */
+  onOpen: (reading: SavedReading) => void;
   /** Which reading (if any) is currently mid-upload, so only ITS button shows a spinner/disables -- the others stay usable. Also used to show progress during a bulk upload, since that walks this same id through the list one at a time. */
   uploadingId: string | null;
   /** True while a bulk upload (onUploadMany) is in progress -- distinct from uploadingId being set for a single-row upload, so Select mode can be locked while it runs without also disabling the single-row buttons on every other screen. */
@@ -59,6 +61,7 @@ function HistoryRow({
   onUploadWithLabel,
   onDelete,
   onShareOne,
+  onOpen,
   selectMode,
   selected,
   onToggleSelected,
@@ -69,6 +72,7 @@ function HistoryRow({
   onUploadWithLabel: (id: string, label: string) => void;
   onDelete: (id: string) => void;
   onShareOne: (reading: SavedReading) => void;
+  onOpen: (reading: SavedReading) => void;
   selectMode: boolean;
   selected: boolean;
   onToggleSelected: (id: string) => void;
@@ -113,9 +117,14 @@ function HistoryRow({
       <View style={styles.rowHeader}>
         <Text style={styles.rowMeta}>{formatSavedAt(reading.savedAt)}</Text>
         {!selectMode && (
-          <TouchableOpacity onPress={() => onDelete(reading.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={styles.deleteText}>Delete</Text>
-          </TouchableOpacity>
+          <View style={styles.rowHeaderButtons}>
+            <TouchableOpacity onPress={() => onOpen(reading)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.viewText}>View</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => onDelete(reading.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.deleteText}>Delete</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
 
@@ -208,6 +217,7 @@ export default function HistoryTab({
   onDeleteMany,
   onShareOne,
   onShareAll,
+  onOpen,
   uploadingId,
   bulkUploading,
 }: Props) {
@@ -350,6 +360,7 @@ export default function HistoryTab({
           onUploadWithLabel={onUploadWithLabel}
           onDelete={onDelete}
           onShareOne={onShareOne}
+          onOpen={onOpen}
           selectMode={selectMode}
           selected={selected.has(r.id)}
           onToggleSelected={toggleSelected}
@@ -415,6 +426,8 @@ const styles = StyleSheet.create({
   selectRowBody: { flex: 1 },
   rowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   rowMeta: { color: colors.muted, fontSize: 11, fontFamily: 'monospace' },
+  rowHeaderButtons: { flexDirection: 'row', alignItems: 'center' },
+  viewText: { color: colors.info, fontSize: 12, fontWeight: '600', marginRight: 14 },
   deleteText: { color: colors.danger, fontSize: 12 },
 
   labelInput: {
