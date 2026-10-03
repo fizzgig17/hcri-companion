@@ -62,8 +62,19 @@ interface Props {
 // / padding: 16 -- 16px each side) -- true for every host of this
 // component regardless of extraHorizontalChrome above.
 const SCREEN_PADDING = 32;
-// Each chart's own chartCard, below, has padding: 10 each side.
-const CARD_PADDING = 20;
+// Each chart's own chartCard/chromCard, below, has padding: 10 AND
+// borderWidth: 1 each side -- 22px of combined horizontal inset, not just
+// the 20px of padding alone. Confirmed 2026-10-03 as the actual "right
+// side is cut off, charts are slightly too big for where they are" bug:
+// this constant used to only subtract the padding, so every chart's own
+// SVG was drawn 2px wider than the room the card's border really left
+// for it. That 2px used to just quietly overlap the card's own border
+// line; once chartCard/chromCard picked up overflow: 'hidden' (to stop
+// content spilling past the Chrom page's rounded corner), those same 2px
+// started getting hard-clipped off the right edge instead -- visible
+// now, when it was only ever cosmetically overlapping the border line
+// before.
+const CARD_PADDING = 22;
 
 export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 0 }: Props) {
   const { colors } = useTheme();
