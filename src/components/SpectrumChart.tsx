@@ -91,8 +91,24 @@ export default function SpectrumChart({ spectrum, height = 200 }: Props) {
   // estimate means a chart is drawn immediately on mount; onLayout still
   // corrects it to the exact measured value the moment it arrives, same as
   // before.
+  //
+  // Confirmed 2026-10-03: the raw window width overshoots the real value
+  // by a lot more than it needs to, because this chart never actually
+  // spans the full window -- it sits inside SpectrumTab's chartCard
+  // (padding: 10 each side) which itself sits inside the screen's own
+  // scroll content (paddingHorizontal: 16 each side, on both HomeScreen
+  // and ReadingDetailScreen, the only two places SpectrumTab is used).
+  // That's 52px of horizontal chrome this estimate was ignoring, drawn
+  // then immediately corrected narrower by onLayout -- visible as the
+  // chart starting too wide and snapping in, right when a reading
+  // completes and again every time this remounts (e.g. swiping away from
+  // and back to the tab that holds it). Subtracting that known, constant
+  // 52px gets the first paint within a pixel or two of the real size
+  // instead of a full-window overshoot, while still drawing something
+  // immediately rather than waiting on onLayout (the original 2026-10-02
+  // fix above).
   const { colors } = useTheme();
-  const [width, setWidth] = useState(() => Dimensions.get('window').width);
+  const [width, setWidth] = useState(() => Dimensions.get('window').width - 52);
 
   if (spectrum.length < 2) {
     return <View style={{ height }} onLayout={(e) => setWidth(e.nativeEvent.layout.width)} />;

@@ -67,7 +67,27 @@ function readableTextOn(hex: string): string {
 
 export default function RValuesBarChart({ ri, height }: Props) {
   const { colors } = useTheme();
-  const [width, setWidth] = useState(() => Dimensions.get('window').width);
+  // Seeded as an estimate of the real width rather than 0, for the same
+  // reason as SpectrumChart.tsx's own width state (see its longer
+  // comment): this mounts at the same moment as the other two
+  // SpectrumTab pages (SwipablePages mounts all three pages together,
+  // not lazily per swipe), so it's exposed to the same first-reading
+  // JS-thread congestion that can delay onLayout -- seeding at 0 here
+  // would risk the same "blank on the first reading" bug, even though
+  // this particular page usually isn't the one on screen yet.
+  //
+  // Like SpectrumChart, seeded as window width minus 52 rather than the
+  // raw window width: this chart sits inside the exact same chartCard
+  // (padding: 10 each side) inside the same screen scroll content
+  // (paddingHorizontal: 16 each side), so the real width is always ~52px
+  // narrower than the window. Using the raw window width overshot by
+  // that much and then snapped narrower the instant onLayout corrected
+  // it -- the "starts wide then narrows" glitch, repeating on every
+  // remount (swiping to this page, then away and back to the tab above
+  // it). Subtracting the known 52px gets the first paint close enough
+  // that the correction isn't visible, without losing the no-blank-chart
+  // guarantee a 0 seed would give up.
+  const [width, setWidth] = useState(() => Dimensions.get('window').width - 52);
 
   const items = ri
     .map((v, i) => ({ i: i + 1, v }))

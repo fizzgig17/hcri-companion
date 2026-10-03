@@ -52,7 +52,22 @@ export default function SwipablePages({ pages }: Props) {
   // top of SpectrumChart's own and doubling the window for a delayed first
   // reading to show nothing. Seeding from the window's width means pages
   // mount immediately; onLayout still corrects it once it arrives.
-  const [width, setWidth] = useState(() => Dimensions.get('window').width);
+  //
+  // Seeded as window width minus 32, not the raw window width -- this
+  // component is only ever used inside HomeScreen's/ReadingDetailScreen's
+  // own scroll content, both of which reserve 16px of horizontal padding
+  // on each side (see their `content` styles) before this ever mounts.
+  // The raw window width overshoots by exactly that 32px, which used to be
+  // visible as this (and every child chart below it) drawing noticeably
+  // too wide for a frame or two and then snapping narrower the instant
+  // onLayout corrects it -- worse than a plain guess-wrong-by-a-little,
+  // and it repeated every time this remounts (e.g. swiping HomeScreen's
+  // Main/Data/Logs tab away from and back to Main). Subtracting the one
+  // horizontal chrome value that's constant across both screens this is
+  // used from gets the very first paint within a pixel or two of the real
+  // size instead, without giving up the no-blank-first-render guarantee
+  // above.
+  const [width, setWidth] = useState(() => Dimensions.get('window').width - 32);
   const [activeIndex, setActiveIndex] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
   // One measured height per page, filled in as each page's onLayout fires
