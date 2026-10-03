@@ -20,6 +20,7 @@ import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage'
 import { loadKeepAwakePreference } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
 import { addReading } from '../storage/readingHistory';
+import { IS_DEV_BUILD } from '../hcri/buildTarget';
 import { shareDebugLog } from '../utils/shareLog';
 import { shareSingleReadingCsv } from '../utils/shareCsv';
 import { hapticSuccess, hapticFailure } from '../utils/haptics';
@@ -545,7 +546,18 @@ export default function HomeScreen({ navigation }: any) {
   });
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+    // 'top' dropped from edges when a dev build's orange banner (see
+    // App.tsx/DevBuildBanner.tsx) is showing -- it sits directly above
+    // this screen and already has its OWN SafeAreaView reserving the
+    // status-bar/notch inset for itself. react-native-safe-area-context's
+    // insets are a fixed measurement of the device's physical safe area,
+    // not a shrinking budget that accounts for how much of it a sibling
+    // already used -- so with both this screen AND the banner each
+    // requesting the 'top' edge, the inset got reserved twice, stacking
+    // into a large dead gap above the tab bar that's only there in dev
+    // builds. Production builds have no banner, so 'top' is still needed
+    // there to clear the status bar/notch directly.
+    <SafeAreaView style={styles.container} edges={IS_DEV_BUILD ? ['left', 'right'] : ['top', 'left', 'right']}>
       <ScrollView contentContainerStyle={styles.content}>
         {/* No title/gear header any more -- "hCRI Companion" was just
             branding, not information, and Settings is now its own bottom

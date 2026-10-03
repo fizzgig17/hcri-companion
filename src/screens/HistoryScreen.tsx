@@ -34,6 +34,7 @@ import { loadHcriCredentials } from '../storage/secureStorage';
 import { buildCsv } from '../hcri/buildCsv';
 import { uploadToHcri } from '../hcri/uploadToHcri';
 import { shareSingleReadingCsv, shareAllReadingsCsv } from '../utils/shareCsv';
+import { IS_DEV_BUILD } from '../hcri/buildTarget';
 
 export default function HistoryScreen({ navigation }: any) {
   const { colors } = useTheme();
@@ -203,7 +204,11 @@ export default function HistoryScreen({ navigation }: any) {
   });
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+    // 'top' dropped from edges in a dev build -- see the matching comment
+    // in HomeScreen.tsx for why: DevBuildBanner already reserves the
+    // status-bar/notch inset for itself right above this screen, and
+    // requesting it again here double-stacks it into a dead gap.
+    <SafeAreaView style={styles.container} edges={IS_DEV_BUILD ? ['left', 'right'] : ['top', 'left', 'right']}>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>History</Text>
         <HistoryTab
