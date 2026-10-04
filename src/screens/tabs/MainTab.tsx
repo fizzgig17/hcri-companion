@@ -326,7 +326,12 @@ export default function MainTab({
             return <StatCard key={id} label={metric.label} value={out.value} unit={out.unit} compact />;
           })}
         </View>
-        <Text style={styles.customizeHint}>
+        {/* numberOfLines + adjustsFontSizeToFit -- shrinks to whatever font
+            size actually fits this phone's width rather than a single
+            hardcoded fontSize that wraps on narrower screens. Confirmed
+            2026-10-04: this line was wrapping to 2+ lines at fontSize 10.5
+            on at least one device. */}
+        <Text style={styles.customizeHint} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
           Tap ⚙ Settings to customize which measurements show here, and in what order.
         </Text>
         {/* resultCard (below) wraps this in its own padding: 14 AND
