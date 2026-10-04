@@ -52,6 +52,25 @@ export interface SavedReading {
    * rows rather than treating a missing field as corrupted data.
    */
   analysis?: SpectralAnalysis;
+  /**
+   * The hCRI.io report this reading was most recently uploaded as, if
+   * ever -- the same {id, isPublic} shape the Main/Data tabs' own
+   * copy-link button keeps in memory (see HomeScreen.tsx's
+   * lastUploadedReport and UploadResult in uploadToHcri.ts), just
+   * persisted here instead so History can offer the same "Copy Link"
+   * affordance for a reading uploaded a while ago, not only the one
+   * that's still the current in-memory result.
+   *
+   * Set/overwritten by setReadingReportLink() after EVERY successful
+   * upload of this reading, from any of the three places that can
+   * trigger one (Main tab, Data tab, History tab itself) -- a second
+   * upload replaces whatever was here before rather than leaving a
+   * stale reportId/reportIsPublic pointing at an earlier report.
+   * Missing entirely for a reading that's never been uploaded, or was
+   * uploaded before this field existed.
+   */
+  reportId?: number;
+  reportIsPublic?: boolean;
 }
 
 function makeId(): string {
@@ -89,6 +108,23 @@ export async function addReading(result: MeterResult, label: string): Promise<Sa
 export async function renameReading(id: string, label: string): Promise<void> {
   const existing = await loadHistory();
   const next = existing.map((r) => (r.id === id ? { ...r, label } : r));
+  await saveAll(next);
+}
+
+/**
+ * Records (or overwrites) which hCRI.io report a reading was most recently
+ * uploaded as -- called after EVERY successful upload of a saved reading,
+ * from any of Main tab, Data tab, or History tab's own upload/upload-many
+ * flows (each already has a SavedReading id to hand by the time its upload
+ * succeeds: measure() keeps the id addReading() returned for Main/Data's
+ * "current reading", History already has the id for its own rows). A
+ * second upload of the same reading calls this again and simply replaces
+ * the previous {reportId, isPublic} -- there's no stale-link case to guard
+ * against beyond always overwriting rather than merging/ignoring.
+ */
+export async function setReadingReportLink(id: string, reportId: number, isPublic: boolean): Promise<void> {
+  const existing = await loadHistory();
+  const next = existing.map((r) => (r.id === id ? { ...r, reportId, reportIsPublic: isPublic } : r));
   await saveAll(next);
 }
 

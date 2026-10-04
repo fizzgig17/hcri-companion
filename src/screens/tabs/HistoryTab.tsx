@@ -48,6 +48,10 @@ interface Props {
   uploadingId: string | null;
   /** True while a bulk upload (onUploadMany) is in progress -- distinct from uploadingId being set for a single-row upload, so Select mode can be locked while it runs without also disabling the single-row buttons on every other screen. */
   bulkUploading: boolean;
+  /** Resolves a reading's stored report link and copies it to the clipboard -- same Copy Link affordance Main/Data show, just for a reading that may have been uploaded a while ago (see readingHistory.ts's reportId/reportIsPublic and HistoryScreen.tsx's copyReportLinkFromHistory). Only ever called for a row that actually has a reportId -- see the pill's own guard below. */
+  onCopyLink: (reading: SavedReading) => void;
+  /** Which reading's Copy Link request is in flight, if any -- same single-at-a-time pattern as uploadingId. */
+  copyingLinkId: string | null;
 }
 
 function formatSavedAt(ms: number): string {
@@ -85,6 +89,8 @@ function HistoryRow({
   selectMode,
   selected,
   onToggleSelected,
+  onCopyLink,
+  copyingLink,
 }: {
   reading: SavedReading;
   uploading: boolean;
@@ -96,6 +102,8 @@ function HistoryRow({
   selectMode: boolean;
   selected: boolean;
   onToggleSelected: (id: string) => void;
+  onCopyLink: (reading: SavedReading) => void;
+  copyingLink: boolean;
 }) {
   const { colors } = useTheme();
   const [text, setText] = useState(reading.label);
@@ -192,6 +200,24 @@ function HistoryRow({
     },
     actionButtonDisabled: { opacity: 0.6 },
     actionButtonText: { color: colors.text, fontSize: 13, fontWeight: '600' },
+
+    // Same outlined-pill treatment as MainTab/DataTab's Copy Link button --
+    // kept as its own small pill rather than folded into actionButton's
+    // style so it visually reads as "link to something already out there"
+    // rather than another same-weight action on this reading.
+    copyLinkPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: colors.accent,
+      borderRadius: 8,
+      paddingVertical: 7,
+      marginTop: 6,
+    },
+    copyLinkIcon: { fontSize: 13, marginRight: 6 },
+    copyLinkSpinner: { marginRight: 6 },
+    copyLinkLabel: { color: colors.accent, fontSize: 12, fontWeight: '700' },
   });
 
   const rowInner = (
@@ -259,6 +285,25 @@ function HistoryRow({
           </TouchableOpacity>
         </View>
       )}
+
+      {/* Only once this reading actually has a stored report to point at
+          (readingHistory.ts's reportId/reportIsPublic, set by whichever
+          upload -- Main, Data, or right here -- most recently succeeded
+          for it) -- never shown for a reading that's never been uploaded. */}
+      {!selectMode && typeof reading.reportId === 'number' && (
+        <TouchableOpacity
+          onPress={() => onCopyLink(reading)}
+          disabled={copyingLink}
+          style={styles.copyLinkPill}
+        >
+          {copyingLink ? (
+            <ActivityIndicator size="small" color={colors.accent} style={styles.copyLinkSpinner} />
+          ) : (
+            <Text style={styles.copyLinkIcon}>🔗</Text>
+          )}
+          <Text style={styles.copyLinkLabel}>{copyingLink ? 'Copying…' : 'Copy Link'}</Text>
+        </TouchableOpacity>
+      )}
     </>
   );
 
@@ -306,6 +351,8 @@ export default function HistoryTab({
   onOpen,
   uploadingId,
   bulkUploading,
+  onCopyLink,
+  copyingLinkId,
 }: Props) {
   const { colors } = useTheme();
   const [selectMode, setSelectMode] = useState(false);
@@ -536,6 +583,8 @@ export default function HistoryTab({
           selectMode={selectMode}
           selected={selected.has(r.id)}
           onToggleSelected={toggleSelected}
+          onCopyLink={onCopyLink}
+          copyingLink={copyingLinkId === r.id}
         />
       ))}
 
@@ -559,6 +608,8 @@ export default function HistoryTab({
                 selectMode={selectMode}
                 selected={selected.has(r.id)}
                 onToggleSelected={toggleSelected}
+                onCopyLink={onCopyLink}
+                copyingLink={copyingLinkId === r.id}
               />
             ))}
           </View>

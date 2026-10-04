@@ -19,6 +19,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Text, ScrollView, StyleSheet, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Clipboard from '@react-native-clipboard/clipboard';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLog } from '../contexts/LogContext';
 import { withBackgroundDisconnectSuppressed } from '../ble/backgroundDisconnectGuard';
@@ -28,11 +29,13 @@ import {
   renameReading,
   deleteReading,
   deleteManyReadings,
+  setReadingReportLink,
   SavedReading,
 } from '../storage/readingHistory';
 import { loadHcriCredentials } from '../storage/secureStorage';
 import { buildCsv } from '../hcri/buildCsv';
 import { uploadToHcri } from '../hcri/uploadToHcri';
+import { getReportLink } from '../hcri/getReportLink';
 import { shareSingleReadingCsv, shareAllReadingsCsv } from '../utils/shareCsv';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
 
@@ -49,6 +52,11 @@ export default function HistoryScreen({ navigation }: any) {
   // tracked independently.
   const [historyUploadingId, setHistoryUploadingId] = useState<string | null>(null);
   const [historyBulkUploading, setHistoryBulkUploading] = useState(false);
+  // Which saved reading's Copy Link button (below) is mid-request right
+  // now -- same single-id-at-a-time pattern as historyUploadingId, so only
+  // that one row's icon shows a spinner while the rest of the list stays
+  // tappable.
+  const [copyingLinkId, setCopyingLinkId] = useState<string | null>(null);
 
   const refreshHistory = useCallback(() => {
     loadHistory()
@@ -82,6 +90,24 @@ export default function HistoryScreen({ navigation }: any) {
   }, []);
 
   /**
+   * Saves a just-succeeded upload's report {id, isPublic} onto the matching
+   * History row (see readingHistory.ts's setReadingReportLink) and mirrors
+   * that into local state so HistoryTab reflects it immediately rather than
+   * waiting for this screen's next focus-triggered refreshHistory(). Shared
+   * by both uploadFromHistory and uploadManyFromHistory below -- either
+   * one succeeding should leave the row's link current, same requirement
+   * as a successful upload from Main/Data (see HomeScreen.tsx's upload()).
+   */
+  const saveReportLink = useCallback(async (id: string, reportId: number, isPublic: boolean) => {
+    try {
+      await setReadingReportLink(id, reportId, isPublic);
+      setHistory((prev) => prev.map((r) => (r.id === id ? { ...r, reportId, reportIsPublic: isPublic } : r)));
+    } catch (e: any) {
+      appendLog(`Failed to save report link to history: ${e.message}`);
+    }
+  }, [appendLog]);
+
+  /**
    * Uploads a past reading under whatever label is passed in (which may be
    * freshly edited, not yet committed to storage). The label is persisted
    * first -- "if you rename them to upload, it should save them with that
@@ -112,6 +138,9 @@ export default function HistoryScreen({ navigation }: any) {
         const csv = buildCsv(entry.result);
         const res = await uploadToHcri(csv, label, creds.token, appendLog);
         appendLog(res.message);
+        if (res.success && typeof res.reportId === 'number' && typeof res.isPublic === 'boolean') {
+          await saveReportLink(id, res.reportId, res.isPublic);
+        }
         Alert.alert(
           res.success ? 'Uploaded' : 'Upload failed',
           res.success ? `Uploaded "${label}".` : `Could not upload "${label}". Check Logs for details.`
@@ -120,7 +149,7 @@ export default function HistoryScreen({ navigation }: any) {
         setHistoryUploadingId(null);
       }
     },
-    [history, navigation, appendLog, renameFromHistory]
+    [history, navigation, appendLog, renameFromHistory, saveReportLink]
   );
 
   /**
@@ -166,6 +195,9 @@ export default function HistoryScreen({ navigation }: any) {
             appendLog(res.message);
             if (res.success) {
               okCount += 1;
+              if (typeof res.reportId === 'number' && typeof res.isPublic === 'boolean') {
+                await saveReportLink(id, res.reportId, res.isPublic);
+              }
             } else {
               failCount += 1;
             }
@@ -186,7 +218,41 @@ export default function HistoryScreen({ navigation }: any) {
           : `${okCount} succeeded, ${failCount} failed. Check Logs for details.`
       );
     },
-    [history, navigation, appendLog]
+    [history, navigation, appendLog, saveReportLink]
+  );
+
+  /**
+   * Resolves a History row's stored {reportId, reportIsPublic} (see
+   * readingHistory.ts) into a copyable hcri.io link and puts it on the
+   * clipboard -- same getReportLink.ts call HomeScreen's own copy-link
+   * button makes for the "current" reading, just reusable for ANY past
+   * reading that's ever been uploaded, however long ago.
+   */
+  const copyReportLinkFromHistory = useCallback(
+    async (reading: SavedReading) => {
+      if (typeof reading.reportId !== 'number' || typeof reading.reportIsPublic !== 'boolean') return;
+      const creds = await loadHcriCredentials();
+      if (!creds) {
+        Alert.alert('No hCRI.io account set up', 'Add your username and API token first.', [
+          { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
+        return;
+      }
+      setCopyingLinkId(reading.id);
+      try {
+        const res = await getReportLink(reading.reportId, reading.reportIsPublic, creds.token, appendLog);
+        if (res.success && res.link) {
+          Clipboard.setString(res.link);
+          appendLog(`Copied report link: ${res.link}`);
+        } else {
+          Alert.alert('Could not get link', res.message || 'Something went wrong. Please try again.');
+        }
+      } finally {
+        setCopyingLinkId(null);
+      }
+    },
+    [navigation, appendLog]
   );
 
   const shareOneFromHistory = useCallback((reading: SavedReading) => {
@@ -224,6 +290,8 @@ export default function HistoryScreen({ navigation }: any) {
           onOpen={(reading) => navigation.navigate('ReadingDetail', { reading })}
           uploadingId={historyUploadingId}
           bulkUploading={historyBulkUploading}
+          onCopyLink={copyReportLinkFromHistory}
+          copyingLinkId={copyingLinkId}
         />
       </ScrollView>
     </SafeAreaView>

@@ -21,7 +21,7 @@ import { getReportLink } from '../hcri/getReportLink';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
 import { loadKeepAwakePreference, loadStayConnectedInBackgroundPreference } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
-import { addReading } from '../storage/readingHistory';
+import { addReading, renameReading, setReadingReportLink } from '../storage/readingHistory';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
 import { shareDebugLog } from '../utils/shareLog';
 import { shareSingleReadingCsv } from '../utils/shareCsv';
@@ -105,6 +105,15 @@ export default function HomeScreen({ navigation }: any) {
   // as that flag: a link for a PREVIOUS reading's report should never sit
   // next to a checkmark that looks like it's describing this one.
   const [lastUploadedReport, setLastUploadedReport] = useState<{ id: number; isPublic: boolean } | null>(null);
+  // The History entry (readingHistory.ts) that measure() just auto-saved
+  // the CURRENT reading as -- kept around purely so upload() can write the
+  // upload title and the resulting report link back onto that same History
+  // row (renameReading/setReadingReportLink) once an upload succeeds,
+  // rather than those two staying permanently disconnected the way they
+  // were before. Cleared alongside uploadSucceeded/lastUploadedReport the
+  // moment a fresh measurement starts, so an upload triggered right after
+  // can never accidentally write onto a PREVIOUS reading's History row.
+  const [currentReadingId, setCurrentReadingId] = useState<string | null>(null);
   // True while the copy-link button's own request (getReportLink, for a
   // private report only -- a public one resolves with no request) is in
   // flight, so the icon can show a spinner instead of being tappable
@@ -448,6 +457,7 @@ export default function HomeScreen({ navigation }: any) {
       // left over from the PREVIOUS reading's upload, which would
       // otherwise keep showing next to a result it no longer describes.
       setUploadSucceeded(false);
+      setCurrentReadingId(null);
       setStatus('connected');
       hapticSuccess();
 
@@ -465,7 +475,11 @@ export default function HomeScreen({ navigation }: any) {
       try {
         const creds = await loadHcriCredentials();
         const label = defaultLabel(creds?.username ?? null, r.deviceName);
-        await addReading(r, label);
+        const saved = await addReading(r, label);
+        // So a later upload() of THIS reading can sync its title and
+        // report link back onto this exact History row -- see
+        // currentReadingId's own comment above.
+        setCurrentReadingId(saved.id);
       } catch (e: any) {
         // Don't let a storage hiccup here look like the measurement itself
         // failed -- the reading is still shown/usable, it just didn't get
@@ -677,13 +691,30 @@ export default function HomeScreen({ navigation }: any) {
       if (typeof res.reportId === 'number' && typeof res.isPublic === 'boolean') {
         setLastUploadedReport({ id: res.reportId, isPublic: res.isPublic });
       }
+      // Sync this upload back onto the matching History row -- the title
+      // just uploaded under (so a custom title typed here shows up as this
+      // reading's name in History too, not just in the upload itself) and
+      // the resulting report link (so History can offer the same Copy
+      // Link affordance later, even after this reading stops being the
+      // "current" one). Best-effort: a storage hiccup here shouldn't make
+      // an otherwise-successful upload look like it failed.
+      if (currentReadingId) {
+        renameReading(currentReadingId, label).catch((e: any) =>
+          appendLog(`Failed to sync upload title to history: ${e.message}`)
+        );
+        if (typeof res.reportId === 'number' && typeof res.isPublic === 'boolean') {
+          setReadingReportLink(currentReadingId, res.reportId, res.isPublic).catch((e: any) =>
+            appendLog(`Failed to save report link to history: ${e.message}`)
+          );
+        }
+      }
     } else {
       // A failure is still worth interrupting for -- this is the one
       // outcome that keeps the real Alert.
       Alert.alert('Upload failed', `Could not upload "${label}". Check Logs for details.`);
     }
     setStatus('connected');
-  }, [result, navigation, appendLog, uploadTitle]);
+  }, [result, navigation, appendLog, uploadTitle, currentReadingId]);
 
   // Resolves the current lastUploadedReport into a link (see
   // getReportLink.ts) and puts it on the clipboard. Needs its own fresh
