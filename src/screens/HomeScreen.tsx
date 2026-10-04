@@ -147,27 +147,46 @@ export default function HomeScreen({ navigation }: any) {
   // that alone doesn't scroll a focused field that's now below the
   // shrunk visible area into view -- the Upload Title field (on both Main
   // and Data) was ending up hidden behind the keyboard with no way to see
-  // what you were typing. Takes a ref to the focused TextInput itself
-  // (measureLayout needs the actual host component, not just a position)
-  // and scrolls it to just below the top of the screen, with a little
-  // headroom above. The short delay lets the keyboard's own show animation
-  // (and the adjustResize window shrink that comes with it) start before
-  // measuring -- measuring immediately on focus can still reflect the
-  // pre-keyboard layout.
-  const scrollInputIntoView = useCallback((inputRef: React.RefObject<any>) => {
-    setTimeout(() => {
-      const input = inputRef.current;
-      const scroller = scrollRef.current;
-      if (!input || !scroller) return;
-      input.measureLayout(
-        scroller,
-        (_left: number, top: number) => {
-          scroller.scrollTo({ y: Math.max(top - 80, 0), animated: true });
-        },
-        () => {}
-      );
-    }, 120);
+  // what you were typing. measureAndScroll takes a ref to the focused
+  // TextInput itself (measureLayout needs the actual host component, not
+  // just a position) and scrolls it to just below the top of the screen,
+  // with a little headroom above.
+  const measureAndScroll = useCallback((inputRef: React.RefObject<any>) => {
+    const input = inputRef.current;
+    const scroller = scrollRef.current;
+    if (!input || !scroller) return;
+    input.measureLayout(
+      scroller,
+      (_left: number, top: number) => {
+        scroller.scrollTo({ y: Math.max(top - 80, 0), animated: true });
+      },
+      () => {}
+    );
   }, []);
+
+  // Which field (if any) most recently got focus -- kept as a ref, not
+  // state, since nothing here needs to re-render off it; it's read back
+  // by the keyboardDidShow handler below. Confirmed 2026-10-04: calling
+  // measureAndScroll directly from onFocus on a fixed delay (the previous
+  // approach) raced the keyboard's own show animation and, separately,
+  // the paddingBottom increase below that actually makes room to scroll
+  // into -- on a slower show, measuring before either had finished landed
+  // short of the field and looked like "it's just not auto-scrolling".
+  // Tracking the focused ref here and re-measuring once keyboardDidShow
+  // ACTUALLY fires (rather than guessing how long its animation takes)
+  // fixes that race. The immediate attempt below still matters for a
+  // DIFFERENT case this doesn't cover: switching focus to another field
+  // while the keyboard is already up, where keyboardDidShow never fires
+  // again (the keyboard's height hasn't changed) -- that scroll has to
+  // happen off focus itself, which is why both exist.
+  const focusedInputRef = useRef<React.RefObject<any> | null>(null);
+  const scrollInputIntoView = useCallback(
+    (inputRef: React.RefObject<any>) => {
+      focusedInputRef.current = inputRef;
+      setTimeout(() => measureAndScroll(inputRef), 120);
+    },
+    [measureAndScroll]
+  );
 
   // How much extra bottom padding the content needs RIGHT NOW to leave room
   // to scroll a field clear of the keyboard. Confirmed 2026-10-04: the
@@ -185,13 +204,28 @@ export default function HomeScreen({ navigation }: any) {
   // is gone.
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   useEffect(() => {
-    const showSub = Keyboard.addListener('keyboardDidShow', (e) => setKeyboardHeight(e.endCoordinates.height));
+    const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+      // Re-measure now that the keyboard has actually finished showing --
+      // see focusedInputRef's own comment above for why this, and not just
+      // the onFocus-time attempt, is what fixes the race. Still one more
+      // short delay after this: setKeyboardHeight above doesn't take
+      // effect in THIS same callback -- it queues a re-render that adds
+      // the extra paddingBottom, and the ScrollView needs that render's
+      // layout pass to actually commit before its scrollable range grows
+      // enough to reach the field. Scrolling synchronously here would race
+      // that layout pass the same way the old fixed-delay-from-focus
+      // approach raced the keyboard animation.
+      if (focusedInputRef.current) {
+        setTimeout(() => measureAndScroll(focusedInputRef.current!), 80);
+      }
+    });
     const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
     return () => {
       showSub.remove();
       hideSub.remove();
     };
-  }, []);
+  }, [measureAndScroll]);
 
   useEffect(() => {
     const loadCachedUsername = () => {
@@ -655,6 +689,14 @@ export default function HomeScreen({ navigation }: any) {
 
   const upload = useCallback(async () => {
     if (!result) return;
+    // Tapping Upload is "I'm done editing the title" regardless of whether
+    // the field still has focus -- the keyboard sitting there through the
+    // whole upload (and the extra scroll padding it forces, see
+    // keyboardHeight above) just wastes screen space for something no
+    // longer being typed into. Dismissing up front, not after the upload
+    // resolves, also means a slow request doesn't leave it hanging open
+    // for no reason in the meantime.
+    Keyboard.dismiss();
     const creds = await loadHcriCredentials();
     if (!creds) {
       Alert.alert('No hCRI.io account set up', 'Add your username and API token first.', [
