@@ -261,6 +261,28 @@ export default function DataTab({
         <PrimaryButton title="Share CSV" onPress={onShareCsv} variant="muted" />
       </View>
 
+      {/* Moved here from the Spectrum sub-page (SpectrumTab.tsx) 2026-10-04
+          -- expanding it there, inside SwipablePages' swipeable pager, never
+          actually grew the visible area: the pager sizes its ScrollView
+          viewport to the ACTIVE page's last-measured height and then
+          stretches each page to fill that same fixed height (the default
+          cross-axis behavior for a horizontal ScrollView's row-direction
+          content container), so an expanding CollapsibleSection inside a
+          page got clipped to its own stale pre-expansion height instead of
+          growing it -- a circular measurement dependency, not something
+          fixable by a small tweak to that shared pager. This tab's plain
+          vertical ScrollView has no such constraint, so it just works here
+          the same way Upload Preview/R1-R15/Chromaticity/Device Info
+          already do below. */}
+      <CollapsibleSection title="Raw Values" count={result.spectrum.length}>
+        {result.spectrum.map((p) => (
+          <View key={p.nm} style={styles.row}>
+            <Text style={styles.rowLabel}>{p.nm}nm</Text>
+            <Text style={styles.rowValue}>{p.value.toFixed(4)}</Text>
+          </View>
+        ))}
+      </CollapsibleSection>
+
       <CollapsibleSection title="R1–R15" count={analysis.ri.length}>
         {analysis.ri.map((v, i) => (
           <View key={i} style={styles.row}>
