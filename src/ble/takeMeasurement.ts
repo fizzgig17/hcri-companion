@@ -21,7 +21,6 @@ import {
   POLL_INTERVAL_MS,
   MEASUREMENT_TIMEOUT_MS,
   STATE_REPLY_TESTSTATE_OFFSET,
-  SHORT_REPLY_ECHO_LENGTH,
   STATE_TEST_END,
   getFieldOffsetsForDevice,
 } from './protocol';
@@ -282,25 +281,51 @@ export async function takeMeasurement(
         // Logging it explicitly here instead makes a malformed 8C 03 reply
         // show up clearly in the Logs tab rather than looking like an
         // ordinary "not done yet" state.
-        // STATE_REPLY_TESTSTATE_OFFSET is relative to right after the 2-byte
-        // "8C 03" echo -- 8C 03 replies are NOT header-stripped (unlike 8C
-        // 13), so msg.body still has that echo in front. Indexing with the
-        // bare offset here used to read the echo's own trailing byte instead
-        // of the real test-state field -- see protocol.ts's comment on this
-        // constant for the capture that caught it.
-        const testStateOffset = SHORT_REPLY_ECHO_LENGTH + STATE_REPLY_TESTSTATE_OFFSET;
-        if (msg.body.byteLength <= testStateOffset) {
-          log(`Ignoring malformed 8C 03 reply: only ${msg.body.byteLength} byte(s), needed at least ${testStateOffset + 1}`);
+        //
+        // NOTE on STATE_REPLY_TESTSTATE_OFFSET itself: a 2026-10-04 debug
+        // capture was briefly misread as proof this needed a +2 (echo
+        // length) adjustment -- a single 8C 03 reply showed 0x01 at that
+        // adjusted offset where STATE_TEST_END was expected. Don't trust
+        // that: the SAME capture showed all 16 polled 8C 03 replies as
+        // byte-for-byte IDENTICAL over 3 seconds, including that 0x01 --
+        // the measurement never actually completed in that capture (it hit
+        // the overall timeout), so there's no confirmed example of what a
+        // genuine completion reply looks like at either offset, and that
+        // 0x01 is just as likely a static/mode byte as a real flag. Left
+        // as originally authored (offset 3, unstripped) until a capture
+        // that spans an ACTUAL test-end transition settles this for real.
+        if (msg.body.byteLength <= STATE_REPLY_TESTSTATE_OFFSET) {
+          log(
+            `Ignoring malformed 8C 03 reply: only ${msg.body.byteLength} byte(s), needed at least ${
+              STATE_REPLY_TESTSTATE_OFFSET + 1
+            }`
+          );
           return;
         }
-        const testState = msg.body[testStateOffset];
+        const testState = msg.body[STATE_REPLY_TESTSTATE_OFFSET];
         if (testState === STATE_TEST_END) {
           log('Confirmed test end -- reading result');
           pollingDone = true; // stop polling, but keep listening for 8C 13
           requestResult();
         } else {
+          // Confirmed 2026-10-04: this used to also reset stableCandidateSeen
+          // to false here, which looked harmless (just "go back to polling")
+          // but actually broke the elapsed-time fallback below completely.
+          // Clearing it makes the NEXT 8C 05 poll treat an integ time that
+          // was already stable as newly stabilizing again, re-stamping
+          // stableDetectedAt to "now" -- and since a full 8C 05-then-8C 03
+          // round trip (~150-215ms, per that capture) is faster than
+          // FALLBACK_MIN_SETTLE_MS (300ms), stableDetectedAt never gets the
+          // chance to age past that threshold. Every "still testing" reply
+          // perpetually deferred the fallback instead of just leaving it
+          // alone to keep accumulating settled time -- so as long as 8C 03
+          // kept replying at all (even with a perfectly accurate "still
+          // testing"), the fallback could never fire either, and the only
+          // way out was the full MEASUREMENT_TIMEOUT_MS. Just log and keep
+          // polling -- stableCandidateSeen (and stableDetectedAt with it)
+          // should only change when the INTEG TIME ITSELF changes (see the
+          // 0x05 handler above), not in response to a state check's answer.
           log('State check says still testing despite stable integ time -- resuming poll');
-          stableCandidateSeen = false;
         }
       }
 

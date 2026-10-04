@@ -114,26 +114,25 @@ export const POLL_INTERVAL_MS = 150;
 export const MEASUREMENT_TIMEOUT_MS = 15000;
 
 /**
- * Byte offset of the "test state" field within an 8C 03 reply, counted from
- * right after the 2-byte 8C 03 echo (i.e. within the reply's actual payload,
- * not the raw notification). 0x00 = still testing, 0x01 = test end.
+ * Byte offset of the "test state" field within an 8C 03 reply (0-indexed
+ * from the start of the reply, i.e. right after the 8C 03 echo). 0x00 =
+ * still testing, 0x01 = test end.
  *
- * IMPORTANT: 8C 03 replies are NOT header-stripped (see MeterConnection.ts's
- * MeterMessage comment -- only 8C 13 gets its echo+length header removed).
- * So when reading this field off the raw msg.body, add SHORT_REPLY_ECHO_LENGTH
- * first -- msg.body[SHORT_REPLY_ECHO_LENGTH + STATE_REPLY_TESTSTATE_OFFSET],
- * never msg.body[STATE_REPLY_TESTSTATE_OFFSET] directly. Confirmed
- * 2026-10-04: a debug-report capture showed a genuine test-end reply (8c 03
- * 00 00 00 01 01 33 33 -- 0x01 at byte index 5) being misread as "still
- * testing" because the code was indexing byte 3 (part of the echo's own
- * trailing zero padding) instead of byte 5. That misread is almost
- * certainly also why an earlier investigation (2026-09-27) concluded this
- * firmware "never replies to 8C 03 at all" -- it was replying correctly the
- * whole time, just being read at the wrong offset.
+ * UNVERIFIED as of 2026-10-04: a debug-report capture (dim lighting, a
+ * reading that needed the full ~10s auto-exposure range and timed out
+ * before finishing) showed 16 consecutive 8C 03 replies, every one
+ * byte-for-byte identical (8c 03 00 00 00 01 01 33 33). That was briefly
+ * taken as evidence the real flag lives 2 bytes later than this offset
+ * (i.e. at the unstripped msg.body's byte 5, not byte 3) -- but since the
+ * measurement never actually completed in that capture, there's no sample
+ * of what a reply looks like AT the real test-end transition, and a byte
+ * that's constant for 3 straight seconds while genuinely still testing is
+ * just as likely a static/mode byte as a completion flag. Left as
+ * originally authored until a capture spanning an actual completion
+ * settles it either way -- see takeMeasurement.ts's 0x03 handler for
+ * where this gets read.
  */
 export const STATE_REPLY_TESTSTATE_OFFSET = 3;
-/** Length of the 2-byte command echo (e.g. "8C 03") that prefixes every un-stripped short reply. Add this before indexing into a raw msg.body with an offset documented as relative to "after the echo" -- see STATE_REPLY_TESTSTATE_OFFSET. */
-export const SHORT_REPLY_ECHO_LENGTH = 2;
 export const STATE_TEST_END = 0x01;
 
 // ---------------------------------------------------------------------------
