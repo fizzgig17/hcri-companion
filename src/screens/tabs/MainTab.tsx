@@ -330,9 +330,12 @@ export default function MainTab({
             size actually fits this phone's width rather than a single
             hardcoded fontSize that wraps on narrower screens. Confirmed
             2026-10-04: this line was wrapping to 2+ lines at fontSize 10.5
-            on at least one device. */}
-        <Text style={styles.customizeHint} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-          Tap ⚙ Settings to customize which measurements show here, and in what order.
+            on at least one device. Shortened the text itself too, same day
+            -- the shorter it is, the less it ever needs to shrink, so
+            minimumFontScale's floor stays comfortably readable rather than
+            being relied on to rescue a long sentence. */}
+        <Text style={styles.customizeHint} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+          Tap ⚙ Settings to customize these measurements.
         </Text>
         {/* resultCard (below) wraps this in its own padding: 14 AND
             borderWidth: 1 each side (30px combined) -- SpectrumTab/
