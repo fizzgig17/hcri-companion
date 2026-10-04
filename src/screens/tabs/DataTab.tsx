@@ -126,9 +126,27 @@ export default function DataTab({
 
     uploadRow: { flexDirection: 'row', alignItems: 'center' },
     uploadButton: { flex: 1 },
-    uploadCheck: { color: colors.accent, fontSize: 20, fontWeight: '700', marginLeft: 10, marginTop: 8 },
-    copyLinkButton: { marginLeft: 10, marginTop: 6, padding: 2 },
-    copyLinkIcon: { color: colors.info, fontSize: 18 },
+    // Replaces the old separate checkmark + bare-icon-button pair -- next
+    // to each other, both unlabeled, they read as two things rather than
+    // one ("why are there two icons?"). A single pill that's both the
+    // success confirmation AND the copy-link action -- its own outline in
+    // the accent color IS the confirmation, so there's no bare checkmark
+    // needed alongside it. Mirrors MainTab's identical style -- see its
+    // own copy of this comment for the one place this is defined, in case
+    // these two ever drift.
+    copyLinkPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginLeft: 10,
+      paddingVertical: 7,
+      paddingHorizontal: 12,
+      borderRadius: 18,
+      borderWidth: 1.5,
+      borderColor: colors.accent,
+    },
+    copyLinkIcon: { fontSize: 15, marginRight: 6 },
+    copyLinkSpinner: { marginRight: 6 },
+    copyLinkLabel: { color: colors.accent, fontSize: 13, fontWeight: '700' },
 
     fieldLabel: { color: colors.muted, fontSize: 11, marginBottom: 4 },
     // Background/border live on the wrapper, not the TextInput itself, so the
@@ -239,23 +257,30 @@ export default function DataTab({
             variant="muted"
             style={styles.uploadButton}
           />
-          {/* Same inline checkmark MainTab shows instead of a confirmation
-              popup -- see HomeScreen.tsx's upload() for why. */}
-          {uploadSucceeded && <Text style={styles.uploadCheck}>✓</Text>}
-          {/* Same copy-link icon MainTab shows -- see its own comment. */}
+          {/* Same Copy Link pill MainTab shows -- it's both the success
+              confirmation and the copy-link action, replacing the old
+              separate checkmark + bare-icon pair. See MainTab.tsx's own
+              comment on this. */}
           {uploadSucceeded && canCopyLink && (
             <TouchableOpacity
               onPress={onCopyLink}
               disabled={copyingLink}
-              style={styles.copyLinkButton}
+              style={styles.copyLinkPill}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               {copyingLink ? (
-                <ActivityIndicator size="small" color={colors.info} />
+                <ActivityIndicator size="small" color={colors.accent} style={styles.copyLinkSpinner} />
               ) : (
                 <Text style={styles.copyLinkIcon}>🔗</Text>
               )}
+              <Text style={styles.copyLinkLabel}>{copyingLink ? 'Copying…' : 'Copy Link'}</Text>
             </TouchableOpacity>
+          )}
+          {uploadSucceeded && !canCopyLink && (
+            <View style={styles.copyLinkPill}>
+              <Text style={styles.copyLinkIcon}>✓</Text>
+              <Text style={styles.copyLinkLabel}>Uploaded</Text>
+            </View>
           )}
         </View>
         <PrimaryButton title="Share CSV" onPress={onShareCsv} variant="muted" />

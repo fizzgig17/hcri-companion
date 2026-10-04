@@ -150,15 +150,27 @@ export default function MainTab({
     customizeHint: { color: colors.mutedFaint, fontSize: 10.5, marginBottom: 10, textAlign: 'center' },
     uploadRow: { flexDirection: 'row', alignItems: 'center' },
     uploadButton: { flex: 1 },
-    // Green, same as the "connected" status dot/accent buttons -- reads as
-    // a quiet, positive confirmation rather than another popup to dismiss.
-    uploadCheck: { color: colors.accent, fontSize: 20, fontWeight: '700', marginLeft: 10, marginTop: 8 },
-    // Same vertical slot as uploadCheck (marginTop lines it up with the
-    // button, not the checkmark beside it -- they sit side by side, not
-    // stacked) but its own tap target rather than plain Text, since this
-    // one actually does something.
-    copyLinkButton: { marginLeft: 10, marginTop: 6, padding: 2 },
-    copyLinkIcon: { color: colors.info, fontSize: 18 },
+    // Replaces the old separate checkmark + bare-icon-button pair -- next
+    // to each other, both unlabeled, they read as two things rather than
+    // one ("why are there two icons?"). A single pill that's both the
+    // success confirmation AND the copy-link action -- its own outline in
+    // the accent color IS the confirmation, so there's no bare checkmark
+    // needed alongside it. Mirrors DataTab's identical style -- see its
+    // own copy of this comment for the one place this is defined, in case
+    // these two ever drift.
+    copyLinkPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginLeft: 10,
+      paddingVertical: 7,
+      paddingHorizontal: 12,
+      borderRadius: 18,
+      borderWidth: 1.5,
+      borderColor: colors.accent,
+    },
+    copyLinkIcon: { fontSize: 15, marginRight: 6 },
+    copyLinkSpinner: { marginRight: 6 },
+    copyLinkLabel: { color: colors.accent, fontSize: 13, fontWeight: '700' },
 
     modalBackdrop: {
       flex: 1,
@@ -292,26 +304,32 @@ export default function MainTab({
           {/* Replaces the old "Uploaded"/"Upload failed" Alert on success --
               a failed attempt still raises a real Alert (see HomeScreen.tsx's
               upload()), since that's the one outcome actually worth
-              interrupting for. */}
-          {uploadSucceeded && <Text style={styles.uploadCheck}>✓</Text>}
-          {/* Copies this report's hcri.io link to the clipboard -- a public
-              report's link needs no request at all, a private one mints/
-              reuses its share token first (see getReportLink.ts). Only
-              shows once canCopyLink is true, i.e. right next to the
-              checkmark above, never on its own. */}
+              interrupting for. This pill IS the success confirmation (its
+              outline only appears once uploadSucceeded is true) as well as
+              the copy-link action, replacing the old separate checkmark +
+              bare-icon pair. Falls back to a plain "Uploaded" pill (no tap
+              action) on the rare report canCopyLink never goes true for --
+              still a clear success signal even without a link to copy. */}
           {uploadSucceeded && canCopyLink && (
             <TouchableOpacity
               onPress={onCopyLink}
               disabled={copyingLink}
-              style={styles.copyLinkButton}
+              style={styles.copyLinkPill}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               {copyingLink ? (
-                <ActivityIndicator size="small" color={colors.info} />
+                <ActivityIndicator size="small" color={colors.accent} style={styles.copyLinkSpinner} />
               ) : (
                 <Text style={styles.copyLinkIcon}>🔗</Text>
               )}
+              <Text style={styles.copyLinkLabel}>{copyingLink ? 'Copying…' : 'Copy Link'}</Text>
             </TouchableOpacity>
+          )}
+          {uploadSucceeded && !canCopyLink && (
+            <View style={styles.copyLinkPill}>
+              <Text style={styles.copyLinkIcon}>✓</Text>
+              <Text style={styles.copyLinkLabel}>Uploaded</Text>
+            </View>
           )}
         </View>
         {status === 'connected' && <PrimaryButton title="Disconnect" onPress={disconnect} variant="muted" />}
