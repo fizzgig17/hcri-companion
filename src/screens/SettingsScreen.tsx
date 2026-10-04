@@ -4,7 +4,7 @@
 // Keychain), not plaintext -- unlike the ESP32 firmware's NVS storage.
 
 import React, { useEffect, useState } from 'react';
-import { ScrollView, View, Text, TextInput, Switch, TouchableOpacity, StyleSheet, Alert, Modal } from 'react-native';
+import { ScrollView, View, Text, TextInput, Switch, TouchableOpacity, StyleSheet, Alert, Modal, Linking } from 'react-native';
 import PrimaryButton from '../components/PrimaryButton';
 import DraggableStatList from '../components/DraggableStatList';
 import {
@@ -20,6 +20,14 @@ import { generateApiToken } from '../hcri/generateApiToken';
 // to it in the Profile -> API list on the website, so it should read as a
 // real, specific name rather than a generic placeholder like "API token".
 const DEFAULT_GENERATED_TOKEN_NAME = 'hCRI Companion Data Upload Token';
+
+// Password reset is entirely a website flow (an emailed link, see
+// api/auth/reset_request.php) -- there's no in-app equivalent to call,
+// and no deep-linkable URL that jumps straight to the "forgot password"
+// modal on hcri.io. The plain homepage is still the right target though:
+// a logged-out visitor lands on the sign-in screen by default, and
+// "Forgot password?" is right there on it (see AuthScreen.jsx).
+const FORGOT_PASSWORD_URL = 'https://www.hcri.io/';
 import {
   loadKeepAwakePreference,
   saveKeepAwakePreference,
@@ -247,6 +255,12 @@ export default function SettingsScreen() {
     }
   };
 
+  const openForgotPassword = () => {
+    Linking.openURL(FORGOT_PASSWORD_URL).catch(() => {
+      Alert.alert('Could not open browser', `Visit ${FORGOT_PASSWORD_URL} directly instead.`);
+    });
+  };
+
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
     // Padding lives here (the scrollable content) rather than on the
@@ -326,6 +340,8 @@ export default function SettingsScreen() {
     modalTitle: { color: colors.text, fontSize: 16, fontWeight: '700', marginBottom: 4 },
     modalSubtitle: { color: colors.muted, fontSize: 13, marginBottom: 14, lineHeight: 18 },
     modalLabel: { color: colors.muted, marginTop: 12, marginBottom: 6, fontSize: 13 },
+    forgotPasswordLink: { alignSelf: 'flex-end', marginTop: 8 },
+    forgotPasswordText: { color: colors.info, fontSize: 12.5 },
     modalCancel: { alignItems: 'center', paddingVertical: 12, marginTop: 6 },
     modalCancelText: { color: colors.muted, fontSize: 13, fontWeight: '600' },
     // No borderTop/marginTop like toggleRow below -- this is the first
@@ -516,6 +532,9 @@ export default function SettingsScreen() {
               placeholder="password"
               placeholderTextColor={colors.mutedFaint}
             />
+            <TouchableOpacity onPress={openForgotPassword} disabled={genBusy} style={styles.forgotPasswordLink}>
+              <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+            </TouchableOpacity>
 
             <Text style={styles.modalLabel}>Token Name</Text>
             <TextInput
