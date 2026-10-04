@@ -4,7 +4,7 @@
 // Keychain), not plaintext -- unlike the ESP32 firmware's NVS storage.
 
 import React, { useEffect, useState } from 'react';
-import { ScrollView, View, Text, TextInput, Switch, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { ScrollView, View, Text, TextInput, Switch, TouchableOpacity, StyleSheet, Alert, Modal } from 'react-native';
 import PrimaryButton from '../components/PrimaryButton';
 import DraggableStatList from '../components/DraggableStatList';
 import {
@@ -12,6 +12,14 @@ import {
   saveHcriCredentials,
   clearHcriCredentials,
 } from '../storage/secureStorage';
+import { generateApiToken } from '../hcri/generateApiToken';
+
+// Default name given to a token minted from the in-app "generate" flow
+// below -- shown to the person as an editable starting point (see the
+// Token Name field in the modal), and this is exactly what shows up next
+// to it in the Profile -> API list on the website, so it should read as a
+// real, specific name rather than a generic placeholder like "API token".
+const DEFAULT_GENERATED_TOKEN_NAME = 'hCRI Companion Data Upload Token';
 import {
   loadKeepAwakePreference,
   saveKeepAwakePreference,
@@ -65,6 +73,16 @@ export default function SettingsScreen() {
   // order -- starts from the built-in default so the list renders
   // immediately (not empty) while loadStatDisplayPrefs() resolves.
   const [statPrefs, setStatPrefs] = useState<StatDisplayPrefs>(defaultStatDisplayPrefs());
+
+  // "Generate token" modal -- logs into hCRI.io with a username/email +
+  // password and mints a brand-new named API token, instead of making
+  // someone copy one over by hand from Profile -> API on the website. See
+  // generateApiToken.ts for the two-request login-then-create flow.
+  const [tokenModalVisible, setTokenModalVisible] = useState(false);
+  const [genEmail, setGenEmail] = useState('');
+  const [genPassword, setGenPassword] = useState('');
+  const [genTokenName, setGenTokenName] = useState(DEFAULT_GENERATED_TOKEN_NAME);
+  const [genBusy, setGenBusy] = useState(false);
 
   useEffect(() => {
     loadHcriCredentials().then((creds) => {
@@ -147,13 +165,14 @@ export default function SettingsScreen() {
     await saveVerboseLoggingPreference(value);
   };
 
-  const save = async () => {
-    if (!username.trim() || !token.trim()) {
-      Alert.alert('Both fields are required');
-      return;
-    }
-    const trimmedToken = token.trim();
-    await saveHcriCredentials({ username: username.trim(), token: trimmedToken });
+  // Shared by the manual Save button and the "generate token" flow below --
+  // pulled out so the generate flow can persist the username/token it just
+  // got back from the server directly, rather than calling setUsername()/
+  // setToken() and then save() in the same tick and reading back its own
+  // not-yet-applied state (React state updates aren't synchronous).
+  const persistCredentials = async (newUsername: string, newToken: string) => {
+    await saveHcriCredentials({ username: newUsername, token: newToken });
+    setUsername(newUsername);
     // loadedToken (what the locked view's maskSecret() reads) was only
     // ever set by the mount-time loadHcriCredentials() effect -- never
     // here, so right after a fresh Save it was still '', and maskSecret('')
@@ -161,9 +180,17 @@ export default function SettingsScreen() {
     // re-ran that effect and actually populated it. Setting it directly
     // from what was just saved fixes the immediate case without waiting on
     // a round trip back through storage.
-    setLoadedToken(trimmedToken);
+    setLoadedToken(newToken);
     setToken('');
     setHasSaved(true);
+  };
+
+  const save = async () => {
+    if (!username.trim() || !token.trim()) {
+      Alert.alert('Both fields are required');
+      return;
+    }
+    await persistCredentials(username.trim(), token.trim());
     Alert.alert('Saved');
   };
 
@@ -173,6 +200,51 @@ export default function SettingsScreen() {
     setToken('');
     setLoadedToken('');
     setHasSaved(false);
+  };
+
+  const openTokenModal = () => {
+    // Pre-fill with whatever's already typed in the Username field, if
+    // anything -- saves retyping it for the common case of "I have a
+    // username, I just don't have a token yet". Password and the token
+    // name always start fresh.
+    setGenEmail(username.trim());
+    setGenPassword('');
+    setGenTokenName(DEFAULT_GENERATED_TOKEN_NAME);
+    setTokenModalVisible(true);
+  };
+
+  const closeTokenModal = () => {
+    if (genBusy) return; // don't let a backdrop tap abandon an in-flight request
+    setTokenModalVisible(false);
+    // Clear the password out of state the moment the modal's gone -- same
+    // "never hang onto it longer than it has to" spirit as generateApiToken.ts
+    // itself never persisting or logging it.
+    setGenPassword('');
+  };
+
+  const generateToken = async () => {
+    const email = genEmail.trim();
+    const name = genTokenName.trim() || DEFAULT_GENERATED_TOKEN_NAME;
+    if (!email || !genPassword) {
+      Alert.alert('Username/email and password are both required');
+      return;
+    }
+    setGenBusy(true);
+    try {
+      const result = await generateApiToken(email, genPassword, name);
+      setGenPassword('');
+      setTokenModalVisible(false);
+      // Same locked-view, "Forget Credentials to change it" behavior as
+      // manually pasting a token in and tapping Save -- generating one
+      // isn't a different kind of credential, so it shouldn't end up in a
+      // different state afterward.
+      await persistCredentials(result.username, result.token);
+      Alert.alert('Token created', `"${name}" was created and saved.`);
+    } catch (e: any) {
+      Alert.alert('Could not create a token', e?.message || 'Something went wrong. Please try again.');
+    } finally {
+      setGenBusy(false);
+    }
   };
 
   const styles = StyleSheet.create({
@@ -215,6 +287,47 @@ export default function SettingsScreen() {
     // PrimaryButton's own default marginTop so it doesn't stack on top of this.
     saveButtonWrap: { marginTop: 18 },
     noTopMargin: { marginTop: 0 },
+    // Save + the "generate token" icon button sit side by side in this row
+    // -- Save takes the remaining width, the icon button is a fixed-size
+    // square next to it rather than a second full-width button, since it's
+    // a secondary/occasional action, not an equal alternative to Save.
+    saveRow: { flexDirection: 'row', alignItems: 'stretch', gap: 10 },
+    saveRowButton: { flex: 1 },
+    generateTokenButton: {
+      width: 50,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.card,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    generateTokenIcon: { fontSize: 20 },
+    generateTokenHint: { color: colors.mutedFaint, fontSize: 11.5, marginTop: 8, lineHeight: 15 },
+
+    // "Generate token" modal -- same overlay/sheet treatment as MainTab's
+    // device-picker modal, for a consistent feel across the app.
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.6)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 24,
+    },
+    modalSheet: {
+      width: '100%',
+      maxWidth: 400,
+      backgroundColor: colors.card,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      padding: 18,
+    },
+    modalTitle: { color: colors.text, fontSize: 16, fontWeight: '700', marginBottom: 4 },
+    modalSubtitle: { color: colors.muted, fontSize: 13, marginBottom: 14, lineHeight: 18 },
+    modalLabel: { color: colors.muted, marginTop: 12, marginBottom: 6, fontSize: 13 },
+    modalCancel: { alignItems: 'center', paddingVertical: 12, marginTop: 6 },
+    modalCancelText: { color: colors.muted, fontSize: 13, fontWeight: '600' },
     // No borderTop/marginTop like toggleRow below -- this is the first
     // section on the screen, directly under the credentials form, so there's
     // nothing above it yet to separate from.
@@ -346,11 +459,88 @@ export default function SettingsScreen() {
             placeholderTextColor={colors.mutedFaint}
           />
 
-          <View style={styles.saveButtonWrap}>
-            <PrimaryButton title="Save" onPress={save} style={styles.noTopMargin} />
+          <View style={[styles.saveButtonWrap, styles.saveRow]}>
+            <PrimaryButton title="Save" onPress={save} style={[styles.noTopMargin, styles.saveRowButton]} />
+            {/* Don't have a token yet? Logs into hCRI.io with a username +
+                password and mints a brand-new one -- see generateApiToken.ts.
+                A separate icon button rather than folded into Save itself:
+                this is a different action (create a new token on the
+                server) from Save (persist whatever's already typed in). */}
+            <TouchableOpacity
+              style={styles.generateTokenButton}
+              onPress={openTokenModal}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel="Generate a new API token"
+            >
+              <Text style={styles.generateTokenIcon}>🔑</Text>
+            </TouchableOpacity>
           </View>
+          <Text style={styles.generateTokenHint}>
+            Don't have a token? Tap 🔑 to sign in with your hCRI.io username and password and create one.
+          </Text>
         </>
       )}
+
+      {/* "Generate token" modal -- logs in, creates a named API token, and
+          saves it (same as tapping Save manually), then closes. Dismissing
+          via the backdrop/Cancel just closes the overlay without creating
+          anything, same as leaving the fields above blank. */}
+      <Modal visible={tokenModalVisible} transparent animationType="fade" onRequestClose={closeTokenModal}>
+        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={closeTokenModal}>
+          <TouchableOpacity style={styles.modalSheet} activeOpacity={1} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Generate API Token</Text>
+            <Text style={styles.modalSubtitle}>
+              Sign in with your hCRI.io username and password to create a new API token. Your password is
+              used once to sign in and is never stored.
+            </Text>
+
+            <Text style={styles.modalLabel}>hCRI.io Username or Email</Text>
+            <TextInput
+              style={styles.input}
+              value={genEmail}
+              onChangeText={setGenEmail}
+              autoCapitalize="none"
+              editable={!genBusy}
+              placeholder="username or email"
+              placeholderTextColor={colors.mutedFaint}
+            />
+
+            <Text style={styles.modalLabel}>Password</Text>
+            <TextInput
+              style={styles.input}
+              value={genPassword}
+              onChangeText={setGenPassword}
+              autoCapitalize="none"
+              secureTextEntry
+              editable={!genBusy}
+              placeholder="password"
+              placeholderTextColor={colors.mutedFaint}
+            />
+
+            <Text style={styles.modalLabel}>Token Name</Text>
+            <TextInput
+              style={styles.input}
+              value={genTokenName}
+              onChangeText={setGenTokenName}
+              editable={!genBusy}
+              placeholder={DEFAULT_GENERATED_TOKEN_NAME}
+              placeholderTextColor={colors.mutedFaint}
+            />
+
+            <View style={styles.saveButtonWrap}>
+              <PrimaryButton
+                title={genBusy ? 'Generating…' : 'Generate & Save'}
+                onPress={generateToken}
+                disabled={genBusy}
+                style={styles.noTopMargin}
+              />
+            </View>
+            <TouchableOpacity style={styles.modalCancel} onPress={closeTokenModal} disabled={genBusy}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       <View style={styles.appearanceSection}>
         <Text style={styles.appearanceLabel}>Appearance</Text>
