@@ -8,7 +8,7 @@
 // of whatever the last reading and log happen to be.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, ScrollView, StyleSheet, Alert, AppState } from 'react-native';
+import { View, ScrollView, StyleSheet, Alert, AppState, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MeterConnection } from '../ble/MeterConnection';
 import { initializeMeter, takeMeasurement } from '../ble/takeMeasurement';
@@ -110,6 +110,63 @@ export default function HomeScreen({ navigation }: any) {
   // rather than an empty grid for one frame.
   const [statIds, setStatIds] = useState<string[]>(() => visibleStatIds(defaultStatDisplayPrefs()));
   const connRef = useRef<MeterConnection | null>(null);
+  // The outer ScrollView both tabs render inside -- handed down to Main/Data
+  // so each can scroll its own Upload Title field into view once the
+  // keyboard comes up and covers it (see scrollInputIntoView below). Owned
+  // here rather than inside each tab since the ScrollView itself is owned
+  // here; a tab-local ScrollView ref would have nothing to scroll.
+  const scrollRef = useRef<ScrollView>(null);
+
+  // Confirmed 2026-10-04: android:windowSoftInputMode="adjustResize" (see
+  // AndroidManifest.xml) resizes the window when the keyboard appears, but
+  // that alone doesn't scroll a focused field that's now below the
+  // shrunk visible area into view -- the Upload Title field (on both Main
+  // and Data) was ending up hidden behind the keyboard with no way to see
+  // what you were typing. Takes a ref to the focused TextInput itself
+  // (measureLayout needs the actual host component, not just a position)
+  // and scrolls it to just below the top of the screen, with a little
+  // headroom above. The short delay lets the keyboard's own show animation
+  // (and the adjustResize window shrink that comes with it) start before
+  // measuring -- measuring immediately on focus can still reflect the
+  // pre-keyboard layout.
+  const scrollInputIntoView = useCallback((inputRef: React.RefObject<any>) => {
+    setTimeout(() => {
+      const input = inputRef.current;
+      const scroller = scrollRef.current;
+      if (!input || !scroller) return;
+      input.measureLayout(
+        scroller,
+        (_left: number, top: number) => {
+          scroller.scrollTo({ y: Math.max(top - 80, 0), animated: true });
+        },
+        () => {}
+      );
+    }, 120);
+  }, []);
+
+  // How much extra bottom padding the content needs RIGHT NOW to leave room
+  // to scroll a field clear of the keyboard. Confirmed 2026-10-04: the
+  // ScrollView's own fixed paddingBottom (56, below -- sized for the home
+  // indicator/nav bar, not a keyboard) meant there was simply nowhere left
+  // to scroll TO once the keyboard was up -- scrollInputIntoView's own
+  // scrollTo() was a no-op near the bottom of the content because the
+  // ScrollView had already hit its max scroll offset well short of
+  // clearing the keyboard. Tracking the keyboard's real height and adding
+  // it as temporary extra padding guarantees there's always enough room
+  // below the last bit of content to scroll a lower field all the way
+  // clear, no matter how short that tab's content is. 'keyboardDidShow'/
+  // 'keyboardDidHide' (not the iOS-only 'Will' variants) fire on both
+  // platforms. Reset to 0 on hide so nothing's left over once the keyboard
+  // is gone.
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', (e) => setKeyboardHeight(e.endCoordinates.height));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   useEffect(() => {
     const loadCachedUsername = () => {
@@ -665,7 +722,7 @@ export default function HomeScreen({ navigation }: any) {
     // supplies its own bottom padding as the gap between the docked tab
     // bar and the first bit of scrolling content, so this would just be a
     // second gap stacked on top of that one.
-    content: { paddingHorizontal: 16, paddingBottom: 56 },
+    content: { paddingHorizontal: 16, paddingBottom: 56 + keyboardHeight },
     // The docked header sitting above the ScrollView -- NOT inside its
     // contentContainerStyle any more (see the TabBar render below): a
     // sibling View here can't scroll away with the rest of the content,
@@ -706,7 +763,7 @@ export default function HomeScreen({ navigation }: any) {
           onChange={setActiveTab}
         />
       </View>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {activeTab === 'main' && (
           <MainTab
             status={status}
@@ -733,6 +790,7 @@ export default function HomeScreen({ navigation }: any) {
             uploadTitle={uploadTitle}
             onUploadTitleChange={setUploadTitle}
             cachedUsername={cachedUsername}
+            scrollInputIntoView={scrollInputIntoView}
           />
         )}
         {activeTab === 'data' && (
@@ -745,6 +803,7 @@ export default function HomeScreen({ navigation }: any) {
             canCopyLink={!!lastUploadedReport}
             copyingLink={copyingLink}
             onCopyLink={copyReportLink}
+            scrollInputIntoView={scrollInputIntoView}
             uploadTitle={uploadTitle}
             onUploadTitleChange={setUploadTitle}
             onShareCsv={shareCurrentCsv}

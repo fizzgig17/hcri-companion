@@ -15,7 +15,7 @@
 // (the overwhelmingly common case) connects straight through with no
 // extra UI at all, same as before.
 
-import React from 'react';
+import React, { useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Modal, StyleSheet } from 'react-native';
 import PrimaryButton from '../../components/PrimaryButton';
 import StatCard from '../../components/StatCard';
@@ -106,6 +106,12 @@ interface Props {
    * case defaultLabel() just leaves that piece out rather than a blank
    * placeholder. Same prop DataTab takes -- see its own comment. */
   cachedUsername: string | null;
+  /** Scrolls a given TextInput ref clear of the keyboard -- see
+   * HomeScreen.tsx's own comment on this. Needs a ref to the actual input
+   * (not just a position) since it measures that input's layout relative
+   * to the ScrollView HomeScreen owns, which this tab has no ref to
+   * itself. */
+  scrollInputIntoView: (inputRef: React.RefObject<any>) => void;
 }
 
 export default function MainTab({
@@ -133,6 +139,7 @@ export default function MainTab({
   uploadTitle,
   onUploadTitleChange,
   cachedUsername,
+  scrollInputIntoView,
 }: Props) {
   const { colors, statusColors } = useTheme();
   const canSwitchMeters = status === 'connected' && (devicePickerDevices?.length ?? 0) > 1;
@@ -143,6 +150,10 @@ export default function MainTab({
   // what actually keeps the Take Reading button from jumping position.
   const displayResult = result ?? EMPTY_METER_RESULT;
   const displayAnalysis = analysis ?? EMPTY_SPECTRAL_ANALYSIS;
+  // See HomeScreen.tsx's scrollInputIntoView comment -- needs a ref to the
+  // actual TextInput, not just a position, since it measures this input's
+  // layout relative to the ScrollView HomeScreen owns.
+  const titleInputRef = useRef<TextInput>(null);
 
   const styles = StyleSheet.create({
     statusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
@@ -359,9 +370,11 @@ export default function MainTab({
                 </Text>
               )}
               <TextInput
+                ref={titleInputRef}
                 style={styles.titleInput}
                 value={uploadTitle}
                 onChangeText={onUploadTitleChange}
+                onFocus={() => scrollInputIntoView(titleInputRef)}
                 autoCapitalize="none"
                 autoCorrect={false}
                 multiline
