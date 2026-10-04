@@ -62,6 +62,51 @@ function getSharedBleManager(): BleManager {
   return global.__hcriBleManagerSingleton;
 }
 
+/**
+ * Confirmed 2026-10-04: the reported "meter not found on cold start, works
+ * fine after tapping Connect again" bug. getSharedBleManager() lazily
+ * constructs a brand-new BleManager() the first time connect() runs -- which,
+ * on a fresh app launch, is immediately on mount (see HomeScreen.tsx's
+ * mount-effect connect() call). A just-constructed BleManager's native-side
+ * adapter state takes a short, genuinely async moment to settle to
+ * 'PoweredOn' -- scanForKnownMeters() used to call startDeviceScan()
+ * straight away with no check at all, racing that settling. Losing the
+ * race doesn't throw or hang; it just means the scan quietly starts before
+ * the native BLE stack is actually listening, so it finds nothing. A manual
+ * retry a few seconds later always wins the race (the manager's long since
+ * settled by then), which is exactly the "always works on a second try"
+ * symptom reported. Waits for a real 'PoweredOn' before scanning/connecting
+ * -- resolves immediately if it's already there (the common case, after the
+ * very first scan of a session), so this costs nothing once the race window
+ * has passed. Rejects promptly (not after the full timeout) if the state is
+ * already known to be 'PoweredOff', with a clear user-facing message rather
+ * than the generic "Meter not found".
+ */
+async function waitForPoweredOn(manager: BleManager, timeoutMs = 5000): Promise<void> {
+  const current = await manager.state();
+  if (current === 'PoweredOn') return;
+  if (current === 'PoweredOff') {
+    throw new Error('Bluetooth is turned off -- turn it on and try again.');
+  }
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      subscription.remove();
+      reject(new Error(`Bluetooth didn't become ready in time (state: ${current}) -- make sure it's turned on.`));
+    }, timeoutMs);
+    const subscription = manager.onStateChange((state) => {
+      if (state === 'PoweredOn') {
+        clearTimeout(timeout);
+        subscription.remove();
+        resolve();
+      } else if (state === 'PoweredOff') {
+        clearTimeout(timeout);
+        subscription.remove();
+        reject(new Error('Bluetooth is turned off -- turn it on and try again.'));
+      }
+    }, false);
+  });
+}
+
 /** True if the advertised name matches any known meter model prefix (see protocol.ts's METER_NAME_PREFIXES for why this is a list, not one hardcoded string). */
 function matchesKnownMeter(name: string | null | undefined): boolean {
   if (!name) return false;
@@ -194,6 +239,10 @@ export class MeterConnection {
       );
     }
 
+    // See waitForPoweredOn's own comment -- this is the actual fix for
+    // "meter not found on cold start, works after tapping Connect again".
+    await waitForPoweredOn(this.manager);
+
     this.log(`Scanning for known meter models (${METER_NAME_PREFIXES.join(', ')})...`);
 
     const found = new Map<string, Device>();
@@ -238,6 +287,11 @@ export class MeterConnection {
         'Bluetooth permission was denied. Enable "Nearby devices" (and Location, on older Android) for this app in Settings.'
       );
     }
+
+    // Cheap/instant once a scan has already happened this session (the
+    // common case) -- see waitForPoweredOn's own comment for why this is
+    // still worth calling here too, not just in scanForKnownMeters().
+    await waitForPoweredOn(this.manager);
 
     // A scan may still be running (e.g. scanForKnownMeters() just resolved
     // with more than one candidate, and the person is now picking from the
