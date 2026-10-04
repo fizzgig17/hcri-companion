@@ -156,7 +156,7 @@ export default function MainTab({
   const titleInputRef = useRef<TextInput>(null);
 
   const styles = StyleSheet.create({
-    statusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+    statusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
     resetLink: { alignItems: 'center', paddingVertical: 8 },
     resetLinkText: { color: colors.muted, fontSize: 12 },
     statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
@@ -173,7 +173,7 @@ export default function MainTab({
       borderWidth: 1,
       borderColor: colors.cardBorder,
       padding: 14,
-      marginTop: 16,
+      marginTop: 6,
     },
     statGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -5, marginBottom: 2 },
     customizeHint: { color: colors.mutedFaint, fontSize: 10.5, marginBottom: 10, textAlign: 'center' },
