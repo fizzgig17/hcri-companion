@@ -99,11 +99,41 @@ export const CMD_READ_RESULT = [0x8c, 0x13, 0x31]; // reads stored result, does 
 /** How often to poll 8C 05 / 8C 03 while waiting for a measurement to finish. */
 export const POLL_INTERVAL_MS = 150;
 
-/** Overall give-up timeout. Good-light convergence is typically under 1s; poor lighting can legitimately take several seconds while auto-exposure hunts. 10s balances not cutting off a slow-but-real reading against not leaving the UI stuck too long. */
-export const MEASUREMENT_TIMEOUT_MS = 10000;
+/**
+ * Overall give-up timeout. Good-light convergence is typically under 1s;
+ * poor lighting can legitimately take several seconds while auto-exposure
+ * hunts, and the HPCS-330P's auto-exposure range tops out around 10s
+ * (10,000,000us integration time, confirmed in a 2026-10-04 debug-report
+ * capture in dim lighting). This used to be 10000 -- exactly equal to that
+ * worst-case exposure, with zero room left for the polling round-trips
+ * before the exposure even starts or the FALLBACK_SAFETY_MARGIN_MS after it
+ * ends -- so any reading that actually needed the full auto-exposure range
+ * was guaranteed to time out no matter what. Bumped to give that a real
+ * margin to land in.
+ */
+export const MEASUREMENT_TIMEOUT_MS = 15000;
 
-/** Byte offset of the "test state" field within an 8C 03 reply (0-indexed from the start of the reply, i.e. right after the 8C 03 echo). 0x00 = still testing, 0x01 = test end. */
+/**
+ * Byte offset of the "test state" field within an 8C 03 reply, counted from
+ * right after the 2-byte 8C 03 echo (i.e. within the reply's actual payload,
+ * not the raw notification). 0x00 = still testing, 0x01 = test end.
+ *
+ * IMPORTANT: 8C 03 replies are NOT header-stripped (see MeterConnection.ts's
+ * MeterMessage comment -- only 8C 13 gets its echo+length header removed).
+ * So when reading this field off the raw msg.body, add SHORT_REPLY_ECHO_LENGTH
+ * first -- msg.body[SHORT_REPLY_ECHO_LENGTH + STATE_REPLY_TESTSTATE_OFFSET],
+ * never msg.body[STATE_REPLY_TESTSTATE_OFFSET] directly. Confirmed
+ * 2026-10-04: a debug-report capture showed a genuine test-end reply (8c 03
+ * 00 00 00 01 01 33 33 -- 0x01 at byte index 5) being misread as "still
+ * testing" because the code was indexing byte 3 (part of the echo's own
+ * trailing zero padding) instead of byte 5. That misread is almost
+ * certainly also why an earlier investigation (2026-09-27) concluded this
+ * firmware "never replies to 8C 03 at all" -- it was replying correctly the
+ * whole time, just being read at the wrong offset.
+ */
 export const STATE_REPLY_TESTSTATE_OFFSET = 3;
+/** Length of the 2-byte command echo (e.g. "8C 03") that prefixes every un-stripped short reply. Add this before indexing into a raw msg.body with an offset documented as relative to "after the echo" -- see STATE_REPLY_TESTSTATE_OFFSET. */
+export const SHORT_REPLY_ECHO_LENGTH = 2;
 export const STATE_TEST_END = 0x01;
 
 // ---------------------------------------------------------------------------

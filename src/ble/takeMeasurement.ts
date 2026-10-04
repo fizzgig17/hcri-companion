@@ -21,6 +21,7 @@ import {
   POLL_INTERVAL_MS,
   MEASUREMENT_TIMEOUT_MS,
   STATE_REPLY_TESTSTATE_OFFSET,
+  SHORT_REPLY_ECHO_LENGTH,
   STATE_TEST_END,
   getFieldOffsetsForDevice,
 } from './protocol';
@@ -122,7 +123,9 @@ export async function takeMeasurement(
       if (!settled) {
         settled = true;
         cleanup();
-        reject(new Error('Measurement timed out (20s) -- check lighting / connection'));
+        reject(
+          new Error(`Measurement timed out (${MEASUREMENT_TIMEOUT_MS / 1000}s) -- check lighting / connection`)
+        );
       }
     }, MEASUREMENT_TIMEOUT_MS);
 
@@ -238,24 +241,21 @@ export async function takeMeasurement(
         }
         lastIntegTime = integTimeUs;
 
-        // Fallback completion signal. Confirmed by wire-level logging on a
-        // real HPCS-330P (2026-09-27): this firmware never replies to 8C 03
-        // at all, on any of its exposed characteristics -- so a design that
-        // ONLY proceeds once 8C 03 confirms teststate==END means this model
-        // simply never completes a measurement in this app, full stop,
-        // regardless of lighting -- even though the meter itself is fine
-        // (confirmed working via the vendor's own app against the same
-        // unit). "Integration time looked the same for two 150ms polls in a
-        // row" was never actually proof the exposure had FINISHED, though --
-        // that's just when the auto-exposure algorithm settled on a target
-        // duration; the physical exposure at that duration still has to
-        // elapse for real, which is exactly what 8C 03 was meant to confirm.
-        // Since that confirmation isn't coming, wait out that real duration
-        // ourselves instead: once stable, require BOTH a small settle
-        // buffer since stability was first seen AND that enough real
-        // wall-clock time has passed since the test started to cover one
-        // full exposure at the settled integration time, plus a safety
-        // margin -- then read the result directly.
+        // Fallback completion signal, kept as a safety net even though the
+        // 2026-09-27 claim that prompted it ("this firmware never replies to
+        // 8C 03 at all") turned out to be wrong -- see STATE_REPLY_TESTSTATE_OFFSET's
+        // comment in protocol.ts: that investigation was almost certainly
+        // looking at the right reply at the wrong byte offset, not an
+        // absent reply. With the offset fixed, a genuine 8C 03 confirmation
+        // should arrive and resolve things via the 0x03 branch below well
+        // before this fallback's own wait is up. Left in place regardless,
+        // in case some unit/firmware revision really does drop 8C 03: once
+        // integ time looks stable, require BOTH a small settle buffer since
+        // stability was first seen AND that enough real wall-clock time has
+        // passed since the test started to cover one full exposure at the
+        // settled integration time, plus a safety margin -- then read the
+        // result directly rather than waiting out the full
+        // MEASUREMENT_TIMEOUT_MS on a confirmation that may not come.
         if (!pollingDone && stableCandidateSeen && stableIntegTimeUs !== null && stableDetectedAt !== null) {
           const now = Date.now();
           const requiredSinceStart = stableIntegTimeUs / 1000 + FALLBACK_SAFETY_MARGIN_MS;
@@ -282,15 +282,18 @@ export async function takeMeasurement(
         // Logging it explicitly here instead makes a malformed 8C 03 reply
         // show up clearly in the Logs tab rather than looking like an
         // ordinary "not done yet" state.
-        if (msg.body.byteLength <= STATE_REPLY_TESTSTATE_OFFSET) {
-          log(
-            `Ignoring malformed 8C 03 reply: only ${msg.body.byteLength} byte(s), needed at least ${
-              STATE_REPLY_TESTSTATE_OFFSET + 1
-            }`
-          );
+        // STATE_REPLY_TESTSTATE_OFFSET is relative to right after the 2-byte
+        // "8C 03" echo -- 8C 03 replies are NOT header-stripped (unlike 8C
+        // 13), so msg.body still has that echo in front. Indexing with the
+        // bare offset here used to read the echo's own trailing byte instead
+        // of the real test-state field -- see protocol.ts's comment on this
+        // constant for the capture that caught it.
+        const testStateOffset = SHORT_REPLY_ECHO_LENGTH + STATE_REPLY_TESTSTATE_OFFSET;
+        if (msg.body.byteLength <= testStateOffset) {
+          log(`Ignoring malformed 8C 03 reply: only ${msg.body.byteLength} byte(s), needed at least ${testStateOffset + 1}`);
           return;
         }
-        const testState = msg.body[STATE_REPLY_TESTSTATE_OFFSET];
+        const testState = msg.body[testStateOffset];
         if (testState === STATE_TEST_END) {
           log('Confirmed test end -- reading result');
           pollingDone = true; // stop polling, but keep listening for 8C 13
