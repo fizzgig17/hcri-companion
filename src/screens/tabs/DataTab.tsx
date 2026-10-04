@@ -8,7 +8,7 @@
 // customizable, right where the reading is taken; repeating them here
 // was just the same numbers twice.
 
-import React from 'react';
+import React, { useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import PrimaryButton from '../../components/PrimaryButton';
 import CollapsibleSection from '../../components/CollapsibleSection';
@@ -60,6 +60,9 @@ interface Props {
    * case defaultLabel() just leaves that piece out rather than a blank
    * placeholder. */
   cachedUsername: string | null;
+  /** Scrolls a given TextInput ref clear of the keyboard -- see
+   * HomeScreen.tsx's own comment on this. Same prop MainTab takes. */
+  scrollInputIntoView: (inputRef: React.RefObject<any>) => void;
 }
 
 export default function DataTab({
@@ -75,8 +78,13 @@ export default function DataTab({
   onUploadTitleChange,
   onShareCsv,
   cachedUsername,
+  scrollInputIntoView,
 }: Props) {
   const { colors } = useTheme();
+  // See HomeScreen.tsx's scrollInputIntoView comment -- needs a ref to the
+  // actual TextInput, not just a position, since it measures this input's
+  // layout relative to the ScrollView HomeScreen owns.
+  const titleInputRef = useRef<TextInput>(null);
 
   const styles = StyleSheet.create({
     empty: { paddingVertical: 40, alignItems: 'center' },
@@ -225,9 +233,11 @@ export default function DataTab({
             </Text>
           )}
           <TextInput
+            ref={titleInputRef}
             style={styles.titleInput}
             value={uploadTitle}
             onChangeText={onUploadTitleChange}
+            onFocus={() => scrollInputIntoView(titleInputRef)}
             autoCapitalize="none"
             autoCorrect={false}
             multiline
