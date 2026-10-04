@@ -14,6 +14,15 @@ const HCRI_UPLOAD_URL = `${HCRI_API_BASE}/index.php/api/v1/upload`;
 export interface UploadResult {
   success: boolean;
   message: string;
+  /** This upload's new report id, and whether it's public -- both come
+   * straight back in the upload response itself (ingest_spd_upload()'s
+   * return array), so getReportLink.ts can build a public report's link
+   * for free, with no extra request. Undefined on failure, or if the
+   * response wasn't the JSON shape expected (treated as "can't offer a
+   * link for this one" rather than a hard error -- the upload itself
+   * already succeeded either way). */
+  reportId?: number;
+  isPublic?: boolean;
 }
 
 export async function uploadToHcri(
@@ -54,5 +63,19 @@ export async function uploadToHcri(
   if (!response.ok) {
     return { success: false, message: `Upload failed (${response.status}): ${text}` };
   }
-  return { success: true, message: text || 'Uploaded' };
+
+  // Best-effort parse for id/isPublic -- `text` is logged verbatim above
+  // regardless, so a parse failure here only costs the copy-link feature,
+  // never the upload's own success/message result.
+  let reportId: number | undefined;
+  let isPublic: boolean | undefined;
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed.id === 'number') reportId = parsed.id;
+    if (typeof parsed.isPublic === 'boolean') isPublic = parsed.isPublic;
+  } catch {
+    // Not JSON, or not the shape expected -- leave both undefined.
+  }
+
+  return { success: true, message: text || 'Uploaded', reportId, isPublic };
 }

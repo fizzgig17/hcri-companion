@@ -9,7 +9,7 @@
 // was just the same numbers twice.
 
 import React from 'react';
-import { View, Text, TextInput, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import PrimaryButton from '../../components/PrimaryButton';
 import CollapsibleSection from '../../components/CollapsibleSection';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -42,6 +42,12 @@ interface Props {
    * HomeScreen.tsx's own comment on it. Shown here too since this tab has
    * its own copy of the Upload button. */
   uploadSucceeded: boolean;
+  /** Same canCopyLink/copyingLink/onCopyLink trio MainTab uses -- see its
+   * own comments on these props. Shown here too since this tab has its
+   * own copy of the Upload button/checkmark. */
+  canCopyLink: boolean;
+  copyingLink: boolean;
+  onCopyLink: () => void;
   /** Upload title/label -- lifted up to HomeScreen so it survives switching
    * tabs and taking multiple readings; only resets when the app itself
    * restarts. See the long comment on this state in HomeScreen.tsx. */
@@ -62,6 +68,9 @@ export default function DataTab({
   onUpload,
   uploading,
   uploadSucceeded,
+  canCopyLink,
+  copyingLink,
+  onCopyLink,
   uploadTitle,
   onUploadTitleChange,
   onShareCsv,
@@ -118,6 +127,8 @@ export default function DataTab({
     uploadRow: { flexDirection: 'row', alignItems: 'center' },
     uploadButton: { flex: 1 },
     uploadCheck: { color: colors.accent, fontSize: 20, fontWeight: '700', marginLeft: 10, marginTop: 8 },
+    copyLinkButton: { marginLeft: 10, marginTop: 6, padding: 2 },
+    copyLinkIcon: { color: colors.info, fontSize: 18 },
 
     fieldLabel: { color: colors.muted, fontSize: 11, marginBottom: 4 },
     // Background/border live on the wrapper, not the TextInput itself, so the
@@ -231,6 +242,21 @@ export default function DataTab({
           {/* Same inline checkmark MainTab shows instead of a confirmation
               popup -- see HomeScreen.tsx's upload() for why. */}
           {uploadSucceeded && <Text style={styles.uploadCheck}>✓</Text>}
+          {/* Same copy-link icon MainTab shows -- see its own comment. */}
+          {uploadSucceeded && canCopyLink && (
+            <TouchableOpacity
+              onPress={onCopyLink}
+              disabled={copyingLink}
+              style={styles.copyLinkButton}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              {copyingLink ? (
+                <ActivityIndicator size="small" color={colors.info} />
+              ) : (
+                <Text style={styles.copyLinkIcon}>🔗</Text>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
         <PrimaryButton title="Share CSV" onPress={onShareCsv} variant="muted" />
       </View>

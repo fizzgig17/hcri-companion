@@ -26,7 +26,7 @@ export function buildCsv(result: MeterResult): string {
 
 /**
  * A human-readable local date/time/timezone stamp, e.g. "2026-09-28 2:01pm
- * est" -- used by defaultLabel() below, pulled out on its own since it's
+ * EST" -- used by defaultLabel() below, pulled out on its own since it's
  * the fiddly part (12-hour clock, lowercase am/pm, a timezone abbreviation
  * that plain Date methods don't give you at all).
  */
@@ -44,27 +44,30 @@ function friendlyStamp(now: Date): string {
 
   // Intl's timeZoneName needs full ICU data to resolve an abbreviation like
   // "EST" -- not guaranteed present in every Hermes build. Falls back to a
-  // plain UTC offset (e.g. "utc-4") rather than silently dropping the
-  // timezone entirely if that data isn't available.
+  // plain UTC offset (e.g. "UTC-4") rather than silently dropping the
+  // timezone entirely if that data isn't available. Uppercased either way
+  // -- "EST"/"UTC-4", not "est"/"utc-4" -- matching how a timezone
+  // abbreviation is conventionally written everywhere else (the website
+  // included), even though the rest of this stamp (am/pm) stays lowercase.
   let tz = '';
   try {
     const part = new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' })
       .formatToParts(now)
       .find((p) => p.type === 'timeZoneName');
-    if (part) tz = part.value.toLowerCase();
+    if (part) tz = part.value.toUpperCase();
   } catch {
     // fall through to the offset-based fallback below
   }
   if (!tz) {
     const offsetMin = -now.getTimezoneOffset(); // minutes EAST of UTC
     const sign = offsetMin >= 0 ? '+' : '-';
-    tz = `utc${sign}${Math.abs(offsetMin) / 60}`;
+    tz = `UTC${sign}${Math.abs(offsetMin) / 60}`;
   }
 
   return `${datePart} ${timePart} ${tz}`;
 }
 
-/** Default label when the user hasn't typed/renamed one: username + timestamp + device, e.g. "fizzgig 2026-09-28 2:01pm est HPCS-330P". Any piece that isn't available (no hCRI.io account set up yet, or called before a device name is known) is just left out rather than leaving a blank placeholder behind. */
+/** Default label when the user hasn't typed/renamed one: username + timestamp + device, e.g. "fizzgig 2026-09-28 2:01pm EST HPCS-330P". Any piece that isn't available (no hCRI.io account set up yet, or called before a device name is known) is just left out rather than leaving a blank placeholder behind. */
 export function defaultLabel(username: string | null, deviceName?: string | null): string {
   const parts = [username, friendlyStamp(new Date()), deviceName].filter(
     (p): p is string => !!p && p.trim().length > 0
