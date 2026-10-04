@@ -21,7 +21,7 @@ import { getReportLink } from '../hcri/getReportLink';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
 import { loadKeepAwakePreference, loadStayConnectedInBackgroundPreference } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
-import { addReading } from '../storage/readingHistory';
+import { addReading, recordUpload } from '../storage/readingHistory';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
 import { shareDebugLog } from '../utils/shareLog';
 import { shareSingleReadingCsv } from '../utils/shareCsv';
@@ -51,7 +51,23 @@ type TabKey = 'main' | 'data' | 'logs';
 // just resolve the instant it hears the first match: the whole point is
 // knowing whether a SECOND one is also in range, which means waiting out a
 // real window rather than racing to the first advertisement.
-const CONNECT_SCAN_WINDOW_MS = 3000;
+const CONNECT_SCAN_WINDOW_MS = 5000;
+
+// Confirmed 2026-10-04 (a debug-report capture): backgrounding the app
+// disconnects the meter (see the AppState effect below), and coming back to
+// the foreground immediately tries to reconnect -- but in that capture, the
+// reconnect's scan started only ~1.7s after the disconnect and came up
+// completely empty 3s later, even though the SAME meter had been found
+// without any trouble just ~11s before that. The central side (this app)
+// finishes its own disconnect quickly, but the PERIPHERAL (the meter) still
+// needs its own moment afterward to notice the link dropped and resume
+// advertising -- nothing this app's own disconnect() can wait on directly,
+// since that's happening entirely on the meter's side. Giving the
+// foreground-reconnect path a short head start before it even begins
+// scanning (not needed for a manual Connect tap, which already has a human
+// pause built in before the person taps it) gives the meter that moment
+// instead of racing it.
+const FOREGROUND_RECONNECT_DELAY_MS = 1500;
 
 export default function HomeScreen({ navigation }: any) {
   const { colors } = useTheme();
@@ -89,6 +105,15 @@ export default function HomeScreen({ navigation }: any) {
   // as that flag: a link for a PREVIOUS reading's report should never sit
   // next to a checkmark that looks like it's describing this one.
   const [lastUploadedReport, setLastUploadedReport] = useState<{ id: number; isPublic: boolean } | null>(null);
+  // The History entry (readingHistory.ts) that measure() just auto-saved
+  // the CURRENT reading as -- kept around purely so upload() can write the
+  // upload title and the resulting report link back onto that same History
+  // row (renameReading/setReadingReportLink) once an upload succeeds,
+  // rather than those two staying permanently disconnected the way they
+  // were before. Cleared alongside uploadSucceeded/lastUploadedReport the
+  // moment a fresh measurement starts, so an upload triggered right after
+  // can never accidentally write onto a PREVIOUS reading's History row.
+  const [currentReadingId, setCurrentReadingId] = useState<string | null>(null);
   // True while the copy-link button's own request (getReportLink, for a
   // private report only -- a public one resolves with no request) is in
   // flight, so the icon can show a spinner instead of being tappable
@@ -122,27 +147,46 @@ export default function HomeScreen({ navigation }: any) {
   // that alone doesn't scroll a focused field that's now below the
   // shrunk visible area into view -- the Upload Title field (on both Main
   // and Data) was ending up hidden behind the keyboard with no way to see
-  // what you were typing. Takes a ref to the focused TextInput itself
-  // (measureLayout needs the actual host component, not just a position)
-  // and scrolls it to just below the top of the screen, with a little
-  // headroom above. The short delay lets the keyboard's own show animation
-  // (and the adjustResize window shrink that comes with it) start before
-  // measuring -- measuring immediately on focus can still reflect the
-  // pre-keyboard layout.
-  const scrollInputIntoView = useCallback((inputRef: React.RefObject<any>) => {
-    setTimeout(() => {
-      const input = inputRef.current;
-      const scroller = scrollRef.current;
-      if (!input || !scroller) return;
-      input.measureLayout(
-        scroller,
-        (_left: number, top: number) => {
-          scroller.scrollTo({ y: Math.max(top - 80, 0), animated: true });
-        },
-        () => {}
-      );
-    }, 120);
+  // what you were typing. measureAndScroll takes a ref to the focused
+  // TextInput itself (measureLayout needs the actual host component, not
+  // just a position) and scrolls it to just below the top of the screen,
+  // with a little headroom above.
+  const measureAndScroll = useCallback((inputRef: React.RefObject<any>) => {
+    const input = inputRef.current;
+    const scroller = scrollRef.current;
+    if (!input || !scroller) return;
+    input.measureLayout(
+      scroller,
+      (_left: number, top: number) => {
+        scroller.scrollTo({ y: Math.max(top - 80, 0), animated: true });
+      },
+      () => {}
+    );
   }, []);
+
+  // Which field (if any) most recently got focus -- kept as a ref, not
+  // state, since nothing here needs to re-render off it; it's read back
+  // by the keyboardDidShow handler below. Confirmed 2026-10-04: calling
+  // measureAndScroll directly from onFocus on a fixed delay (the previous
+  // approach) raced the keyboard's own show animation and, separately,
+  // the paddingBottom increase below that actually makes room to scroll
+  // into -- on a slower show, measuring before either had finished landed
+  // short of the field and looked like "it's just not auto-scrolling".
+  // Tracking the focused ref here and re-measuring once keyboardDidShow
+  // ACTUALLY fires (rather than guessing how long its animation takes)
+  // fixes that race. The immediate attempt below still matters for a
+  // DIFFERENT case this doesn't cover: switching focus to another field
+  // while the keyboard is already up, where keyboardDidShow never fires
+  // again (the keyboard's height hasn't changed) -- that scroll has to
+  // happen off focus itself, which is why both exist.
+  const focusedInputRef = useRef<React.RefObject<any> | null>(null);
+  const scrollInputIntoView = useCallback(
+    (inputRef: React.RefObject<any>) => {
+      focusedInputRef.current = inputRef;
+      setTimeout(() => measureAndScroll(inputRef), 120);
+    },
+    [measureAndScroll]
+  );
 
   // How much extra bottom padding the content needs RIGHT NOW to leave room
   // to scroll a field clear of the keyboard. Confirmed 2026-10-04: the
@@ -160,13 +204,28 @@ export default function HomeScreen({ navigation }: any) {
   // is gone.
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   useEffect(() => {
-    const showSub = Keyboard.addListener('keyboardDidShow', (e) => setKeyboardHeight(e.endCoordinates.height));
+    const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+      // Re-measure now that the keyboard has actually finished showing --
+      // see focusedInputRef's own comment above for why this, and not just
+      // the onFocus-time attempt, is what fixes the race. Still one more
+      // short delay after this: setKeyboardHeight above doesn't take
+      // effect in THIS same callback -- it queues a re-render that adds
+      // the extra paddingBottom, and the ScrollView needs that render's
+      // layout pass to actually commit before its scrollable range grows
+      // enough to reach the field. Scrolling synchronously here would race
+      // that layout pass the same way the old fixed-delay-from-focus
+      // approach raced the keyboard animation.
+      if (focusedInputRef.current) {
+        setTimeout(() => measureAndScroll(focusedInputRef.current!), 80);
+      }
+    });
     const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
     return () => {
       showSub.remove();
       hideSub.remove();
     };
-  }, []);
+  }, [measureAndScroll]);
 
   useEffect(() => {
     const loadCachedUsername = () => {
@@ -432,6 +491,7 @@ export default function HomeScreen({ navigation }: any) {
       // left over from the PREVIOUS reading's upload, which would
       // otherwise keep showing next to a result it no longer describes.
       setUploadSucceeded(false);
+      setCurrentReadingId(null);
       setStatus('connected');
       hapticSuccess();
 
@@ -449,7 +509,11 @@ export default function HomeScreen({ navigation }: any) {
       try {
         const creds = await loadHcriCredentials();
         const label = defaultLabel(creds?.username ?? null, r.deviceName);
-        await addReading(r, label);
+        const saved = await addReading(r, label);
+        // So a later upload() of THIS reading can sync its title and
+        // report link back onto this exact History row -- see
+        // currentReadingId's own comment above.
+        setCurrentReadingId(saved.id);
       } catch (e: any) {
         // Don't let a storage hiccup here look like the measurement itself
         // failed -- the reading is still shown/usable, it just didn't get
@@ -554,12 +618,25 @@ export default function HomeScreen({ navigation }: any) {
         // "reconnect" something that's already connected.
         if (statusRef.current === 'disconnected') {
           appendLog('App back in foreground -- reconnecting to meter...');
-          // preferLastDeviceOnMultiple: true -- this is a reconnect, not a
-          // fresh choice, so if more than one meter happens to be in range
-          // right now, silently go back to the one that was connected
-          // before backgrounding rather than popping up a picker the
-          // person didn't ask for (see connect()'s own comment on this).
-          connect({ preferLastDeviceOnMultiple: true });
+          // 'connecting' right away, even though the actual scan is about
+          // to be held off for a moment (see FOREGROUND_RECONNECT_DELAY_MS
+          // above) -- otherwise the status row would just keep showing
+          // "Disconnected" for that whole delay, looking like nothing was
+          // happening rather than like a reconnect already in progress.
+          setStatus('connecting');
+          setTimeout(() => {
+            // Status could have changed during the delay (the person
+            // backgrounded again, or tapped Connect/Disconnect themselves)
+            // -- only actually follow through if it's still exactly the
+            // "waiting to reconnect" state this timer was set up for.
+            if (statusRef.current !== 'connecting') return;
+            // preferLastDeviceOnMultiple: true -- this is a reconnect, not a
+            // fresh choice, so if more than one meter happens to be in range
+            // right now, silently go back to the one that was connected
+            // before backgrounding rather than popping up a picker the
+            // person didn't ask for (see connect()'s own comment on this).
+            connect({ preferLastDeviceOnMultiple: true });
+          }, FOREGROUND_RECONNECT_DELAY_MS);
         }
         return;
       }
@@ -612,6 +689,14 @@ export default function HomeScreen({ navigation }: any) {
 
   const upload = useCallback(async () => {
     if (!result) return;
+    // Tapping Upload is "I'm done editing the title" regardless of whether
+    // the field still has focus -- the keyboard sitting there through the
+    // whole upload (and the extra scroll padding it forces, see
+    // keyboardHeight above) just wastes screen space for something no
+    // longer being typed into. Dismissing up front, not after the upload
+    // resolves, also means a slow request doesn't leave it hanging open
+    // for no reason in the meantime.
+    Keyboard.dismiss();
     const creds = await loadHcriCredentials();
     if (!creds) {
       Alert.alert('No hCRI.io account set up', 'Add your username and API token first.', [
@@ -648,13 +733,30 @@ export default function HomeScreen({ navigation }: any) {
       if (typeof res.reportId === 'number' && typeof res.isPublic === 'boolean') {
         setLastUploadedReport({ id: res.reportId, isPublic: res.isPublic });
       }
+      // Sync this upload back onto the matching History row -- the title
+      // just uploaded under (so a custom title typed here shows up as this
+      // reading's name in History too, not just in the upload itself) and
+      // the resulting report link (so History can offer the same Copy
+      // Link affordance later, even after this reading stops being the
+      // "current" one). One atomic recordUpload() call, not a separate
+      // rename + setReadingReportLink fired side by side -- two concurrent
+      // read-modify-writes race each other and the later one to finish
+      // silently clobbers the other's change, which is exactly what made
+      // some uploaded readings end up with a synced title but no Copy Link
+      // (or neither) instead of both. Best-effort: a storage hiccup here
+      // shouldn't make an otherwise-successful upload look like it failed.
+      if (currentReadingId) {
+        recordUpload(currentReadingId, label, res.reportId, res.isPublic).catch((e: any) =>
+          appendLog(`Failed to sync upload to history: ${e.message}`)
+        );
+      }
     } else {
       // A failure is still worth interrupting for -- this is the one
       // outcome that keeps the real Alert.
       Alert.alert('Upload failed', `Could not upload "${label}". Check Logs for details.`);
     }
     setStatus('connected');
-  }, [result, navigation, appendLog, uploadTitle]);
+  }, [result, navigation, appendLog, uploadTitle, currentReadingId]);
 
   // Resolves the current lastUploadedReport into a link (see
   // getReportLink.ts) and puts it on the clipboard. Needs its own fresh
@@ -723,6 +825,14 @@ export default function HomeScreen({ navigation }: any) {
     // bar and the first bit of scrolling content, so this would just be a
     // second gap stacked on top of that one.
     content: { paddingHorizontal: 16, paddingBottom: 56 + keyboardHeight },
+    // Explicit flex:1 (new now that this ScrollView is conditionally
+    // rendered as a sibling of LogsTab -- see the activeTab==='logs'
+    // branch above) rather than relying on it picking up the remaining
+    // space implicitly -- makes it behave identically to LogsTab's own
+    // flex:1 root either way, instead of leaving which one actually fills
+    // the screen down to however Yoga happens to size an unstyled
+    // ScrollView here.
+    scrollArea: { flex: 1 },
     // The docked header sitting above the ScrollView -- NOT inside its
     // contentContainerStyle any more (see the TabBar render below): a
     // sibling View here can't scroll away with the rest of the content,
@@ -763,7 +873,17 @@ export default function HomeScreen({ navigation }: any) {
           onChange={setActiveTab}
         />
       </View>
-      <ScrollView ref={scrollRef} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      {/* Logs is NOT rendered inside this ScrollView -- see LogsTab.tsx's
+          own file-level comment for why: nested inside here, dragging
+          past the end of the log's own inner scroller used to hand the
+          gesture off to THIS ScrollView, dragging the tab bar above (and
+          LogsTab's own Share/Clear buttons) up off-screen with it. As a
+          flex:1 sibling instead, there's nothing above it that CAN
+          scroll, so that hand-off has nowhere to go. */}
+      {activeTab === 'logs' ? (
+        <LogsTab log={log} onShare={shareLog} onClear={clearLog} />
+      ) : (
+      <ScrollView ref={scrollRef} style={styles.scrollArea} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {activeTab === 'main' && (
           <MainTab
             status={status}
@@ -810,8 +930,8 @@ export default function HomeScreen({ navigation }: any) {
             cachedUsername={cachedUsername}
           />
         )}
-        {activeTab === 'logs' && <LogsTab log={log} onShare={shareLog} onClear={clearLog} />}
       </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
