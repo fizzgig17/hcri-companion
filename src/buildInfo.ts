@@ -14,5 +14,5 @@
 // build.gradle -- see that file's own version-bump commit history for
 // the existing convention this now joins. BUILD_DATE is the date of
 // that commit, not an automatic build timestamp.
-export const APP_VERSION = '1.3';
-export const BUILD_DATE = '2026-10-03';
+export const APP_VERSION = '1.4';
+export const BUILD_DATE = '2026-10-04';
