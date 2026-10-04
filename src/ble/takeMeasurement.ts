@@ -122,7 +122,9 @@ export async function takeMeasurement(
       if (!settled) {
         settled = true;
         cleanup();
-        reject(new Error('Measurement timed out (20s) -- check lighting / connection'));
+        reject(
+          new Error(`Measurement timed out (${MEASUREMENT_TIMEOUT_MS / 1000}s) -- check lighting / connection`)
+        );
       }
     }, MEASUREMENT_TIMEOUT_MS);
 
@@ -238,24 +240,21 @@ export async function takeMeasurement(
         }
         lastIntegTime = integTimeUs;
 
-        // Fallback completion signal. Confirmed by wire-level logging on a
-        // real HPCS-330P (2026-09-27): this firmware never replies to 8C 03
-        // at all, on any of its exposed characteristics -- so a design that
-        // ONLY proceeds once 8C 03 confirms teststate==END means this model
-        // simply never completes a measurement in this app, full stop,
-        // regardless of lighting -- even though the meter itself is fine
-        // (confirmed working via the vendor's own app against the same
-        // unit). "Integration time looked the same for two 150ms polls in a
-        // row" was never actually proof the exposure had FINISHED, though --
-        // that's just when the auto-exposure algorithm settled on a target
-        // duration; the physical exposure at that duration still has to
-        // elapse for real, which is exactly what 8C 03 was meant to confirm.
-        // Since that confirmation isn't coming, wait out that real duration
-        // ourselves instead: once stable, require BOTH a small settle
-        // buffer since stability was first seen AND that enough real
-        // wall-clock time has passed since the test started to cover one
-        // full exposure at the settled integration time, plus a safety
-        // margin -- then read the result directly.
+        // Fallback completion signal, kept as a safety net even though the
+        // 2026-09-27 claim that prompted it ("this firmware never replies to
+        // 8C 03 at all") turned out to be wrong -- see STATE_REPLY_TESTSTATE_OFFSET's
+        // comment in protocol.ts: that investigation was almost certainly
+        // looking at the right reply at the wrong byte offset, not an
+        // absent reply. With the offset fixed, a genuine 8C 03 confirmation
+        // should arrive and resolve things via the 0x03 branch below well
+        // before this fallback's own wait is up. Left in place regardless,
+        // in case some unit/firmware revision really does drop 8C 03: once
+        // integ time looks stable, require BOTH a small settle buffer since
+        // stability was first seen AND that enough real wall-clock time has
+        // passed since the test started to cover one full exposure at the
+        // settled integration time, plus a safety margin -- then read the
+        // result directly rather than waiting out the full
+        // MEASUREMENT_TIMEOUT_MS on a confirmation that may not come.
         if (!pollingDone && stableCandidateSeen && stableIntegTimeUs !== null && stableDetectedAt !== null) {
           const now = Date.now();
           const requiredSinceStart = stableIntegTimeUs / 1000 + FALLBACK_SAFETY_MARGIN_MS;
@@ -282,6 +281,19 @@ export async function takeMeasurement(
         // Logging it explicitly here instead makes a malformed 8C 03 reply
         // show up clearly in the Logs tab rather than looking like an
         // ordinary "not done yet" state.
+        //
+        // NOTE on STATE_REPLY_TESTSTATE_OFFSET itself: a 2026-10-04 debug
+        // capture was briefly misread as proof this needed a +2 (echo
+        // length) adjustment -- a single 8C 03 reply showed 0x01 at that
+        // adjusted offset where STATE_TEST_END was expected. Don't trust
+        // that: the SAME capture showed all 16 polled 8C 03 replies as
+        // byte-for-byte IDENTICAL over 3 seconds, including that 0x01 --
+        // the measurement never actually completed in that capture (it hit
+        // the overall timeout), so there's no confirmed example of what a
+        // genuine completion reply looks like at either offset, and that
+        // 0x01 is just as likely a static/mode byte as a real flag. Left
+        // as originally authored (offset 3, unstripped) until a capture
+        // that spans an ACTUAL test-end transition settles this for real.
         if (msg.body.byteLength <= STATE_REPLY_TESTSTATE_OFFSET) {
           log(
             `Ignoring malformed 8C 03 reply: only ${msg.body.byteLength} byte(s), needed at least ${
@@ -296,8 +308,24 @@ export async function takeMeasurement(
           pollingDone = true; // stop polling, but keep listening for 8C 13
           requestResult();
         } else {
+          // Confirmed 2026-10-04: this used to also reset stableCandidateSeen
+          // to false here, which looked harmless (just "go back to polling")
+          // but actually broke the elapsed-time fallback below completely.
+          // Clearing it makes the NEXT 8C 05 poll treat an integ time that
+          // was already stable as newly stabilizing again, re-stamping
+          // stableDetectedAt to "now" -- and since a full 8C 05-then-8C 03
+          // round trip (~150-215ms, per that capture) is faster than
+          // FALLBACK_MIN_SETTLE_MS (300ms), stableDetectedAt never gets the
+          // chance to age past that threshold. Every "still testing" reply
+          // perpetually deferred the fallback instead of just leaving it
+          // alone to keep accumulating settled time -- so as long as 8C 03
+          // kept replying at all (even with a perfectly accurate "still
+          // testing"), the fallback could never fire either, and the only
+          // way out was the full MEASUREMENT_TIMEOUT_MS. Just log and keep
+          // polling -- stableCandidateSeen (and stableDetectedAt with it)
+          // should only change when the INTEG TIME ITSELF changes (see the
+          // 0x05 handler above), not in response to a state check's answer.
           log('State check says still testing despite stable integ time -- resuming poll');
-          stableCandidateSeen = false;
         }
       }
 

@@ -730,6 +730,9 @@ export default function HomeScreen({ navigation }: any) {
             onCopyLink={copyReportLink}
             statIds={statIds}
             connectedDeviceName={deviceName}
+            uploadTitle={uploadTitle}
+            onUploadTitleChange={setUploadTitle}
+            cachedUsername={cachedUsername}
           />
         )}
         {activeTab === 'data' && (

@@ -99,10 +99,39 @@ export const CMD_READ_RESULT = [0x8c, 0x13, 0x31]; // reads stored result, does 
 /** How often to poll 8C 05 / 8C 03 while waiting for a measurement to finish. */
 export const POLL_INTERVAL_MS = 150;
 
-/** Overall give-up timeout. Good-light convergence is typically under 1s; poor lighting can legitimately take several seconds while auto-exposure hunts. 10s balances not cutting off a slow-but-real reading against not leaving the UI stuck too long. */
-export const MEASUREMENT_TIMEOUT_MS = 10000;
+/**
+ * Overall give-up timeout. Good-light convergence is typically under 1s;
+ * poor lighting can legitimately take several seconds while auto-exposure
+ * hunts, and the HPCS-330P's auto-exposure range tops out around 10s
+ * (10,000,000us integration time, confirmed in a 2026-10-04 debug-report
+ * capture in dim lighting). This used to be 10000 -- exactly equal to that
+ * worst-case exposure, with zero room left for the polling round-trips
+ * before the exposure even starts or the FALLBACK_SAFETY_MARGIN_MS after it
+ * ends -- so any reading that actually needed the full auto-exposure range
+ * was guaranteed to time out no matter what. Bumped to give that a real
+ * margin to land in.
+ */
+export const MEASUREMENT_TIMEOUT_MS = 15000;
 
-/** Byte offset of the "test state" field within an 8C 03 reply (0-indexed from the start of the reply, i.e. right after the 8C 03 echo). 0x00 = still testing, 0x01 = test end. */
+/**
+ * Byte offset of the "test state" field within an 8C 03 reply (0-indexed
+ * from the start of the reply, i.e. right after the 8C 03 echo). 0x00 =
+ * still testing, 0x01 = test end.
+ *
+ * UNVERIFIED as of 2026-10-04: a debug-report capture (dim lighting, a
+ * reading that needed the full ~10s auto-exposure range and timed out
+ * before finishing) showed 16 consecutive 8C 03 replies, every one
+ * byte-for-byte identical (8c 03 00 00 00 01 01 33 33). That was briefly
+ * taken as evidence the real flag lives 2 bytes later than this offset
+ * (i.e. at the unstripped msg.body's byte 5, not byte 3) -- but since the
+ * measurement never actually completed in that capture, there's no sample
+ * of what a reply looks like AT the real test-end transition, and a byte
+ * that's constant for 3 straight seconds while genuinely still testing is
+ * just as likely a static/mode byte as a completion flag. Left as
+ * originally authored until a capture spanning an actual completion
+ * settles it either way -- see takeMeasurement.ts's 0x03 handler for
+ * where this gets read.
+ */
 export const STATE_REPLY_TESTSTATE_OFFSET = 3;
 export const STATE_TEST_END = 0x01;
 

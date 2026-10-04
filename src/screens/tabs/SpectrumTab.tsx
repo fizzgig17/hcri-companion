@@ -25,7 +25,6 @@ import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import SpectrumChart from '../../components/SpectrumChart';
 import ChromaticityChart from '../../components/ChromaticityChart';
 import RValuesBarChart from '../../components/RValuesBarChart';
-import CollapsibleSection from '../../components/CollapsibleSection';
 import SwipablePages from '../../components/SwipablePages';
 import { useTheme } from '../../contexts/ThemeContext';
 import { MeterResult } from '../../ble/parseResult';
@@ -137,9 +136,6 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
       marginBottom: 12,
       overflow: 'hidden',
     },
-    spectrumRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3 },
-    spectrumNm: { color: colors.muted, fontSize: 12, fontFamily: 'monospace' },
-    spectrumValue: { color: colors.text, fontSize: 12, fontFamily: 'monospace' },
 
     rvaluesTitle: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
   });
@@ -160,19 +156,8 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
           key: 'spectrum',
           label: 'Spectrum',
           content: (
-            <View>
-              <View style={styles.chartCard}>
-                <SpectrumChart spectrum={result.spectrum} width={chartWidth} />
-              </View>
-
-              <CollapsibleSection title="Raw Values" count={result.spectrum.length}>
-                {result.spectrum.map((p) => (
-                  <View key={p.nm} style={styles.spectrumRow}>
-                    <Text style={styles.spectrumNm}>{p.nm}nm</Text>
-                    <Text style={styles.spectrumValue}>{p.value.toFixed(4)}</Text>
-                  </View>
-                ))}
-              </CollapsibleSection>
+            <View style={styles.chartCard}>
+              <SpectrumChart spectrum={result.spectrum} width={chartWidth} />
             </View>
           ),
         },

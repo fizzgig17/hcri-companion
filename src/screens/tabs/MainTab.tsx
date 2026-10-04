@@ -16,7 +16,7 @@
 // extra UI at all, same as before.
 
 import React from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Modal, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Modal, StyleSheet } from 'react-native';
 import PrimaryButton from '../../components/PrimaryButton';
 import StatCard from '../../components/StatCard';
 import SpectrumTab from './SpectrumTab';
@@ -27,6 +27,7 @@ import { SpectralAnalysis } from '../../utils/spectralAnalysis';
 import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
 import { HCRI_BRAND_HOST } from '../../hcri/buildTarget';
 import { EMPTY_METER_RESULT, EMPTY_SPECTRAL_ANALYSIS } from '../../utils/placeholderReading';
+import { defaultLabel } from '../../hcri/buildCsv';
 
 export type Status = 'disconnected' | 'connecting' | 'connected' | 'measuring' | 'uploading';
 
@@ -91,6 +92,20 @@ interface Props {
    * Home's own header (dropped along with the rest of that header -- see
    * HomeScreen.tsx), so this is the one place it's still visible at all. */
   connectedDeviceName?: string | null;
+  /** Upload title/label -- the SAME state DataTab's own Upload Title field
+   * reads/writes, lifted up to HomeScreen so it survives switching tabs and
+   * taking multiple readings, only resetting when the app itself restarts
+   * (a cold start) -- see HomeScreen.tsx's own long comment on this state.
+   * Shown here too so you don't have to switch to Data just to set a title
+   * before uploading from Main. */
+  uploadTitle: string;
+  onUploadTitleChange: (title: string) => void;
+  /** hCRI.io username, cached in HomeScreen from secureStorage -- purely for
+   * showing what the default title WOULD be (defaultLabel()) before you've
+   * typed anything of your own. null if no account is set up yet, in which
+   * case defaultLabel() just leaves that piece out rather than a blank
+   * placeholder. Same prop DataTab takes -- see its own comment. */
+  cachedUsername: string | null;
 }
 
 export default function MainTab({
@@ -115,6 +130,9 @@ export default function MainTab({
   onCopyLink,
   statIds,
   connectedDeviceName,
+  uploadTitle,
+  onUploadTitleChange,
+  cachedUsername,
 }: Props) {
   const { colors, statusColors } = useTheme();
   const canSwitchMeters = status === 'connected' && (devicePickerDevices?.length ?? 0) > 1;
@@ -150,15 +168,62 @@ export default function MainTab({
     customizeHint: { color: colors.mutedFaint, fontSize: 10.5, marginBottom: 10, textAlign: 'center' },
     uploadRow: { flexDirection: 'row', alignItems: 'center' },
     uploadButton: { flex: 1 },
-    // Green, same as the "connected" status dot/accent buttons -- reads as
-    // a quiet, positive confirmation rather than another popup to dismiss.
-    uploadCheck: { color: colors.accent, fontSize: 20, fontWeight: '700', marginLeft: 10, marginTop: 8 },
-    // Same vertical slot as uploadCheck (marginTop lines it up with the
-    // button, not the checkmark beside it -- they sit side by side, not
-    // stacked) but its own tap target rather than plain Text, since this
-    // one actually does something.
-    copyLinkButton: { marginLeft: 10, marginTop: 6, padding: 2 },
-    copyLinkIcon: { color: colors.info, fontSize: 18 },
+    // Replaces the old separate checkmark + bare-icon-button pair -- next
+    // to each other, both unlabeled, they read as two things rather than
+    // one ("why are there two icons?"). A single pill that's both the
+    // success confirmation AND the copy-link action -- its own outline in
+    // the accent color IS the confirmation, so there's no bare checkmark
+    // needed alongside it. Mirrors DataTab's identical style -- see its
+    // own copy of this comment for the one place this is defined, in case
+    // these two ever drift.
+    copyLinkPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginLeft: 10,
+      paddingVertical: 7,
+      paddingHorizontal: 12,
+      borderRadius: 18,
+      borderWidth: 1.5,
+      borderColor: colors.accent,
+    },
+    copyLinkIcon: { fontSize: 15, marginRight: 6 },
+    copyLinkSpinner: { marginRight: 6 },
+    copyLinkLabel: { color: colors.accent, fontSize: 13, fontWeight: '700' },
+
+    // Same Upload Title field DataTab has always had -- added here too so
+    // you don't have to switch tabs just to set a title before uploading
+    // from Main. Styles/behavior copied verbatim from DataTab.tsx (see its
+    // own comments for why the default is an overlaid Text rather than
+    // TextInput's native `placeholder`), reading/writing the SAME lifted
+    // uploadTitle state in HomeScreen -- not a second, independent field.
+    fieldLabel: { color: colors.muted, fontSize: 11, marginBottom: 4 },
+    titleInputWrap: {
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 8,
+      minHeight: 38,
+      position: 'relative',
+      marginBottom: 10,
+    },
+    titleInputOverlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      color: colors.muted,
+      fontSize: 13,
+    },
+    titleInput: {
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      color: colors.text,
+      fontSize: 13,
+      minHeight: 38,
+    },
 
     modalBackdrop: {
       flex: 1,
@@ -281,6 +346,31 @@ export default function MainTab({
         {status === 'connected' && <PrimaryButton title="Take Reading" onPress={measure} />}
         {status === 'measuring' && <PrimaryButton title="Measuring…" onPress={() => {}} disabled />}
 
+        {/* Same Upload Title field as the Data tab -- see MainTab's own
+            styles comment above. Shown whenever there's something to
+            upload, same as the Upload button right below it. */}
+        {hasReading && (
+          <>
+            <Text style={styles.fieldLabel}>Upload Title</Text>
+            <View style={styles.titleInputWrap}>
+              {uploadTitle.length === 0 && (
+                <Text style={styles.titleInputOverlay} pointerEvents="none">
+                  {defaultLabel(cachedUsername, displayResult.deviceName)}
+                </Text>
+              )}
+              <TextInput
+                style={styles.titleInput}
+                value={uploadTitle}
+                onChangeText={onUploadTitleChange}
+                autoCapitalize="none"
+                autoCorrect={false}
+                multiline
+                textAlignVertical="top"
+              />
+            </View>
+          </>
+        )}
+
         <View style={styles.uploadRow}>
           <PrimaryButton
             title={`Upload to ${HCRI_BRAND_HOST}`}
@@ -292,26 +382,32 @@ export default function MainTab({
           {/* Replaces the old "Uploaded"/"Upload failed" Alert on success --
               a failed attempt still raises a real Alert (see HomeScreen.tsx's
               upload()), since that's the one outcome actually worth
-              interrupting for. */}
-          {uploadSucceeded && <Text style={styles.uploadCheck}>✓</Text>}
-          {/* Copies this report's hcri.io link to the clipboard -- a public
-              report's link needs no request at all, a private one mints/
-              reuses its share token first (see getReportLink.ts). Only
-              shows once canCopyLink is true, i.e. right next to the
-              checkmark above, never on its own. */}
+              interrupting for. This pill IS the success confirmation (its
+              outline only appears once uploadSucceeded is true) as well as
+              the copy-link action, replacing the old separate checkmark +
+              bare-icon pair. Falls back to a plain "Uploaded" pill (no tap
+              action) on the rare report canCopyLink never goes true for --
+              still a clear success signal even without a link to copy. */}
           {uploadSucceeded && canCopyLink && (
             <TouchableOpacity
               onPress={onCopyLink}
               disabled={copyingLink}
-              style={styles.copyLinkButton}
+              style={styles.copyLinkPill}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               {copyingLink ? (
-                <ActivityIndicator size="small" color={colors.info} />
+                <ActivityIndicator size="small" color={colors.accent} style={styles.copyLinkSpinner} />
               ) : (
                 <Text style={styles.copyLinkIcon}>🔗</Text>
               )}
+              <Text style={styles.copyLinkLabel}>{copyingLink ? 'Copying…' : 'Copy Link'}</Text>
             </TouchableOpacity>
+          )}
+          {uploadSucceeded && !canCopyLink && (
+            <View style={styles.copyLinkPill}>
+              <Text style={styles.copyLinkIcon}>✓</Text>
+              <Text style={styles.copyLinkLabel}>Uploaded</Text>
+            </View>
           )}
         </View>
         {status === 'connected' && <PrimaryButton title="Disconnect" onPress={disconnect} variant="muted" />}
