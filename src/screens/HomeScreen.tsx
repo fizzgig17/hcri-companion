@@ -14,8 +14,10 @@ import { MeterConnection } from '../ble/MeterConnection';
 import { initializeMeter, takeMeasurement } from '../ble/takeMeasurement';
 import { MeterResult } from '../ble/parseResult';
 import { analyzeSpectrum } from '../utils/spectralAnalysis';
+import Clipboard from '@react-native-clipboard/clipboard';
 import { buildCsv, defaultLabel } from '../hcri/buildCsv';
 import { uploadToHcri } from '../hcri/uploadToHcri';
+import { getReportLink } from '../hcri/getReportLink';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
 import { loadKeepAwakePreference, loadStayConnectedInBackgroundPreference } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
@@ -79,6 +81,19 @@ export default function HomeScreen({ navigation }: any) {
   // Alert (see upload() below), which is the one outcome worth
   // interrupting for.
   const [uploadSucceeded, setUploadSucceeded] = useState(false);
+  // The {id, isPublic} of whichever upload most recently succeeded for the
+  // CURRENT reading -- all the copy-link button needs, and all
+  // uploadToHcri's response gives it for free (no extra request for a
+  // public report; see getReportLink.ts). Cleared alongside
+  // uploadSucceeded any time a fresh upload attempt starts, same reasoning
+  // as that flag: a link for a PREVIOUS reading's report should never sit
+  // next to a checkmark that looks like it's describing this one.
+  const [lastUploadedReport, setLastUploadedReport] = useState<{ id: number; isPublic: boolean } | null>(null);
+  // True while the copy-link button's own request (getReportLink, for a
+  // private report only -- a public one resolves with no request) is in
+  // flight, so the icon can show a spinner instead of being tappable
+  // twice in a row.
+  const [copyingLink, setCopyingLink] = useState(false);
   // Cached just for building default labels/previews (defaultLabel()) --
   // the actual upload/measure() paths each load fresh credentials from
   // secureStorage right before they need them, so a stale value here can
@@ -550,10 +565,11 @@ export default function HomeScreen({ navigation }: any) {
     }
 
     setStatus('uploading');
-    // Clears any checkmark left over from a previous attempt on this same
-    // reading while this one is in flight, rather than leaving a stale
-    // "succeeded" showing during a retry.
+    // Clears any checkmark (and copy-link icon) left over from a previous
+    // attempt on this same reading while this one is in flight, rather
+    // than leaving a stale "succeeded" showing during a retry.
     setUploadSucceeded(false);
+    setLastUploadedReport(null);
     const csv = buildCsv(result);
     // Use whatever the person typed as the upload title if there's anything
     // there; fall back to the generated username+timestamp label only when
@@ -569,6 +585,12 @@ export default function HomeScreen({ navigation }: any) {
       // a small inline checkmark next to the Upload button instead, so a
       // routine upload doesn't need a tap-to-dismiss modal every time.
       setUploadSucceeded(true);
+      // Only set when the server actually returned both fields (see
+      // UploadResult's own comment) -- an older/unexpected response shape
+      // just means no copy-link icon shows, not a broken upload.
+      if (typeof res.reportId === 'number' && typeof res.isPublic === 'boolean') {
+        setLastUploadedReport({ id: res.reportId, isPublic: res.isPublic });
+      }
     } else {
       // A failure is still worth interrupting for -- this is the one
       // outcome that keeps the real Alert.
@@ -576,6 +598,37 @@ export default function HomeScreen({ navigation }: any) {
     }
     setStatus('connected');
   }, [result, navigation, appendLog, uploadTitle]);
+
+  // Resolves the current lastUploadedReport into a link (see
+  // getReportLink.ts) and puts it on the clipboard. Needs its own fresh
+  // credentials load (same reasoning as upload() above -- never trust a
+  // cached token) since this can be tapped a while after the upload
+  // itself finished.
+  const copyReportLink = useCallback(async () => {
+    if (!lastUploadedReport) return;
+    const creds = await loadHcriCredentials();
+    if (!creds) {
+      Alert.alert('No hCRI.io account set up', 'Add your username and API token first.', [
+        { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+      return;
+    }
+    setCopyingLink(true);
+    const res = await getReportLink(
+      lastUploadedReport.id,
+      lastUploadedReport.isPublic,
+      creds.token,
+      appendLog
+    );
+    setCopyingLink(false);
+    if (res.success && res.link) {
+      Clipboard.setString(res.link);
+      appendLog(`Copied report link: ${res.link}`);
+    } else {
+      Alert.alert('Could not get link', res.message || 'Something went wrong. Please try again.');
+    }
+  }, [lastUploadedReport, navigation, appendLog]);
 
   // History's own rename/delete/upload/share handlers now live in
   // HistoryScreen.tsx -- History is its own top-level tab, not a panel
@@ -672,6 +725,9 @@ export default function HomeScreen({ navigation }: any) {
             onUpload={upload}
             uploading={status === 'uploading'}
             uploadSucceeded={uploadSucceeded}
+            canCopyLink={!!lastUploadedReport}
+            copyingLink={copyingLink}
+            onCopyLink={copyReportLink}
             statIds={statIds}
             connectedDeviceName={deviceName}
           />
@@ -683,6 +739,9 @@ export default function HomeScreen({ navigation }: any) {
             onUpload={upload}
             uploading={status === 'uploading'}
             uploadSucceeded={uploadSucceeded}
+            canCopyLink={!!lastUploadedReport}
+            copyingLink={copyingLink}
+            onCopyLink={copyReportLink}
             uploadTitle={uploadTitle}
             onUploadTitleChange={setUploadTitle}
             onShareCsv={shareCurrentCsv}

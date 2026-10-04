@@ -70,6 +70,17 @@ interface Props {
    * in, so the checkmark from a previous reading's upload never lingers
    * next to a result it doesn't actually describe. */
   uploadSucceeded: boolean;
+  /** True once the most recent successful upload's {id, isPublic} is
+   * known -- i.e. there's a report the link icon can actually resolve a
+   * link for right now. Goes false again the moment a new upload starts
+   * (see HomeScreen.tsx), same lifetime as uploadSucceeded. */
+  canCopyLink: boolean;
+  /** True while onCopyLink's own request is in flight (a private report
+   * needs one call to mint/fetch its share token; a public report
+   * resolves with none at all -- see getReportLink.ts). */
+  copyingLink: boolean;
+  /** Resolves the current report's link and puts it on the clipboard. */
+  onCopyLink: () => void;
   /** Which measurements to show in the result card, and in what order --
    * the person's own customization from Settings (see
    * storage/statDisplayPrefs.ts), already resolved down to just the
@@ -99,6 +110,9 @@ export default function MainTab({
   onUpload,
   uploading,
   uploadSucceeded,
+  canCopyLink,
+  copyingLink,
+  onCopyLink,
   statIds,
   connectedDeviceName,
 }: Props) {
@@ -139,6 +153,12 @@ export default function MainTab({
     // Green, same as the "connected" status dot/accent buttons -- reads as
     // a quiet, positive confirmation rather than another popup to dismiss.
     uploadCheck: { color: colors.accent, fontSize: 20, fontWeight: '700', marginLeft: 10, marginTop: 8 },
+    // Same vertical slot as uploadCheck (marginTop lines it up with the
+    // button, not the checkmark beside it -- they sit side by side, not
+    // stacked) but its own tap target rather than plain Text, since this
+    // one actually does something.
+    copyLinkButton: { marginLeft: 10, marginTop: 6, padding: 2 },
+    copyLinkIcon: { color: colors.info, fontSize: 18 },
 
     modalBackdrop: {
       flex: 1,
@@ -274,6 +294,25 @@ export default function MainTab({
               upload()), since that's the one outcome actually worth
               interrupting for. */}
           {uploadSucceeded && <Text style={styles.uploadCheck}>✓</Text>}
+          {/* Copies this report's hcri.io link to the clipboard -- a public
+              report's link needs no request at all, a private one mints/
+              reuses its share token first (see getReportLink.ts). Only
+              shows once canCopyLink is true, i.e. right next to the
+              checkmark above, never on its own. */}
+          {uploadSucceeded && canCopyLink && (
+            <TouchableOpacity
+              onPress={onCopyLink}
+              disabled={copyingLink}
+              style={styles.copyLinkButton}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              {copyingLink ? (
+                <ActivityIndicator size="small" color={colors.info} />
+              ) : (
+                <Text style={styles.copyLinkIcon}>🔗</Text>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
         {status === 'connected' && <PrimaryButton title="Disconnect" onPress={disconnect} variant="muted" />}
       </View>
