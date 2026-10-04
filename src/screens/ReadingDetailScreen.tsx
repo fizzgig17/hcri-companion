@@ -96,10 +96,10 @@ export default function ReadingDetailScreen({ route, navigation }: any) {
             return <StatCard key={id} label={metric.label} value={out.value} unit={out.unit} compact />;
           })}
         </View>
-        {/* numberOfLines + adjustsFontSizeToFit -- see MainTab.tsx's
-            identical copy of this hint for why. */}
-        <Text style={styles.customizeHint} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-          Tap ⚙ Settings to customize which measurements show here, and in what order.
+        {/* numberOfLines + adjustsFontSizeToFit + the shortened text itself
+            -- see MainTab.tsx's identical copy of this hint for why. */}
+        <Text style={styles.customizeHint} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+          Tap ⚙ Settings to customize these measurements.
         </Text>
       </View>
 
