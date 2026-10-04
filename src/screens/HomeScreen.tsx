@@ -21,7 +21,7 @@ import { getReportLink } from '../hcri/getReportLink';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
 import { loadKeepAwakePreference, loadStayConnectedInBackgroundPreference } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
-import { addReading, renameReading, setReadingReportLink } from '../storage/readingHistory';
+import { addReading, recordUpload } from '../storage/readingHistory';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
 import { shareDebugLog } from '../utils/shareLog';
 import { shareSingleReadingCsv } from '../utils/shareCsv';
@@ -696,17 +696,17 @@ export default function HomeScreen({ navigation }: any) {
       // reading's name in History too, not just in the upload itself) and
       // the resulting report link (so History can offer the same Copy
       // Link affordance later, even after this reading stops being the
-      // "current" one). Best-effort: a storage hiccup here shouldn't make
-      // an otherwise-successful upload look like it failed.
+      // "current" one). One atomic recordUpload() call, not a separate
+      // rename + setReadingReportLink fired side by side -- two concurrent
+      // read-modify-writes race each other and the later one to finish
+      // silently clobbers the other's change, which is exactly what made
+      // some uploaded readings end up with a synced title but no Copy Link
+      // (or neither) instead of both. Best-effort: a storage hiccup here
+      // shouldn't make an otherwise-successful upload look like it failed.
       if (currentReadingId) {
-        renameReading(currentReadingId, label).catch((e: any) =>
-          appendLog(`Failed to sync upload title to history: ${e.message}`)
+        recordUpload(currentReadingId, label, res.reportId, res.isPublic).catch((e: any) =>
+          appendLog(`Failed to sync upload to history: ${e.message}`)
         );
-        if (typeof res.reportId === 'number' && typeof res.isPublic === 'boolean') {
-          setReadingReportLink(currentReadingId, res.reportId, res.isPublic).catch((e: any) =>
-            appendLog(`Failed to save report link to history: ${e.message}`)
-          );
-        }
       }
     } else {
       // A failure is still worth interrupting for -- this is the one
@@ -783,6 +783,14 @@ export default function HomeScreen({ navigation }: any) {
     // bar and the first bit of scrolling content, so this would just be a
     // second gap stacked on top of that one.
     content: { paddingHorizontal: 16, paddingBottom: 56 + keyboardHeight },
+    // Explicit flex:1 (new now that this ScrollView is conditionally
+    // rendered as a sibling of LogsTab -- see the activeTab==='logs'
+    // branch above) rather than relying on it picking up the remaining
+    // space implicitly -- makes it behave identically to LogsTab's own
+    // flex:1 root either way, instead of leaving which one actually fills
+    // the screen down to however Yoga happens to size an unstyled
+    // ScrollView here.
+    scrollArea: { flex: 1 },
     // The docked header sitting above the ScrollView -- NOT inside its
     // contentContainerStyle any more (see the TabBar render below): a
     // sibling View here can't scroll away with the rest of the content,
@@ -823,7 +831,17 @@ export default function HomeScreen({ navigation }: any) {
           onChange={setActiveTab}
         />
       </View>
-      <ScrollView ref={scrollRef} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      {/* Logs is NOT rendered inside this ScrollView -- see LogsTab.tsx's
+          own file-level comment for why: nested inside here, dragging
+          past the end of the log's own inner scroller used to hand the
+          gesture off to THIS ScrollView, dragging the tab bar above (and
+          LogsTab's own Share/Clear buttons) up off-screen with it. As a
+          flex:1 sibling instead, there's nothing above it that CAN
+          scroll, so that hand-off has nowhere to go. */}
+      {activeTab === 'logs' ? (
+        <LogsTab log={log} onShare={shareLog} onClear={clearLog} />
+      ) : (
+      <ScrollView ref={scrollRef} style={styles.scrollArea} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {activeTab === 'main' && (
           <MainTab
             status={status}
@@ -870,8 +888,8 @@ export default function HomeScreen({ navigation }: any) {
             cachedUsername={cachedUsername}
           />
         )}
-        {activeTab === 'logs' && <LogsTab log={log} onShare={shareLog} onClear={clearLog} />}
       </ScrollView>
+      )}
     </SafeAreaView>
   );
 }

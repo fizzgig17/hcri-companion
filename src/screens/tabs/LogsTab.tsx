@@ -3,15 +3,27 @@
 // The "Logs" tab: the running debug log (including raw hex dumps from
 // takeMeasurement.ts) and the Share Debug Log button.
 //
-// The log lines live in their own fixed-height, independently-scrolling
-// box rather than just being laid out inline in HomeScreen's outer
-// ScrollView. With up to 100 lines (see appendLog's cap in HomeScreen),
-// scrolling through them in the outer ScrollView meant dragging the
-// header/tab bar off-screen too, since it was all one long page. This way
-// the header and tab bar stay put and only the log itself scrolls.
+// This tab is rendered by HomeScreen as a flex:1 SIBLING of the outer
+// ScrollView that Main/Data share, not INSIDE it (see HomeScreen.tsx's
+// activeTab==='logs' branch) -- the whole point being that nothing here
+// scrolls except the log box itself. An earlier version lived inside that
+// outer ScrollView with its own nested, fixed-height ScrollView for the
+// log; nestedScrollEnabled lets a nested ScrollView scroll on its own, but
+// once it hits ITS bottom the drag gesture hands off to the outer one,
+// dragging this tab's own Share/Clear buttons (and the docked tab bar
+// above everything) up off-screen along with it -- which is exactly the
+// "pushes the buttons at the top up off the screen" bug. With nothing
+// above this component able to scroll at all, that hand-off has nowhere
+// to go.
+//
+// Jump-to-top/middle/bottom buttons exist because these logs are a wall
+// of fixed-width hex dumps (takeMeasurement.ts) that can run to the
+// in-memory cap (100 lines, see HomeScreen's appendLog) -- dragging
+// through all of that by hand to compare "what happened right at the
+// start" against "what happened right before it failed" is slow.
 
-import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, useWindowDimensions, StyleSheet, Alert } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, LayoutChangeEvent } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 
 interface Props {
@@ -31,14 +43,24 @@ export default function LogsTab({ log, onShare, onClear }: Props) {
     ]);
   };
 
-  const { height } = useWindowDimensions();
-  // Leaves room for the header/tab bar above and the Share button inside
-  // this card -- the log box itself takes whatever's left, with a sane
-  // floor so it's never uselessly short on a small/split-screen window.
-  const logBoxHeight = Math.max(260, height - 320);
+  const scrollRef = useRef<ScrollView>(null);
+  // Tracked purely to compute "the middle" -- content height from the log
+  // box's own onContentSizeChange, viewport height from its onLayout. Both
+  // start at 0 (nothing scrolls anywhere until real measurements come in,
+  // which is fine -- jumpToMiddle() below guards against a 0 viewport).
+  const [contentHeight, setContentHeight] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
+
+  const jumpToTop = () => scrollRef.current?.scrollTo({ y: 0, animated: true });
+  const jumpToBottom = () => scrollRef.current?.scrollToEnd({ animated: true });
+  const jumpToMiddle = () => {
+    const target = Math.max((contentHeight - viewportHeight) / 2, 0);
+    scrollRef.current?.scrollTo({ y: target, animated: true });
+  };
 
   const styles = StyleSheet.create({
     card: {
+      flex: 1,
       backgroundColor: colors.card,
       borderRadius: 12,
       borderWidth: 1,
@@ -46,7 +68,7 @@ export default function LogsTab({ log, onShare, onClear }: Props) {
       padding: 14,
     },
     empty: { color: colors.mutedFaint, fontSize: 12, fontStyle: 'italic', paddingVertical: 4 },
-    buttonRow: { flexDirection: 'row', marginHorizontal: -4, marginBottom: 10 },
+    buttonRow: { flexDirection: 'row', marginHorizontal: -4, marginBottom: 8 },
     rowButton: { flex: 1, marginHorizontal: 4 },
     shareButton: {
       backgroundColor: colors.info,
@@ -64,7 +86,22 @@ export default function LogsTab({ log, onShare, onClear }: Props) {
       alignItems: 'center',
     },
     clearButtonText: { color: colors.danger, fontSize: 13, fontWeight: '600' },
+    // Smaller/quieter than the Share/Clear row above -- these are
+    // navigation shortcuts for the log already on screen, not actions
+    // that do anything, so they shouldn't compete for attention.
+    jumpRow: { flexDirection: 'row', marginHorizontal: -4, marginBottom: 10 },
+    jumpButton: {
+      flex: 1,
+      marginHorizontal: 4,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 8,
+      paddingVertical: 6,
+      alignItems: 'center',
+    },
+    jumpButtonText: { color: colors.muted, fontSize: 12, fontWeight: '600' },
     logBox: {
+      flex: 1,
       borderWidth: 1,
       borderColor: colors.cardBorder,
       borderRadius: 8,
@@ -87,10 +124,23 @@ export default function LogsTab({ log, onShare, onClear }: Props) {
               <Text style={styles.clearButtonText}>Clear Log</Text>
             </TouchableOpacity>
           </View>
+          <View style={styles.jumpRow}>
+            <TouchableOpacity style={styles.jumpButton} onPress={jumpToTop} activeOpacity={0.7}>
+              <Text style={styles.jumpButtonText}>⤒ Top</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.jumpButton} onPress={jumpToMiddle} activeOpacity={0.7}>
+              <Text style={styles.jumpButtonText}>Middle</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.jumpButton} onPress={jumpToBottom} activeOpacity={0.7}>
+              <Text style={styles.jumpButtonText}>⤓ Bottom</Text>
+            </TouchableOpacity>
+          </View>
           <ScrollView
-            style={[styles.logBox, { height: logBoxHeight }]}
-            nestedScrollEnabled
+            ref={scrollRef}
+            style={styles.logBox}
             showsVerticalScrollIndicator
+            onLayout={(e: LayoutChangeEvent) => setViewportHeight(e.nativeEvent.layout.height)}
+            onContentSizeChange={(_w, h) => setContentHeight(h)}
           >
             {log.map((line, i) => (
               <Text key={i} style={styles.logLine}>

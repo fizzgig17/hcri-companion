@@ -128,6 +128,37 @@ export async function setReadingReportLink(id: string, reportId: number, isPubli
   await saveAll(next);
 }
 
+/**
+ * Renames a reading AND records its report link in one read-modify-write --
+ * what Main/Data's upload() actually wants (see HomeScreen.tsx), and NOT
+ * the same thing as calling renameReading() and setReadingReportLink()
+ * back to back without awaiting one before starting the other: each of
+ * those does its own loadHistory()-then-saveAll() round trip, and two
+ * fired concurrently race each other -- whichever one's saveAll() finishes
+ * last wins outright, silently overwriting the other's change (confirmed
+ * 2026-10-04: this is why some uploaded readings ended up with their title
+ * synced but no report link, or neither, instead of both). Keeping it to
+ * a single load+modify+save avoids that race entirely rather than papering
+ * over it with sequencing at each call site. `reportId`/`isPublic` are
+ * optional so this can also be used for a rename-only sync if a future
+ * caller needs that, though today's one caller always has both by the
+ * time it calls this.
+ */
+export async function recordUpload(
+  id: string,
+  label: string,
+  reportId?: number,
+  isPublic?: boolean
+): Promise<void> {
+  const existing = await loadHistory();
+  const next = existing.map((r) =>
+    r.id === id
+      ? { ...r, label, ...(typeof reportId === 'number' && typeof isPublic === 'boolean' ? { reportId, reportIsPublic: isPublic } : {}) }
+      : r
+  );
+  await saveAll(next);
+}
+
 export async function deleteReading(id: string): Promise<void> {
   const existing = await loadHistory();
   await saveAll(existing.filter((r) => r.id !== id));
