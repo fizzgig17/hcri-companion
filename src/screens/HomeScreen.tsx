@@ -51,7 +51,23 @@ type TabKey = 'main' | 'data' | 'logs';
 // just resolve the instant it hears the first match: the whole point is
 // knowing whether a SECOND one is also in range, which means waiting out a
 // real window rather than racing to the first advertisement.
-const CONNECT_SCAN_WINDOW_MS = 3000;
+const CONNECT_SCAN_WINDOW_MS = 5000;
+
+// Confirmed 2026-10-04 (a debug-report capture): backgrounding the app
+// disconnects the meter (see the AppState effect below), and coming back to
+// the foreground immediately tries to reconnect -- but in that capture, the
+// reconnect's scan started only ~1.7s after the disconnect and came up
+// completely empty 3s later, even though the SAME meter had been found
+// without any trouble just ~11s before that. The central side (this app)
+// finishes its own disconnect quickly, but the PERIPHERAL (the meter) still
+// needs its own moment afterward to notice the link dropped and resume
+// advertising -- nothing this app's own disconnect() can wait on directly,
+// since that's happening entirely on the meter's side. Giving the
+// foreground-reconnect path a short head start before it even begins
+// scanning (not needed for a manual Connect tap, which already has a human
+// pause built in before the person taps it) gives the meter that moment
+// instead of racing it.
+const FOREGROUND_RECONNECT_DELAY_MS = 1500;
 
 export default function HomeScreen({ navigation }: any) {
   const { colors } = useTheme();
@@ -554,12 +570,25 @@ export default function HomeScreen({ navigation }: any) {
         // "reconnect" something that's already connected.
         if (statusRef.current === 'disconnected') {
           appendLog('App back in foreground -- reconnecting to meter...');
-          // preferLastDeviceOnMultiple: true -- this is a reconnect, not a
-          // fresh choice, so if more than one meter happens to be in range
-          // right now, silently go back to the one that was connected
-          // before backgrounding rather than popping up a picker the
-          // person didn't ask for (see connect()'s own comment on this).
-          connect({ preferLastDeviceOnMultiple: true });
+          // 'connecting' right away, even though the actual scan is about
+          // to be held off for a moment (see FOREGROUND_RECONNECT_DELAY_MS
+          // above) -- otherwise the status row would just keep showing
+          // "Disconnected" for that whole delay, looking like nothing was
+          // happening rather than like a reconnect already in progress.
+          setStatus('connecting');
+          setTimeout(() => {
+            // Status could have changed during the delay (the person
+            // backgrounded again, or tapped Connect/Disconnect themselves)
+            // -- only actually follow through if it's still exactly the
+            // "waiting to reconnect" state this timer was set up for.
+            if (statusRef.current !== 'connecting') return;
+            // preferLastDeviceOnMultiple: true -- this is a reconnect, not a
+            // fresh choice, so if more than one meter happens to be in range
+            // right now, silently go back to the one that was connected
+            // before backgrounding rather than popping up a picker the
+            // person didn't ask for (see connect()'s own comment on this).
+            connect({ preferLastDeviceOnMultiple: true });
+          }, FOREGROUND_RECONNECT_DELAY_MS);
         }
         return;
       }
