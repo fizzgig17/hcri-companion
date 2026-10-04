@@ -16,7 +16,7 @@
 // extra UI at all, same as before.
 
 import React from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Modal, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Modal, StyleSheet } from 'react-native';
 import PrimaryButton from '../../components/PrimaryButton';
 import StatCard from '../../components/StatCard';
 import SpectrumTab from './SpectrumTab';
@@ -27,6 +27,7 @@ import { SpectralAnalysis } from '../../utils/spectralAnalysis';
 import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
 import { HCRI_BRAND_HOST } from '../../hcri/buildTarget';
 import { EMPTY_METER_RESULT, EMPTY_SPECTRAL_ANALYSIS } from '../../utils/placeholderReading';
+import { defaultLabel } from '../../hcri/buildCsv';
 
 export type Status = 'disconnected' | 'connecting' | 'connected' | 'measuring' | 'uploading';
 
@@ -91,6 +92,20 @@ interface Props {
    * Home's own header (dropped along with the rest of that header -- see
    * HomeScreen.tsx), so this is the one place it's still visible at all. */
   connectedDeviceName?: string | null;
+  /** Upload title/label -- the SAME state DataTab's own Upload Title field
+   * reads/writes, lifted up to HomeScreen so it survives switching tabs and
+   * taking multiple readings, only resetting when the app itself restarts
+   * (a cold start) -- see HomeScreen.tsx's own long comment on this state.
+   * Shown here too so you don't have to switch to Data just to set a title
+   * before uploading from Main. */
+  uploadTitle: string;
+  onUploadTitleChange: (title: string) => void;
+  /** hCRI.io username, cached in HomeScreen from secureStorage -- purely for
+   * showing what the default title WOULD be (defaultLabel()) before you've
+   * typed anything of your own. null if no account is set up yet, in which
+   * case defaultLabel() just leaves that piece out rather than a blank
+   * placeholder. Same prop DataTab takes -- see its own comment. */
+  cachedUsername: string | null;
 }
 
 export default function MainTab({
@@ -115,6 +130,9 @@ export default function MainTab({
   onCopyLink,
   statIds,
   connectedDeviceName,
+  uploadTitle,
+  onUploadTitleChange,
+  cachedUsername,
 }: Props) {
   const { colors, statusColors } = useTheme();
   const canSwitchMeters = status === 'connected' && (devicePickerDevices?.length ?? 0) > 1;
@@ -171,6 +189,41 @@ export default function MainTab({
     copyLinkIcon: { fontSize: 15, marginRight: 6 },
     copyLinkSpinner: { marginRight: 6 },
     copyLinkLabel: { color: colors.accent, fontSize: 13, fontWeight: '700' },
+
+    // Same Upload Title field DataTab has always had -- added here too so
+    // you don't have to switch tabs just to set a title before uploading
+    // from Main. Styles/behavior copied verbatim from DataTab.tsx (see its
+    // own comments for why the default is an overlaid Text rather than
+    // TextInput's native `placeholder`), reading/writing the SAME lifted
+    // uploadTitle state in HomeScreen -- not a second, independent field.
+    fieldLabel: { color: colors.muted, fontSize: 11, marginBottom: 4 },
+    titleInputWrap: {
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 8,
+      minHeight: 38,
+      position: 'relative',
+      marginBottom: 10,
+    },
+    titleInputOverlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      color: colors.muted,
+      fontSize: 13,
+    },
+    titleInput: {
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      color: colors.text,
+      fontSize: 13,
+      minHeight: 38,
+    },
 
     modalBackdrop: {
       flex: 1,
@@ -292,6 +345,31 @@ export default function MainTab({
         {status === 'connecting' && <PrimaryButton title="Connecting…" onPress={() => {}} disabled />}
         {status === 'connected' && <PrimaryButton title="Take Reading" onPress={measure} />}
         {status === 'measuring' && <PrimaryButton title="Measuring…" onPress={() => {}} disabled />}
+
+        {/* Same Upload Title field as the Data tab -- see MainTab's own
+            styles comment above. Shown whenever there's something to
+            upload, same as the Upload button right below it. */}
+        {hasReading && (
+          <>
+            <Text style={styles.fieldLabel}>Upload Title</Text>
+            <View style={styles.titleInputWrap}>
+              {uploadTitle.length === 0 && (
+                <Text style={styles.titleInputOverlay} pointerEvents="none">
+                  {defaultLabel(cachedUsername, displayResult.deviceName)}
+                </Text>
+              )}
+              <TextInput
+                style={styles.titleInput}
+                value={uploadTitle}
+                onChangeText={onUploadTitleChange}
+                autoCapitalize="none"
+                autoCorrect={false}
+                multiline
+                textAlignVertical="top"
+              />
+            </View>
+          </>
+        )}
 
         <View style={styles.uploadRow}>
           <PrimaryButton
