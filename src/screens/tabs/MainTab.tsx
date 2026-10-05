@@ -214,6 +214,8 @@ export default function MainTab({
     // TextInput's native `placeholder`), reading/writing the SAME lifted
     // uploadTitle state in HomeScreen -- not a second, independent field.
     fieldLabel: { color: colors.muted, fontSize: 11, marginBottom: 4 },
+    // Extra gap under the "Test reading from…" note, only while a sample is showing.
+    fieldLabelAfterSample: { marginTop: 12 },
     titleInputWrap: {
       backgroundColor: colors.background,
       borderWidth: 1,
@@ -223,17 +225,15 @@ export default function MainTab({
       position: 'relative',
       marginBottom: 10,
     },
+    // In normal flow (not absolutely positioned) so a default title that wraps
+    // onto 2+ lines makes the box grow; the empty TextInput is laid over it.
     titleInputOverlay: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
       paddingHorizontal: 10,
       paddingVertical: 8,
       color: colors.muted,
       fontSize: 13,
     },
+    titleInputEmpty: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
     titleInput: {
       paddingHorizontal: 10,
       paddingVertical: 8,
@@ -387,7 +387,7 @@ export default function MainTab({
             upload, same as the Upload button right below it. */}
         {hasReading && (
           <>
-            <Text style={styles.fieldLabel}>Upload Title</Text>
+            <Text style={[styles.fieldLabel, result?.sampleLabel ? styles.fieldLabelAfterSample : null]}>Upload Title</Text>
             <View style={styles.titleInputWrap}>
               {uploadTitle.length === 0 && (
                 <Text style={styles.titleInputOverlay} pointerEvents="none">
@@ -396,7 +396,7 @@ export default function MainTab({
               )}
               <TextInput
                 ref={titleInputRef}
-                style={styles.titleInput}
+                style={[styles.titleInput, uploadTitle.length === 0 && styles.titleInputEmpty]}
                 value={uploadTitle}
                 onChangeText={onUploadTitleChange}
                 onFocus={() => scrollInputIntoView(titleInputRef)}
@@ -413,7 +413,7 @@ export default function MainTab({
           <PrimaryButton
             title={`Upload to ${HCRI_BRAND_HOST}`}
             onPress={onUpload}
-            disabled={uploading || !hasReading}
+            disabled={uploading || !hasReading || !!result?.sampleLabel}
             variant="muted"
             style={styles.uploadButton}
           />
