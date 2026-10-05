@@ -1,6 +1,9 @@
 package com.hcricompanion
 
 import android.os.Bundle
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
@@ -36,6 +39,23 @@ class MainActivity : ReactActivity() {
   // fresh instead of asking Android to restore anything.
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(null)
+  }
+
+  // Hides the bottom system navigation bar (the back/home/recents buttons
+  // or gesture pill) to give the app the extra screen height. It comes back
+  // transiently on an edge swipe and re-hides itself, and is re-applied
+  // whenever the window regains focus -- dialogs, the keyboard's own
+  // system UI and returning from another app all bring it back otherwise.
+  // Only the navigation bar is hidden; the status bar stays visible.
+  override fun onWindowFocusChanged(hasFocus: Boolean) {
+    super.onWindowFocusChanged(hasFocus)
+    if (hasFocus) hideNavigationBar()
+  }
+
+  private fun hideNavigationBar() {
+    val controller = WindowCompat.getInsetsController(window, window.decorView)
+    controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+    controller.hide(WindowInsetsCompat.Type.navigationBars())
   }
 
   /**

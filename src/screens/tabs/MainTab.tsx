@@ -44,6 +44,9 @@ interface Props {
   /** Spectrum-derived CCT/Duv/Ra/R9/x/y for `result` -- same analysis object SpectrumTab and DataTab use, computed once in HomeScreen. Null only when there's no result yet. */
   analysis: SpectralAnalysis | null;
   connect: () => void;
+  /** Loads a random public hCRI.io report as a sample reading -- offered while no meter is connected. */
+  onShowTestReading: () => void;
+  loadingTestReading: boolean;
   measure: () => void;
   disconnect: () => void;
   /** Manually clears any BLE connection left over from a previous app session -- see MeterConnection.resetStaleConnection(). Surfaced here since that's exactly the situation this button is for: meter won't connect, normally requiring a power cycle. */
@@ -120,6 +123,8 @@ export default function MainTab({
   result,
   analysis,
   connect,
+  onShowTestReading,
+  loadingTestReading,
   measure,
   disconnect,
   resetConnection,
@@ -159,6 +164,7 @@ export default function MainTab({
     statusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
     resetLink: { alignItems: 'center', paddingVertical: 8 },
     resetLinkText: { color: colors.muted, fontSize: 12 },
+    sampleNote: { color: colors.muted, fontSize: 12, fontStyle: 'italic', textAlign: 'center', marginTop: 8 },
     statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
     statusText: { color: colors.muted, fontSize: 14 },
     deviceNameText: { color: colors.text, fontSize: 14, fontWeight: '600' },
@@ -361,6 +367,17 @@ export default function MainTab({
             layouts (pre-reading vs. post-reading) with the button in a
             different spot in each. There's only one layout now. */}
         {status === 'disconnected' && <PrimaryButton title="Connect to Meter" onPress={connect} />}
+        {status === 'disconnected' && (
+          <PrimaryButton
+            title={loadingTestReading ? 'Loading test reading…' : 'Show a test reading'}
+            onPress={onShowTestReading}
+            disabled={loadingTestReading}
+            variant="muted"
+          />
+        )}
+        {result?.sampleLabel ? (
+          <Text style={styles.sampleNote}>Test reading from a public hCRI.io report: {result.sampleLabel}</Text>
+        ) : null}
         {status === 'connecting' && <PrimaryButton title="Connecting…" onPress={() => {}} disabled />}
         {status === 'connected' && <PrimaryButton title="Take Reading" onPress={measure} />}
         {status === 'measuring' && <PrimaryButton title="Measuring…" onPress={() => {}} disabled />}
