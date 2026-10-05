@@ -17,6 +17,7 @@
 
 import React, { useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Modal, StyleSheet } from 'react-native';
+import InfoButton from '../../components/InfoButton';
 import PrimaryButton from '../../components/PrimaryButton';
 import StatCard from '../../components/StatCard';
 import SpectrumTab from './SpectrumTab';
@@ -44,6 +45,9 @@ interface Props {
   /** Spectrum-derived CCT/Duv/Ra/R9/x/y for `result` -- same analysis object SpectrumTab and DataTab use, computed once in HomeScreen. Null only when there's no result yet. */
   analysis: SpectralAnalysis | null;
   connect: () => void;
+  /** Loads a random public hCRI.io report as a sample reading -- offered while no meter is connected. */
+  onShowTestReading: () => void;
+  loadingTestReading: boolean;
   measure: () => void;
   disconnect: () => void;
   /** Manually clears any BLE connection left over from a previous app session -- see MeterConnection.resetStaleConnection(). Surfaced here since that's exactly the situation this button is for: meter won't connect, normally requiring a power cycle. */
@@ -120,6 +124,8 @@ export default function MainTab({
   result,
   analysis,
   connect,
+  onShowTestReading,
+  loadingTestReading,
   measure,
   disconnect,
   resetConnection,
@@ -159,6 +165,7 @@ export default function MainTab({
     statusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
     resetLink: { alignItems: 'center', paddingVertical: 8 },
     resetLinkText: { color: colors.muted, fontSize: 12 },
+    sampleNote: { color: colors.muted, fontSize: 12, fontStyle: 'italic', textAlign: 'center', marginTop: 8 },
     statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
     statusText: { color: colors.muted, fontSize: 14 },
     deviceNameText: { color: colors.text, fontSize: 14, fontWeight: '600' },
@@ -208,6 +215,8 @@ export default function MainTab({
     // TextInput's native `placeholder`), reading/writing the SAME lifted
     // uploadTitle state in HomeScreen -- not a second, independent field.
     fieldLabel: { color: colors.muted, fontSize: 11, marginBottom: 4 },
+    // Extra gap under the "Test reading from…" note, only while a sample is showing.
+    fieldLabelAfterSample: { marginTop: 12 },
     titleInputWrap: {
       backgroundColor: colors.background,
       borderWidth: 1,
@@ -217,17 +226,15 @@ export default function MainTab({
       position: 'relative',
       marginBottom: 10,
     },
+    // In normal flow (not absolutely positioned) so a default title that wraps
+    // onto 2+ lines makes the box grow; the empty TextInput is laid over it.
     titleInputOverlay: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
       paddingHorizontal: 10,
       paddingVertical: 8,
       color: colors.muted,
       fontSize: 13,
     },
+    titleInputEmpty: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
     titleInput: {
       paddingHorizontal: 10,
       paddingVertical: 8,
@@ -361,6 +368,24 @@ export default function MainTab({
             layouts (pre-reading vs. post-reading) with the button in a
             different spot in each. There's only one layout now. */}
         {status === 'disconnected' && <PrimaryButton title="Connect to Meter" onPress={connect} />}
+        {status === 'disconnected' && (
+          <>
+            <PrimaryButton
+              title={loadingTestReading ? 'Loading test reading…' : 'Show a test reading'}
+              onPress={onShowTestReading}
+              disabled={loadingTestReading}
+              variant="muted"
+            />
+            <InfoButton
+              label="What's this?"
+              title="About test readings"
+              message="Don't have a meter handy? This loads the spectrum from a random public report on hCRI.io, so you can explore the stats and charts. It's sample data, not your own reading: it isn't saved to History and can't be uploaded or shared. Connect a meter and take a reading to replace it."
+            />
+          </>
+        )}
+        {result?.sampleLabel ? (
+          <Text style={styles.sampleNote}>Test reading from a public hCRI.io report: {result.sampleLabel}</Text>
+        ) : null}
         {status === 'connecting' && <PrimaryButton title="Connecting…" onPress={() => {}} disabled />}
         {status === 'connected' && <PrimaryButton title="Take Reading" onPress={measure} />}
         {status === 'measuring' && <PrimaryButton title="Measuring…" onPress={() => {}} disabled />}
@@ -370,7 +395,7 @@ export default function MainTab({
             upload, same as the Upload button right below it. */}
         {hasReading && (
           <>
-            <Text style={styles.fieldLabel}>Upload Title</Text>
+            <Text style={[styles.fieldLabel, result?.sampleLabel ? styles.fieldLabelAfterSample : null]}>Upload Title</Text>
             <View style={styles.titleInputWrap}>
               {uploadTitle.length === 0 && (
                 <Text style={styles.titleInputOverlay} pointerEvents="none">
@@ -379,7 +404,7 @@ export default function MainTab({
               )}
               <TextInput
                 ref={titleInputRef}
-                style={styles.titleInput}
+                style={[styles.titleInput, uploadTitle.length === 0 && styles.titleInputEmpty]}
                 value={uploadTitle}
                 onChangeText={onUploadTitleChange}
                 onFocus={() => scrollInputIntoView(titleInputRef)}
@@ -387,6 +412,7 @@ export default function MainTab({
                 autoCorrect={false}
                 multiline
                 textAlignVertical="top"
+                editable={!result?.sampleLabel}
               />
             </View>
           </>
@@ -396,7 +422,7 @@ export default function MainTab({
           <PrimaryButton
             title={`Upload to ${HCRI_BRAND_HOST}`}
             onPress={onUpload}
-            disabled={uploading || !hasReading}
+            disabled={uploading || !hasReading || !!result?.sampleLabel}
             variant="muted"
             style={styles.uploadButton}
           />

@@ -168,17 +168,15 @@ export default function DataTab({
       minHeight: 38,
       position: 'relative',
     },
+    // In normal flow (not absolutely positioned) so a default title that wraps
+    // onto 2+ lines makes the box grow; the empty TextInput is laid over it.
     titleInputOverlay: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
       paddingHorizontal: 10,
       paddingVertical: 8,
       color: colors.muted,
       fontSize: 13,
     },
+    titleInputEmpty: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
     titleInput: {
       paddingHorizontal: 10,
       paddingVertical: 8,
@@ -234,7 +232,7 @@ export default function DataTab({
           )}
           <TextInput
             ref={titleInputRef}
-            style={styles.titleInput}
+            style={[styles.titleInput, uploadTitle.length === 0 && styles.titleInputEmpty]}
             value={uploadTitle}
             onChangeText={onUploadTitleChange}
             onFocus={() => scrollInputIntoView(titleInputRef)}
@@ -242,6 +240,7 @@ export default function DataTab({
             autoCorrect={false}
             multiline
             textAlignVertical="top"
+            editable={!result.sampleLabel}
           />
         </View>
 
@@ -263,7 +262,7 @@ export default function DataTab({
           <PrimaryButton
             title={`Upload to ${HCRI_BRAND_HOST}`}
             onPress={onUpload}
-            disabled={uploading}
+            disabled={uploading || !!result.sampleLabel}
             variant="muted"
             style={styles.uploadButton}
           />

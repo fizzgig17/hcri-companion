@@ -8,7 +8,7 @@
 // of whatever the last reading and log happen to be.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, ScrollView, StyleSheet, Alert, AppState, Keyboard } from 'react-native';
+import { View, ScrollView, StyleSheet, Alert, AppState, Keyboard, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MeterConnection } from '../ble/MeterConnection';
 import { initializeMeter, takeMeasurement } from '../ble/takeMeasurement';
@@ -18,6 +18,7 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import { buildCsv, defaultLabel } from '../hcri/buildCsv';
 import { uploadToHcri } from '../hcri/uploadToHcri';
 import { getReportLink } from '../hcri/getReportLink';
+import { fetchSampleReading } from '../hcri/fetchSampleReading';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
 import { loadKeepAwakePreference, loadStayConnectedInBackgroundPreference } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
@@ -31,6 +32,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useLog } from '../contexts/LogContext';
 import { withBackgroundDisconnectSuppressed, isBackgroundDisconnectSuppressed } from '../ble/backgroundDisconnectGuard';
 import TabBar from '../components/TabBar';
+import InfoButton from '../components/InfoButton';
 import MainTab, { Status, FoundDevice } from './tabs/MainTab';
 import DataTab from './tabs/DataTab';
 import LogsTab from './tabs/LogsTab';
@@ -319,6 +321,32 @@ export default function HomeScreen({ navigation }: any) {
   const [multiMeterCandidates, setMultiMeterCandidates] = useState<FoundDevice[] | null>(null);
   const [devicePickerVisible, setDevicePickerVisible] = useState(false);
 
+  // Guards against stacking a second identical popup if the app-launch
+  // connect and a quick Connect tap both land while the first is still up.
+  const bluetoothAlertOpenRef = useRef(false);
+  const showBluetoothOffAlert = useCallback(() => {
+    if (bluetoothAlertOpenRef.current) return;
+    bluetoothAlertOpenRef.current = true;
+    const done = () => {
+      bluetoothAlertOpenRef.current = false;
+    };
+    Alert.alert(
+      'Bluetooth is off',
+      'Bluetooth is required to take readings. Turn it on, then tap Connect to Meter.',
+      [
+        {
+          text: 'Open Settings',
+          onPress: () => {
+            done();
+            Linking.sendIntent('android.settings.BLUETOOTH_SETTINGS').catch(() => Linking.openSettings());
+          },
+        },
+        { text: 'OK', style: 'cancel', onPress: done },
+      ],
+      { cancelable: true, onDismiss: done }
+    );
+  }, []);
+
   /**
    * `preferLastDeviceOnMultiple`: used by the "app came back to the
    * foreground after we auto-disconnected it" path below, NOT by a fresh
@@ -332,10 +360,23 @@ export default function HomeScreen({ navigation }: any) {
    * this still falls back to the normal picker rather than guessing.
    */
   const connect = useCallback(
-    async (opts?: { preferLastDeviceOnMultiple?: boolean }) => {
+    async (opts?: { preferLastDeviceOnMultiple?: boolean; promptIfBluetoothOff?: boolean }) => {
       setStatus('connecting');
       try {
         const conn = getConnection();
+        // Only the two "the person is actively trying to connect" entry
+        // points ask for this (app launch and the Connect to Meter button)
+        // -- NOT the foreground-return auto-reconnect, which would otherwise
+        // pop this up every time they switch back to the app with Bluetooth
+        // off. Anything other than a definite 'PoweredOff' (including an
+        // 'Unknown' while permissions are still being granted) just carries
+        // on into the normal flow below.
+        if (opts?.promptIfBluetoothOff && (await conn.getBluetoothState()) === 'PoweredOff') {
+          appendLog('Bluetooth is off -- prompting.');
+          showBluetoothOffAlert();
+          setStatus('disconnected');
+          return;
+        }
         // Clears any BLE connection to the meter left over from a previous
         // app/JS session (see MeterConnection.resetStaleConnection() for why
         // this is needed -- it's what used to require a power cycle after
@@ -385,7 +426,7 @@ export default function HomeScreen({ navigation }: any) {
         setStatus('disconnected');
       }
     },
-    [appendLog, getConnection]
+    [appendLog, getConnection, showBluetoothOffAlert]
   );
 
   /** Called when the person taps a device in the picker overlay -- whether it just opened from connect()'s own scan, or was reopened later via the "switch meter" icon while already connected to a different one of the same candidates. */
@@ -433,7 +474,7 @@ export default function HomeScreen({ navigation }: any) {
   // meter is in range it should pop up the picker same as a manual tap
   // would, not silently guess.
   useEffect(() => {
-    connect();
+    connect({ promptIfBluetoothOff: true });
     // Intentionally run once on mount only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -480,6 +521,34 @@ export default function HomeScreen({ navigation }: any) {
     await conn.resetStaleConnection().catch((e: any) => appendLog(`Reset failed: ${e.message}`));
     await connect();
   }, [appendLog, getConnection, connect]);
+
+  // "Show a test reading" (Main tab, no meter connected): loads a random
+  // public hCRI.io report's spectrum into the result view so the stats and
+  // charts can be tried out without a meter. Deliberately NOT saved to
+  // History and blocked from Upload/Share (see isSampleBlocked below) --
+  // it's someone else's data, not a reading this person took.
+  const [loadingTestReading, setLoadingTestReading] = useState(false);
+  const showTestReading = useCallback(async () => {
+    if (loadingTestReading) return;
+    setLoadingTestReading(true);
+    try {
+      const sample = await fetchSampleReading();
+      setResult(sample);
+      setUploadSucceeded(false);
+      setLastUploadedReport(null);
+      setCurrentReadingId(null);
+      appendLog(`Loaded test reading from hCRI.io: ${sample.sampleLabel}`);
+    } catch (e: any) {
+      appendLog(`Test reading failed: ${e.message}`);
+      Alert.alert('Could not load a test reading', e.message ?? 'Check your connection and try again.');
+    } finally {
+      setLoadingTestReading(false);
+    }
+  }, [loadingTestReading, appendLog]);
+
+  const blockSampleAction = useCallback((what: string) => {
+    Alert.alert('Test reading', `This is a sample from a public hCRI.io report, so it can't be ${what}. Take a real reading to do that.`);
+  }, []);
 
   const measure = useCallback(async () => {
     if (!connRef.current) return;
@@ -689,6 +758,10 @@ export default function HomeScreen({ navigation }: any) {
 
   const upload = useCallback(async () => {
     if (!result) return;
+    if (result.sampleLabel) {
+      blockSampleAction('uploaded');
+      return;
+    }
     // Tapping Upload is "I'm done editing the title" regardless of whether
     // the field still has focus -- the keyboard sitting there through the
     // whole upload (and the extra scroll padding it forces, see
@@ -756,7 +829,7 @@ export default function HomeScreen({ navigation }: any) {
       Alert.alert('Upload failed', `Could not upload "${label}". Check Logs for details.`);
     }
     setStatus('connected');
-  }, [result, navigation, appendLog, uploadTitle, currentReadingId]);
+  }, [result, navigation, appendLog, uploadTitle, currentReadingId, blockSampleAction]);
 
   // Resolves the current lastUploadedReport into a link (see
   // getReportLink.ts) and puts it on the clipboard. Needs its own fresh
@@ -797,11 +870,15 @@ export default function HomeScreen({ navigation }: any) {
 
   const shareCurrentCsv = useCallback(() => {
     if (!result) return;
+    if (result.sampleLabel) {
+      blockSampleAction('shared');
+      return;
+    }
     // Same label the current reading would upload under, so "share" and
     // "upload" always agree on what this reading is called.
     const label = uploadTitle.trim() || defaultLabel(cachedUsername, result.deviceName);
     withBackgroundDisconnectSuppressed(() => shareSingleReadingCsv(result, label));
-  }, [result, uploadTitle, cachedUsername]);
+  }, [result, uploadTitle, cachedUsername, blockSampleAction]);
 
   const shareLog = useCallback(() => {
     withBackgroundDisconnectSuppressed(() => shareDebugLog(log));
@@ -841,7 +918,9 @@ export default function HomeScreen({ navigation }: any) {
     // Carries the horizontal padding content's contentContainerStyle also
     // has, since this View is now a sibling of the ScrollView rather than
     // living inside its padded content area.
-    tabBarWrap: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
+    tabBarWrap: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12, flexDirection: 'row', alignItems: 'center' },
+    tabBarFlex: { flex: 1 },
+    headerInfo: { marginLeft: 10 },
   });
 
   return (
@@ -863,14 +942,21 @@ export default function HomeScreen({ navigation }: any) {
           just branding, not information, and Settings is now its own
           bottom tab rather than a button here (see App.tsx). */}
       <View style={styles.tabBarWrap}>
-        <TabBar
-          tabs={[
-            { key: 'main', label: 'Main' },
-            { key: 'data', label: 'Data' },
-            { key: 'logs', label: 'Logs' },
-          ]}
-          active={activeTab}
-          onChange={setActiveTab}
+        <View style={styles.tabBarFlex}>
+          <TabBar
+            tabs={[
+              { key: 'main', label: 'Main' },
+              { key: 'data', label: 'Data' },
+              { key: 'logs', label: 'Logs' },
+            ]}
+            active={activeTab}
+            onChange={setActiveTab}
+          />
+        </View>
+        <InfoButton
+          title="About hCRI Companion"
+          message="hCRI Companion connects to your Hopoocolor spectrometer over Bluetooth, takes a reading and shows its spectrum and lighting stats (CCT, CRI, TM-30 and more). Every reading is saved to History, and you can optionally upload it to your hCRI.io account to analyze and share it. To upload, add your hCRI.io username and API token in Settings."
+          style={styles.headerInfo}
         />
       </View>
       {/* Logs is NOT rendered inside this ScrollView -- see LogsTab.tsx's
@@ -890,7 +976,9 @@ export default function HomeScreen({ navigation }: any) {
             isBusy={isBusy}
             result={result}
             analysis={analysis}
-            connect={() => connect()}
+            connect={() => connect({ promptIfBluetoothOff: true })}
+            onShowTestReading={showTestReading}
+            loadingTestReading={loadingTestReading}
             measure={measure}
             disconnect={disconnect}
             resetConnection={resetConnection}

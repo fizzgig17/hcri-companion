@@ -107,6 +107,35 @@ async function waitForPoweredOn(manager: BleManager, timeoutMs = 5000): Promise<
   });
 }
 
+/**
+ * The adapter's Bluetooth state, for the "Bluetooth is off" prompt. A
+ * just-created manager reports 'Unknown'/'Resetting' for a moment while the
+ * native side settles (same race waitForPoweredOn() below handles), so this
+ * waits briefly for a real answer rather than treating that as "off" or
+ * "on". Never throws -- anything unexpected (e.g. permission not granted
+ * yet) comes back as 'Unknown', which callers treat as "carry on normally".
+ */
+async function readBluetoothState(manager: BleManager, settleMs = 1500): Promise<string> {
+  try {
+    const current = await manager.state();
+    if (current !== 'Unknown' && current !== 'Resetting') return current;
+    return await new Promise<string>((resolve) => {
+      const timer = setTimeout(() => {
+        sub.remove();
+        resolve(current);
+      }, settleMs);
+      const sub = manager.onStateChange((state) => {
+        if (state === 'Unknown' || state === 'Resetting') return;
+        clearTimeout(timer);
+        sub.remove();
+        resolve(state);
+      }, false);
+    });
+  } catch {
+    return 'Unknown';
+  }
+}
+
 /** True if the advertised name matches any known meter model prefix (see protocol.ts's METER_NAME_PREFIXES for why this is a list, not one hardcoded string). */
 function matchesKnownMeter(name: string | null | undefined): boolean {
   if (!name) return false;
@@ -561,6 +590,11 @@ export class MeterConnection {
   /** The connected device's BLE identifier, or null if not connected. Used by takeMeasurement()'s reconnect-per-reading experiment to reconnect to the SAME physical meter via connectToDevice() rather than re-running the name-prefix scan. */
   getDeviceId(): string | null {
     return this.device?.id ?? null;
+  }
+
+  /** 'PoweredOff' when the phone's Bluetooth is switched off; see readBluetoothState() above. */
+  getBluetoothState(): Promise<string> {
+    return readBluetoothState(this.manager);
   }
 
   /**
