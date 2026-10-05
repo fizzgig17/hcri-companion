@@ -32,6 +32,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useLog } from '../contexts/LogContext';
 import { withBackgroundDisconnectSuppressed, isBackgroundDisconnectSuppressed } from '../ble/backgroundDisconnectGuard';
 import TabBar from '../components/TabBar';
+import InfoButton from '../components/InfoButton';
 import MainTab, { Status, FoundDevice } from './tabs/MainTab';
 import DataTab from './tabs/DataTab';
 import LogsTab from './tabs/LogsTab';
@@ -917,7 +918,9 @@ export default function HomeScreen({ navigation }: any) {
     // Carries the horizontal padding content's contentContainerStyle also
     // has, since this View is now a sibling of the ScrollView rather than
     // living inside its padded content area.
-    tabBarWrap: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
+    tabBarWrap: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12, flexDirection: 'row', alignItems: 'center' },
+    tabBarFlex: { flex: 1 },
+    headerInfo: { marginLeft: 10 },
   });
 
   return (
@@ -939,14 +942,21 @@ export default function HomeScreen({ navigation }: any) {
           just branding, not information, and Settings is now its own
           bottom tab rather than a button here (see App.tsx). */}
       <View style={styles.tabBarWrap}>
-        <TabBar
-          tabs={[
-            { key: 'main', label: 'Main' },
-            { key: 'data', label: 'Data' },
-            { key: 'logs', label: 'Logs' },
-          ]}
-          active={activeTab}
-          onChange={setActiveTab}
+        <View style={styles.tabBarFlex}>
+          <TabBar
+            tabs={[
+              { key: 'main', label: 'Main' },
+              { key: 'data', label: 'Data' },
+              { key: 'logs', label: 'Logs' },
+            ]}
+            active={activeTab}
+            onChange={setActiveTab}
+          />
+        </View>
+        <InfoButton
+          title="About hCRI Companion"
+          message="hCRI Companion connects to your Hopoocolor spectrometer over Bluetooth, takes a reading and shows its spectrum and lighting stats (CCT, CRI, TM-30 and more). Every reading is saved to History, and you can upload it to your hCRI.io account to analyze and share it. Add your hCRI.io username and API token in Settings to upload."
+          style={styles.headerInfo}
         />
       </View>
       {/* Logs is NOT rendered inside this ScrollView -- see LogsTab.tsx's
