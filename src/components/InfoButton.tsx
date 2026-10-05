@@ -1,7 +1,8 @@
 // src/components/InfoButton.tsx
 //
-// A small round "i" that opens a short explanatory Alert. Used for the
-// app-wide help next to the top tab bar and for the test-reading button.
+// A small round "?" that opens a short explanatory Alert (app-wide help
+// next to the top tab bar), or -- when `label` is given -- a small text link
+// that does the same ("What's this?" under the test-reading button).
 
 import React from 'react';
 import { TouchableOpacity, Text, Alert, StyleSheet, StyleProp, ViewStyle } from 'react-native';
@@ -10,10 +11,12 @@ import { useTheme } from '../contexts/ThemeContext';
 interface Props {
   title: string;
   message: string;
+  /** When set, renders a small centered text link with this text instead of the round "?". */
+  label?: string;
   style?: StyleProp<ViewStyle>;
 }
 
-export default function InfoButton({ title, message, style }: Props) {
+export default function InfoButton({ title, message, label, style }: Props) {
   const { colors } = useTheme();
   const styles = StyleSheet.create({
     button: {
@@ -25,8 +28,23 @@ export default function InfoButton({ title, message, style }: Props) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    text: { color: colors.muted, fontSize: 15, fontWeight: '700', fontStyle: 'italic' },
+    text: { color: colors.muted, fontSize: 15, fontWeight: '700' },
+    link: { alignSelf: 'center', paddingVertical: 6 },
+    linkText: { color: colors.muted, fontSize: 12, textDecorationLine: 'underline' },
   });
+  if (label) {
+    return (
+      <TouchableOpacity
+        onPress={() => Alert.alert(title, message)}
+        style={[styles.link, style]}
+        hitSlop={{ top: 6, bottom: 6, left: 12, right: 12 }}
+        accessibilityLabel={title}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.linkText}>{label}</Text>
+      </TouchableOpacity>
+    );
+  }
   return (
     <TouchableOpacity
       onPress={() => Alert.alert(title, message)}
@@ -35,7 +53,7 @@ export default function InfoButton({ title, message, style }: Props) {
       accessibilityLabel={title}
       activeOpacity={0.7}
     >
-      <Text style={styles.text}>i</Text>
+      <Text style={styles.text}>?</Text>
     </TouchableOpacity>
   );
 }

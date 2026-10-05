@@ -3,10 +3,11 @@
 // A brief in-app title screen shown over the app as it starts (Android's
 // own system splash can only show the launcher icon, never text). The app
 // keeps loading and auto-connecting underneath it; this just fades out
-// after a moment. Rendered once per app launch.
+// after a moment. Rendered once per app launch. Title matches the header
+// on the hcri.io/companion page: "hCRI.io Companion".
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text } from 'react-native';
+import { Animated, Image, StyleSheet, Text } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 
 const HOLD_MS = 1100;
@@ -37,15 +38,18 @@ export default function SplashTitle() {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    title: { color: colors.text, fontSize: 30, fontWeight: '700' },
+    icon: { width: 112, height: 112, borderRadius: 24, marginBottom: 22 },
+    title: { color: colors.text, fontSize: 28, fontWeight: '800' },
     accent: { color: colors.accent },
-    subtitle: { color: colors.muted, fontSize: 14, marginTop: 6 },
+    companion: { color: colors.muted, fontWeight: '600' },
+    subtitle: { color: colors.muted, fontSize: 13, marginTop: 6 },
   });
 
   return (
     <Animated.View style={[styles.overlay, { opacity }]} pointerEvents="auto">
+      <Image source={require('../assets/splash_icon.png')} style={styles.icon} />
       <Text style={styles.title}>
-        <Text style={styles.accent}>hCRI</Text> Companion
+        hCRI<Text style={styles.accent}>.io</Text> <Text style={styles.companion}>Companion</Text>
       </Text>
       <Text style={styles.subtitle}>Spectrometer readings for hCRI.io</Text>
     </Animated.View>

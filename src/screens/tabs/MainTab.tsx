@@ -165,9 +165,6 @@ export default function MainTab({
     statusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
     resetLink: { alignItems: 'center', paddingVertical: 8 },
     resetLinkText: { color: colors.muted, fontSize: 12 },
-    testRow: { flexDirection: 'row', alignItems: 'center' },
-    testButton: { flex: 1 },
-    infoButton: { marginLeft: 10, marginTop: 8 },
     sampleNote: { color: colors.muted, fontSize: 12, fontStyle: 'italic', textAlign: 'center', marginTop: 8 },
     statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
     statusText: { color: colors.muted, fontSize: 14 },
@@ -372,20 +369,19 @@ export default function MainTab({
             different spot in each. There's only one layout now. */}
         {status === 'disconnected' && <PrimaryButton title="Connect to Meter" onPress={connect} />}
         {status === 'disconnected' && (
-          <View style={styles.testRow}>
+          <>
             <PrimaryButton
               title={loadingTestReading ? 'Loading test reading…' : 'Show a test reading'}
               onPress={onShowTestReading}
               disabled={loadingTestReading}
               variant="muted"
-              style={styles.testButton}
             />
             <InfoButton
+              label="What's this?"
               title="About test readings"
               message="Don't have a meter handy? This loads the spectrum from a random public report on hCRI.io, so you can explore the stats and charts. It's sample data, not your own reading: it isn't saved to History and can't be uploaded or shared. Connect a meter and take a reading to replace it."
-              style={styles.infoButton}
             />
-          </View>
+          </>
         )}
         {result?.sampleLabel ? (
           <Text style={styles.sampleNote}>Test reading from a public hCRI.io report: {result.sampleLabel}</Text>
