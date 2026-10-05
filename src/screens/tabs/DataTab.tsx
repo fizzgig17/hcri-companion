@@ -240,6 +240,7 @@ export default function DataTab({
             autoCorrect={false}
             multiline
             textAlignVertical="top"
+            editable={!result.sampleLabel}
           />
         </View>
 

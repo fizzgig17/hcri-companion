@@ -16,7 +16,7 @@
 // extra UI at all, same as before.
 
 import React, { useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Modal, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Modal, Alert, StyleSheet } from 'react-native';
 import PrimaryButton from '../../components/PrimaryButton';
 import StatCard from '../../components/StatCard';
 import SpectrumTab from './SpectrumTab';
@@ -164,6 +164,20 @@ export default function MainTab({
     statusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
     resetLink: { alignItems: 'center', paddingVertical: 8 },
     resetLinkText: { color: colors.muted, fontSize: 12 },
+    testRow: { flexDirection: 'row', alignItems: 'center' },
+    testButton: { flex: 1 },
+    infoButton: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginLeft: 10,
+      marginTop: 8,
+    },
+    infoButtonText: { color: colors.muted, fontSize: 15, fontWeight: '700', fontStyle: 'italic' },
     sampleNote: { color: colors.muted, fontSize: 12, fontStyle: 'italic', textAlign: 'center', marginTop: 8 },
     statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
     statusText: { color: colors.muted, fontSize: 14 },
@@ -368,12 +382,28 @@ export default function MainTab({
             different spot in each. There's only one layout now. */}
         {status === 'disconnected' && <PrimaryButton title="Connect to Meter" onPress={connect} />}
         {status === 'disconnected' && (
-          <PrimaryButton
-            title={loadingTestReading ? 'Loading test reading…' : 'Show a test reading'}
-            onPress={onShowTestReading}
-            disabled={loadingTestReading}
-            variant="muted"
-          />
+          <View style={styles.testRow}>
+            <PrimaryButton
+              title={loadingTestReading ? 'Loading test reading…' : 'Show a test reading'}
+              onPress={onShowTestReading}
+              disabled={loadingTestReading}
+              variant="muted"
+              style={styles.testButton}
+            />
+            <TouchableOpacity
+              onPress={() =>
+                Alert.alert(
+                  'About test readings',
+                  "Loads the spectrum from a random public report on hCRI.io, so you can see the stats and charts without a meter connected. It's sample data, not your own reading: it isn't saved to History and can't be uploaded or shared. Take a real reading to replace it."
+                )
+              }
+              style={styles.infoButton}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel="About test readings"
+            >
+              <Text style={styles.infoButtonText}>i</Text>
+            </TouchableOpacity>
+          </View>
         )}
         {result?.sampleLabel ? (
           <Text style={styles.sampleNote}>Test reading from a public hCRI.io report: {result.sampleLabel}</Text>
@@ -404,6 +434,7 @@ export default function MainTab({
                 autoCorrect={false}
                 multiline
                 textAlignVertical="top"
+                editable={!result?.sampleLabel}
               />
             </View>
           </>
