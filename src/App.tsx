@@ -12,7 +12,7 @@
 // HomeScreen/SettingsScreen with a bit of local state instead.
 
 import React from 'react';
-import { StatusBar } from 'react-native';
+import { StatusBar, View } from 'react-native';
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -23,6 +23,7 @@ import SettingsScreen from './screens/SettingsScreen';
 import ReadingDetailScreen from './screens/ReadingDetailScreen';
 import ErrorBoundary from './components/ErrorBoundary';
 import DevBuildBanner from './components/DevBuildBanner';
+import SplashTitle from './components/SplashTitle';
 import CrashReporter from './components/CrashReporter';
 import { HomeIcon, HistoryIcon, SettingsIcon } from './components/TabBarIcons';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
@@ -99,6 +100,7 @@ function Navigation() {
   const { colors, scheme } = useTheme();
 
   return (
+    <View style={{ flex: 1 }}>
     <NavigationContainer theme={scheme === 'light' ? DefaultTheme : DarkTheme}>
       {/* Status bar text/icons need to flip too -- dark-on-light is
           unreadable against a light background, and vice versa. */}
@@ -115,6 +117,10 @@ function Navigation() {
         <Stack.Screen name="ReadingDetail" component={ReadingDetailScreen} options={{ title: 'Reading' }} />
       </Stack.Navigator>
     </NavigationContainer>
+    {/* Title screen over the top for the first moment of every launch --
+        the app keeps loading/connecting underneath. See SplashTitle.tsx. */}
+    <SplashTitle />
+    </View>
   );
 }
 
