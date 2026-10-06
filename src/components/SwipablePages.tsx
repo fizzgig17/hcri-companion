@@ -131,7 +131,7 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
               {pages.map((p) => (
                 <View
                   key={p.key}
-                  style={{ width }}
+                  style={{ width, height: fixedHeight }}
                   onLayout={(e) => {
                     const h = e.nativeEvent.layout.height;
                     setPageHeights((prev) => (prev[p.key] === h ? prev : { ...prev, [p.key]: h }));
@@ -150,10 +150,9 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
             {pages[activeIndex]?.info && (
               <View style={styles.infoLeft}>
                 <InfoButton
-                  label="What's this?"
                   title={pages[activeIndex].info!.title}
                   message={pages[activeIndex].info!.message}
-                  style={{ paddingVertical: 2 }}
+                  style={{ width: 24, height: 24, borderRadius: 12 }}
                 />
               </View>
             )}

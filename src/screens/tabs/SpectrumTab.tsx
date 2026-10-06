@@ -92,8 +92,9 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
   // shrink if the region is short; elsewhere they keep 200/230. Overheads: pager dots (~26),
   // card padding/border (22), card bottom margin (12), R-values title (15).
   const fit = regionHeight && regionHeight > 0 ? Math.max(90, Math.floor(regionHeight - 26 - 22 - 12 - 15)) : undefined;
-  const chartHeight = fit === undefined ? undefined : Math.min(fit, 340);
-  const spectrumHeight = chartHeight === undefined ? 200 : Math.min(chartHeight, 320);
+  const chartHeight = fit === undefined ? undefined : Math.min(fit, 300);
+  const fill = chartHeight !== undefined;
+  const spectrumHeight = chartHeight === undefined ? 200 : Math.min(chartHeight, 260);
   // Computed once, here, rather than separately (and inconsistently) in
   // SwipablePages and in each of the three chart components -- see this
   // file's own Props comment above for why a hardcoded per-component
@@ -150,6 +151,10 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
       overflow: 'hidden',
     },
 
+    // Main tab: every page's card is the pager's full height, content centered,
+    // so the dots (and the ? beside them) sit directly under the card on every page.
+    fillCard: { flex: 1, marginBottom: 0, justifyContent: 'center' },
+
     rvaluesTitle: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
   });
 
@@ -174,7 +179,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
             message: `${source}\n\nThe spectral power distribution: how much light the source puts out at each wavelength from about 380 to 780 nm (violet to red), scaled so the tallest point is 1. Everything else here (CCT, CRI, TM-30) is calculated from this curve.`,
           },
           content: (
-            <View style={styles.chartCard}>
+            <View style={[styles.chartCard, fill && styles.fillCard]}>
               <SpectrumChart spectrum={result.spectrum} width={chartWidth} height={spectrumHeight} />
             </View>
           ),
@@ -187,7 +192,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
             message: `${source}\n\nThe colored horseshoe is every color the eye can see (CIE 1931 x,y). The black curve is the Planckian locus, the colors of a heated blackbody from 2,000 K to 10,000 K, and the blue dot is where this light falls. The closer the dot is to the curve, the closer to a natural white (Duv is the distance).`,
           },
           content: (
-            <View style={styles.chromCard}>
+            <View style={[styles.chromCard, fill && styles.fillCard]}>
               {/* Shorter than the original 280 -- trimmed because this
                   page (plus the measurement grid and docked tab bar above
                   it) was running long on Main. The diagram's X/Y domain
@@ -213,7 +218,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
             message: `${source}\n\nHow faithfully this light renders 15 reference colors compared with a natural light of the same color temperature. 100 is perfect. Ra is the average of R1-R8; R9 (saturated red) is the one most often low in LED lights.`,
           },
           content: (
-            <View style={styles.chartCard}>
+            <View style={[styles.chartCard, fill && styles.fillCard]}>
               <Text style={styles.rvaluesTitle}>CRI R1-R15</Text>
               {/* Explicit height, same as the Chrom page's chart just
                   above -- left to its own default (rowCount*22+28, ~360px
