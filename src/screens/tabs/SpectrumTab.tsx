@@ -182,7 +182,13 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
                   wider than tall at 280, so this compresses the horseshoe
                   a little further rather than clipping anything -- still
                   fully legible, just slightly flatter-looking. */}
-              <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} height={chartHeight ?? 230} width={chartWidth} />
+              {/* (0,0) is the "no reading yet" placeholder: leave the card blank
+                  rather than drawing the empty CIE diagram. */}
+              {analysis.x > 0 || analysis.y > 0 ? (
+                <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} height={chartHeight ?? 230} width={chartWidth} />
+              ) : (
+                <View style={{ height: chartHeight ?? 230 }} />
+              )}
             </View>
           ),
         },
