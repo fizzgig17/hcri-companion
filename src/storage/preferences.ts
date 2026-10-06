@@ -24,6 +24,18 @@ export async function saveKeepAwakePreference(enabled: boolean): Promise<void> {
   await AsyncStorage.setItem(KEEP_AWAKE_KEY, enabled ? 'true' : 'false');
 }
 
+const HAPTICS_KEY = 'hcri.io.pref.hapticFeedback';
+
+// Default ON: only an explicit 'false' turns button/result haptics off.
+export async function loadHapticsPreference(): Promise<boolean> {
+  const raw = await AsyncStorage.getItem(HAPTICS_KEY);
+  return raw !== 'false';
+}
+
+export async function saveHapticsPreference(enabled: boolean): Promise<void> {
+  await AsyncStorage.setItem(HAPTICS_KEY, enabled ? 'true' : 'false');
+}
+
 // Default OFF -- the standard (non-verbose) log already covers most
 // troubleshooting (connect/measure milestones, retries, failures). Verbose
 // adds the two categories that are rarely needed and can get genuinely

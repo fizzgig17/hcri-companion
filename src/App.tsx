@@ -11,7 +11,7 @@
 // needs to change -- swap it for simple conditional rendering of
 // HomeScreen/SettingsScreen with a bit of local state instead.
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StatusBar, View } from 'react-native';
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -29,6 +29,8 @@ import { HomeIcon, HistoryIcon, SettingsIcon } from './components/TabBarIcons';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { LogProvider } from './contexts/LogContext';
 import { IS_DEV_BUILD } from './hcri/buildTarget';
+import { hapticTap, setHapticsEnabled } from './utils/haptics';
+import { loadHapticsPreference } from './storage/preferences';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -45,6 +47,7 @@ function Tabs() {
 
   return (
     <Tab.Navigator
+      screenListeners={{ tabPress: () => hapticTap() }}
       screenOptions={{
         headerStyle: { backgroundColor: colors.card },
         headerTintColor: colors.text,
@@ -98,6 +101,9 @@ function Tabs() {
 // directly and instead renders this as ThemeProvider's child.
 function Navigation() {
   const { colors, scheme } = useTheme();
+  useEffect(() => {
+    loadHapticsPreference().then(setHapticsEnabled).catch(() => {});
+  }, []);
 
   return (
     <View style={{ flex: 1 }}>

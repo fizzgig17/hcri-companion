@@ -19,7 +19,16 @@ import { Vibration, Platform } from 'react-native';
 // crash the whole app for something as minor as a buzz -- so every call
 // here is wrapped and just silently no-ops if the native call fails for any
 // reason, instead of taking down the screen.
+// Master switch (Settings > "Haptic feedback"), loaded once at app start
+// and updated live by the Settings toggle. On by default.
+let hapticsEnabled = true;
+
+export function setHapticsEnabled(enabled: boolean): void {
+  hapticsEnabled = enabled;
+}
+
 function safeVibrate(pattern: number | number[]): void {
+  if (!hapticsEnabled) return;
   try {
     Vibration.vibrate(pattern);
   } catch {
@@ -37,4 +46,9 @@ export function hapticSuccess(): void {
 /** Slightly longer double-buzz for a failed/timed-out reading -- deliberately distinct from the success buzz so the two are tellable apart without looking at the screen. */
 export function hapticFailure(): void {
   safeVibrate(Platform.OS === 'android' ? [0, 60, 80, 60] : [0, 40, 60, 40]);
+}
+
+/** Very short tick for pressing a primary button or switching tabs. */
+export function hapticTap(): void {
+  safeVibrate(Platform.OS === 'android' ? 12 : 10);
 }

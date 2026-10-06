@@ -11,6 +11,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
+import { hapticTap } from '../utils/haptics';
 import type { Status } from '../screens/tabs/MainTab';
 
 type IconName = 'play' | 'bluetooth' | 'upload' | 'power' | 'copy' | 'check' | 'activity';
@@ -114,7 +115,7 @@ export default function ActionBar(p: Props) {
   }) => (
     <TouchableOpacity
       style={[styles.side, disabled && styles.disabled]}
-      onPress={onPress}
+      onPress={onPress && (() => { hapticTap(); onPress(); })}
       disabled={disabled || !onPress}
       activeOpacity={0.7}
       accessibilityRole="button"
@@ -134,8 +135,8 @@ export default function ActionBar(p: Props) {
     <View style={styles.center}>
       <TouchableOpacity
         style={[styles.ring, !onPress && styles.disabled]}
-        onPress={onPress}
-        onLongPress={onLongPress}
+        onPress={onPress && (() => { hapticTap(); onPress(); })}
+        onLongPress={onLongPress && (() => { hapticTap(); onLongPress(); })}
         disabled={!onPress}
         activeOpacity={0.8}
         accessibilityRole="button"

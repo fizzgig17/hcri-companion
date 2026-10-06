@@ -30,6 +30,8 @@ const DEFAULT_GENERATED_TOKEN_NAME = 'hCRI Companion Data Upload Token';
 const FORGOT_PASSWORD_URL = 'https://www.hcri.io/';
 import {
   loadKeepAwakePreference,
+  loadHapticsPreference,
+  saveHapticsPreference,
   saveKeepAwakePreference,
   loadVerboseLoggingPreference,
   saveVerboseLoggingPreference,
@@ -49,6 +51,7 @@ import { ThemeMode } from '../theme';
 import AboutTab from './tabs/AboutTab';
 import TabBar from '../components/TabBar';
 import VersionStamp from '../components/VersionStamp';
+import { hapticTap, setHapticsEnabled } from '../utils/haptics';
 
 // Labels/order for the Light/Dark/System picker below -- System first since
 // it's the default every fresh install starts on (see ThemeContext.tsx).
@@ -83,6 +86,7 @@ export default function SettingsScreen({ navigation }: any) {
   // below: the two are never shown/editable at the same time).
   const [loadedToken, setLoadedToken] = useState('');
   const [keepAwake, setKeepAwake] = useState(false);
+  const [haptics, setHaptics] = useState(true);
   // Default true ("stay connected") -- matches loadStayConnectedInBackground
   // Preference()'s own default, so this starts on the right value even
   // before that first load resolves rather than flashing "off" for a frame.
@@ -121,6 +125,7 @@ export default function SettingsScreen({ navigation }: any) {
       }
     });
     loadKeepAwakePreference().then(setKeepAwake);
+    loadHapticsPreference().then(setHaptics);
     loadStayConnectedInBackgroundPreference().then(setStayConnectedInBackground);
     loadVerboseLoggingPreference().then(setVerboseLogging);
     loadStatDisplayPrefs().then(setStatPrefs);
@@ -156,6 +161,13 @@ export default function SettingsScreen({ navigation }: any) {
     const next = defaultStatDisplayPrefs();
     setStatPrefs(next);
     saveStatDisplayPrefs(next).catch(() => {});
+  };
+
+  const toggleHaptics = async (value: boolean) => {
+    setHaptics(value);
+    setHapticsEnabled(value);
+    if (value) hapticTap(); // let them feel what they just turned on
+    await saveHapticsPreference(value);
   };
 
   const toggleKeepAwake = async (value: boolean) => {
@@ -598,6 +610,16 @@ export default function SettingsScreen({ navigation }: any) {
             );
           })}
         </View>
+      </View>
+
+      <View style={styles.toggleRow}>
+        <View style={styles.toggleTextWrap}>
+          <Text style={styles.toggleLabel}>Haptic feedback</Text>
+          <Text style={styles.toggleHint}>
+            A short vibration when you press the main buttons or switch tabs, and when a reading finishes or fails.
+          </Text>
+        </View>
+        <Switch value={haptics} onValueChange={toggleHaptics} trackColor={{ true: colors.accent }} />
       </View>
 
       <View style={styles.toggleRow}>
