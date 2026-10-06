@@ -31,7 +31,6 @@ import {
   NativeScrollEvent,
   StyleSheet,
   TouchableOpacity,
-  useWindowDimensions,
   Platform,
   NativeModules,
 } from 'react-native';
@@ -39,6 +38,7 @@ import {
 const GestureExclusion: { setRects: (r: { x: number; y: number; width: number; height: number }[]) => void } | undefined =
   NativeModules.GestureExclusion;
 import { useTheme } from '../contexts/ThemeContext';
+import { useContentWidth } from '../layout';
 
 // Horizontal chrome this component sits inside on BOTH screens that use
 // it (HomeScreen's and ReadingDetailScreen's own scroll content -- see
@@ -88,7 +88,7 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
   // width. useWindowDimensions gives that directly (and keeps it correct
   // across rotation/resize), so there's only ever one value, computed up
   // front -- nothing to snap to on a later layout pass.
-  const { width: windowWidth } = useWindowDimensions();
+  const windowWidth = useContentWidth();
   const width = windowWidth - horizontalChrome;
   const [activeIndex, setActiveIndex] = useState(0);
   const [scrollLocked, setScrollLocked] = useState(false);

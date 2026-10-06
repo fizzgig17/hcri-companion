@@ -21,7 +21,8 @@
 // drift apart.
 
 import React from 'react';
-import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import { useContentWidth } from '../../layout';
 import SpectrumChart, { SPECTRUM_HEADER_H } from '../../components/SpectrumChart';
 import ChromaticityChart from '../../components/ChromaticityChart';
 import RValuesBarChart from '../../components/RValuesBarChart';
@@ -93,8 +94,10 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
   const { colors } = useTheme();
   // Main tab: charts grow to fill the room they're given (up to 320/340) and
   // shrink if the region is short; elsewhere they keep 200/230. Overheads: pager dots (~26),
-  // card padding/border (22), card bottom margin (12), R-values title (15).
-  const fit = regionHeight && regionHeight > 0 ? Math.max(90, Math.floor(regionHeight - 26 - 22 - 12 - 15)) : undefined;
+  // card padding/border (22), card bottom margin (12), R-values title (15). The pager dots row
+  // is 26 tall plus 8 above and 4 below = 38 (this used to say 26, which pushed the chart cards ~12px
+  // under the title box and clipped their bottoms).
+  const fit = regionHeight && regionHeight > 0 ? Math.max(90, Math.floor(regionHeight - 38 - 22 - 12 - 15)) : undefined;
   const chartHeight = fit === undefined ? undefined : Math.min(fit, 300);
   const fill = chartHeight !== undefined;
   const spectrumHeight = chartHeight === undefined ? 200 : Math.min(chartHeight, 260);
@@ -106,7 +109,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
   // stretches to fill it) should be; `chartWidth` is what's left once a
   // chartCard's own padding is subtracted, i.e. what each chart itself
   // should draw its SVG at.
-  const { width: windowWidth } = useWindowDimensions();
+  const windowWidth = useContentWidth();
   const totalChrome = SCREEN_PADDING + extraHorizontalChrome;
   const pageWidth = windowWidth - totalChrome;
   const chartWidth = Math.max(pageWidth - CARD_PADDING, 0);

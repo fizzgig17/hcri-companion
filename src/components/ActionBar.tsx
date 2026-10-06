@@ -70,7 +70,7 @@ export default function ActionBar(p: Props) {
     slot: { flex: 1, marginBottom: 16 },
     slotLeft: { alignItems: 'flex-start' },
     slotRight: { alignItems: 'flex-end' },
-    center: { alignItems: 'center', width: 104 },
+    center: { alignItems: 'center', width: 150 },
     ring: {
       width: 72,
       height: 72,
@@ -86,7 +86,7 @@ export default function ActionBar(p: Props) {
       shadowOffset: { width: 0, height: 2 },
     },
     inner: { flex: 1, borderRadius: 32, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
-    caption: { marginTop: 4, color: colors.accent, fontSize: 11.5, fontWeight: '700' },
+    caption: { marginTop: 4, color: colors.accent, fontSize: 11.5, fontWeight: '700', textAlign: 'center', alignSelf: 'stretch' },
     side: { minWidth: 64, paddingVertical: 4, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
     sideLabel: { color: colors.muted, fontSize: 11, marginTop: 3, fontWeight: '600' },
     sideLabelAccent: { color: colors.accent },
@@ -146,7 +146,7 @@ export default function ActionBar(p: Props) {
           {busyLabel ? <ActivityIndicator color="#fff" /> : <Icon name={icon} size={icon === 'play' ? 30 : 28} color="#fff" />}
         </View>
       </TouchableOpacity>
-      <Text style={styles.caption}>{caption}</Text>
+      <Text style={styles.caption} numberOfLines={1} adjustsFontSizeToFit>{caption}</Text>
     </View>
   );
 
