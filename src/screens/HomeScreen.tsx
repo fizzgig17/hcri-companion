@@ -11,7 +11,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, ScrollView, StyleSheet, Alert, AppState, Keyboard, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MeterConnection } from '../ble/MeterConnection';
-import { initializeMeter, takeMeasurement } from '../ble/takeMeasurement';
+import { initializeMeter, takeMeasurement, EMPTY_READING_ERROR } from '../ble/takeMeasurement';
 import { MeterResult } from '../ble/parseResult';
 import { analyzeSpectrum } from '../utils/spectralAnalysis';
 import Clipboard from '@react-native-clipboard/clipboard';
@@ -582,7 +582,17 @@ export default function HomeScreen({ navigation }: any) {
     if (!connRef.current) return;
     setStatus('measuring');
     try {
-      const r = await takeMeasurement(connRef.current, appendLog);
+      // An all-zero result (the meter handing back an empty buffer, seen on
+      // the first reading after connecting) is retried once automatically
+      // rather than shown as a blank chart with nonsense stats.
+      let r: MeterResult;
+      try {
+        r = await takeMeasurement(connRef.current, appendLog);
+      } catch (e: any) {
+        if (e?.name !== EMPTY_READING_ERROR) throw e;
+        appendLog('Meter returned an empty reading -- retrying once...');
+        r = await takeMeasurement(connRef.current, appendLog);
+      }
       setResult(r);
       // A fresh reading hasn't been uploaded yet -- clears any checkmark
       // left over from the PREVIOUS reading's upload, which would

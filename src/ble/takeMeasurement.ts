@@ -65,6 +65,9 @@ function hexDump(bytes: Uint8Array): string {
   return '\n' + lines.join('\n');
 }
 
+/** `name` of the error takeMeasurement() rejects with when the meter returned an all-zero result -- checked by name rather than instanceof, which is unreliable for subclassed Errors under some JS engines. */
+export const EMPTY_READING_ERROR = 'EmptyReadingError';
+
 /** Call once, right after connecting, before the first measurement. */
 export async function initializeMeter(conn: MeterConnection): Promise<void> {
   await conn.sendCommand(CMD_IDENTIFY);
@@ -360,6 +363,18 @@ export async function takeMeasurement(
             const firmwareVersion = peekFirmwareVersion(msg.body);
             const offsets = getFieldOffsetsForDevice(conn.getDeviceName(), firmwareVersion);
             const result = parseResult(msg.body, offsets);
+            // An all-zero spectrum is the meter handing back an unarmed/
+            // empty buffer (seen right after connecting -- the body is
+            // zeros with a placeholder 2000-01-xx timestamp), not a real
+            // exposure. parseResult() deliberately keeps it for debugging,
+            // but showing it as a reading produces a blank chart and
+            // nonsense stats (NaN Rf/Rg, negative Ra), so reject it here.
+            const peak = result.spectrum.reduce((m, p) => Math.max(m, Math.abs(p.value)), 0);
+            if (!(peak > 1e-6)) {
+              const err = new Error('The meter returned an empty reading.');
+              err.name = EMPTY_READING_ERROR;
+              throw err;
+            }
             resolve(result);
           } catch (e) {
             reject(e);
