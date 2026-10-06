@@ -69,6 +69,9 @@ jobs:
       - name: Point build at dev.hcri.io
         run: echo "export const HCRI_API_BASE = 'https://dev.hcri.io';" > src/hcri/apiConfig.ts
 
+      - name: Stamp git commit id into the build
+        run: echo "export const GIT_COMMIT = '${GITHUB_SHA::7}';" > src/gitCommit.ts
+
       - name: Decode release keystore
         run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/hcricompanion-release.keystore
 
