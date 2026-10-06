@@ -95,3 +95,11 @@ To learn more about React Native, take a look at the following resources:
 - [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
 - [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
 - [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+
+# License
+
+hCRI Companion is free software, © 2026 fizzgig, licensed under the GNU General Public License v3 or later, with an additional permission (GPL section 7) allowing distribution through app stores such as Apple's App Store. See [LICENSE](LICENSE) and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+# Contributing
+
+Bug reports and suggestions are welcome as issues. Code contributions are accepted only if the contributor agrees, in writing (a comment on the pull request is enough), that their contribution may be included under the project's license **including the App Store additional permission** in [LICENSE](LICENSE). Pull requests without that statement can't be merged.
