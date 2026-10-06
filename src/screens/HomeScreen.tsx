@@ -463,6 +463,22 @@ export default function HomeScreen({ navigation }: any) {
     setDevicePickerVisible(false);
   }, []);
 
+  // Connecting a meter ends the "test reading" -- the sample's stats/charts,
+  // its note, and the upload title all go away, back to the empty state,
+  // rather than leaving someone else's spectrum on screen looking like a
+  // real reading. Reads `result` through a ref so this fires only on the
+  // status change itself, not every time a result changes.
+  const resultRef = useRef(result);
+  resultRef.current = result;
+  useEffect(() => {
+    if (status !== 'connected' || !resultRef.current?.sampleLabel) return;
+    setResult(null);
+    setUploadTitle('');
+    setUploadSucceeded(false);
+    setLastUploadedReport(null);
+    setCurrentReadingId(null);
+  }, [status]);
+
   // Tapping the Home tab always lands on Main -- including when you're
   // already on Home looking at Data or Logs (standard tab-bar behavior:
   // tapping a tab takes you to its starting page) -- and scrolls it back
