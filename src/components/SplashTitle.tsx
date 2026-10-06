@@ -10,7 +10,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Image, StyleSheet, Text } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 
-const HOLD_MS = 1100;
+const HOLD_MS = 1600;
 const FADE_MS = 350;
 
 export default function SplashTitle() {
