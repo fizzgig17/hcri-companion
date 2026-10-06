@@ -82,6 +82,9 @@ const SCREEN_PADDING = 32;
 // now, when it was only ever cosmetically overlapping the border line
 // before.
 const CARD_PADDING = 22;
+// Spectrum plot proportions (width : height), matching the vendor app's wide,
+// short plot rather than filling all the vertical room it's offered.
+const SPECTRUM_ASPECT = 1.65;
 
 export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 0, regionHeight, sampleLabel }: Props) {
   const source = sampleLabel
@@ -183,7 +186,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
               <SpectrumChart
                 spectrum={result.spectrum}
                 width={chartWidth}
-                height={Math.max(60, spectrumHeight - SPECTRUM_HEADER_H)}
+                height={Math.max(60, Math.min(spectrumHeight - SPECTRUM_HEADER_H, Math.round(chartWidth / SPECTRUM_ASPECT)))}
                 details={{
                   integrationMs: result.integrationTimeMs,
                   peakSignal: result.peakSignal,
