@@ -18,8 +18,7 @@
 import React, { useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Modal, StyleSheet } from 'react-native';
 import InfoButton from '../../components/InfoButton';
-import PrimaryButton from '../../components/PrimaryButton';
-import StatCard from '../../components/StatCard';
+import StatCard, { statDensity } from '../../components/StatCard';
 import SpectrumTab from './SpectrumTab';
 import { statusLabels } from '../../theme';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -27,7 +26,6 @@ import { MeterResult } from '../../ble/parseResult';
 import type { BatteryStatus } from '../../ble/protocol';
 import { SpectralAnalysis } from '../../utils/spectralAnalysis';
 import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
-import { HCRI_BRAND_HOST } from '../../hcri/buildTarget';
 import { EMPTY_METER_RESULT, EMPTY_SPECTRAL_ANALYSIS } from '../../utils/placeholderReading';
 import { defaultLabel } from '../../hcri/buildCsv';
 
@@ -164,6 +162,15 @@ export default function MainTab({
   // actual TextInput, not just a position, since it measures this input's
   // layout relative to the ScrollView HomeScreen owns.
   const titleInputRef = useRef<TextInput>(null);
+  // Tiles that actually have a value, and how densely to pack them: the
+  // more the person chooses, the more columns/smaller text, so the chart
+  // stays on screen without scrolling.
+  const visibleStats = statIds.flatMap((id) => {
+    const metric = STAT_METRIC_BY_ID[id];
+    const out = metric ? metric.format(displayResult, displayAnalysis) : null;
+    return metric && out ? [{ id, metric, out }] : [];
+  });
+  const density = statDensity(visibleStats.length);
 
   const styles = StyleSheet.create({
     statusRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', rowGap: 4, marginBottom: 6 },
@@ -356,13 +363,9 @@ export default function MainTab({
               show for this particular meter. displayResult/displayAnalysis
               are 0 for every field until a real reading exists, so every
               tile just reads "0" until then. */}
-          {statIds.map((id) => {
-            const metric = STAT_METRIC_BY_ID[id];
-            if (!metric) return null;
-            const out = metric.format(displayResult, displayAnalysis);
-            if (!out) return null;
-            return <StatCard key={id} label={metric.label} value={out.value} unit={out.unit} compact />;
-          })}
+          {visibleStats.map(({ id, metric, out }) => (
+            <StatCard key={id} label={metric.label} value={out.value} unit={out.unit} compact density={density} />
+          ))}
         </View>
         {/* numberOfLines + adjustsFontSizeToFit -- shrinks to whatever font
             size actually fits this phone's width rather than a single
@@ -390,36 +393,19 @@ export default function MainTab({
             extraHorizontalChrome comment. */}
         <SpectrumTab result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} />
 
-        {/* The single action-button slot -- exactly one of these renders,
-            picked by `status`, and it's always in this same spot in the
-            card (right under the charts) whether or not a reading has
-            happened yet. That's the actual fix for "the green button
-            should stay in the same place": it was never really about the
-            button itself moving, it was about there being two different
-            layouts (pre-reading vs. post-reading) with the button in a
-            different spot in each. There's only one layout now. */}
-        {status === 'disconnected' && <PrimaryButton title="Connect to Meter" onPress={connect} />}
+        {/* Connect / Take Reading / Upload / Disconnect live in the pinned
+            ActionBar (components/ActionBar.tsx), docked above the bottom
+            nav by HomeScreen. Only the explanatory bits stay in the page. */}
         {status === 'disconnected' && (
-          <>
-            <PrimaryButton
-              title={loadingTestReading ? 'Loading test reading…' : 'Show a test reading'}
-              onPress={onShowTestReading}
-              disabled={loadingTestReading}
-              variant="muted"
-            />
-            <InfoButton
-              label="What's this?"
-              title="About test readings"
-              message="Don't have a meter handy? This loads the spectrum from a random public report on hCRI.io, so you can explore the stats and charts. It's sample data, not your own reading: it isn't saved to History and can't be uploaded or shared. Connect a meter and take a reading to replace it."
-            />
-          </>
+          <InfoButton
+            label="What's this?"
+            title="About test readings"
+            message="Don't have a meter handy? Test reading loads the spectrum from a random public report on hCRI.io, so you can explore the stats and charts. It's sample data, not your own reading: it isn't saved to History and can't be uploaded or shared. Connect a meter and take a reading to replace it."
+          />
         )}
         {status === 'disconnected' && result?.sampleLabel ? (
           <Text style={styles.sampleNote}>Test reading from a public hCRI.io report: {result.sampleLabel}</Text>
         ) : null}
-        {status === 'connecting' && <PrimaryButton title="Connecting…" onPress={() => {}} disabled />}
-        {status === 'connected' && <PrimaryButton title="Take Reading" onPress={measure} />}
-        {status === 'measuring' && <PrimaryButton title="Measuring…" onPress={() => {}} disabled />}
 
         {/* Same Upload Title field as the Data tab -- see MainTab's own
             styles comment above. Shown whenever there's something to
@@ -449,46 +435,6 @@ export default function MainTab({
           </>
         )}
 
-        <View style={styles.uploadRow}>
-          <PrimaryButton
-            title={`Upload to ${HCRI_BRAND_HOST}`}
-            onPress={onUpload}
-            disabled={uploading || !hasReading || !!result?.sampleLabel}
-            variant="muted"
-            style={styles.uploadButton}
-          />
-          {/* Replaces the old "Uploaded"/"Upload failed" Alert on success --
-              a failed attempt still raises a real Alert (see HomeScreen.tsx's
-              upload()), since that's the one outcome actually worth
-              interrupting for. This pill IS the success confirmation (its
-              outline only appears once uploadSucceeded is true) as well as
-              the copy-link action, replacing the old separate checkmark +
-              bare-icon pair. Falls back to a plain "Uploaded" pill (no tap
-              action) on the rare report canCopyLink never goes true for --
-              still a clear success signal even without a link to copy. */}
-          {uploadSucceeded && canCopyLink && (
-            <TouchableOpacity
-              onPress={onCopyLink}
-              disabled={copyingLink}
-              style={styles.copyLinkPill}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              {copyingLink ? (
-                <ActivityIndicator size="small" color={colors.accent} style={styles.copyLinkSpinner} />
-              ) : (
-                <Text style={styles.copyLinkIcon}>🔗</Text>
-              )}
-              <Text style={styles.copyLinkLabel}>{copyingLink ? 'Copying…' : 'Copy Link'}</Text>
-            </TouchableOpacity>
-          )}
-          {uploadSucceeded && !canCopyLink && (
-            <View style={styles.copyLinkPill}>
-              <Text style={styles.copyLinkIcon}>✓</Text>
-              <Text style={styles.copyLinkLabel}>Uploaded</Text>
-            </View>
-          )}
-        </View>
-        {status === 'connected' && <PrimaryButton title="Disconnect" onPress={disconnect} variant="muted" />}
       </View>
 
       {status === 'disconnected' && (

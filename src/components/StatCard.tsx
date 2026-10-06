@@ -19,13 +19,28 @@ interface Props {
   value: string;
   unit?: string;
   compact?: boolean;
+  /** Packing for compact tiles: 3 columns (<=8 values), 4 (<=12) or 6 (more). */
+  density?: Density;
 }
 
-export default function StatCard({ label, value, unit, compact }: Props) {
+export type Density = 'roomy' | 'medium' | 'tight';
+
+export function statDensity(count: number): Density {
+  return count <= 8 ? 'roomy' : count <= 12 ? 'medium' : 'tight';
+}
+
+const DENSITY = {
+  roomy: { width: '33.33%', value: 20, unit: 11, label: 10.5 },
+  medium: { width: '25%', value: 17, unit: 10, label: 9.5 },
+  tight: { width: '16.66%', value: 13, unit: 8, label: 8 },
+} as const;
+
+export default function StatCard({ label, value, unit, compact, density = 'roomy' }: Props) {
+  const d = DENSITY[density];
   const { colors } = useTheme();
 
   const styles = StyleSheet.create({
-    statCard: { width: '50%', paddingHorizontal: 6, marginBottom: 12 },
+    statCard: { width: '50%' as const, paddingHorizontal: 6, marginBottom: 12 },
     statValue: { color: colors.text, fontSize: 22, fontWeight: '700' },
     statUnit: { color: colors.muted, fontSize: 14, fontWeight: '400' },
     statLabel: { color: colors.muted, fontSize: 12, marginTop: 2 },
@@ -41,12 +56,12 @@ export default function StatCard({ label, value, unit, compact }: Props) {
   });
 
   return (
-    <View style={[styles.statCard, compact && styles.statCardCompact]}>
-      <Text style={[styles.statValue, compact && styles.statValueCompact]}>
+    <View style={[styles.statCard, compact && styles.statCardCompact, compact && { width: d.width }]}>
+      <Text style={[styles.statValue, compact && styles.statValueCompact, compact && { fontSize: d.value }]} numberOfLines={1} adjustsFontSizeToFit>
         {value}
-        {unit ? <Text style={[styles.statUnit, compact && styles.statUnitCompact]}> {unit}</Text> : null}
+        {unit ? <Text style={[styles.statUnit, compact && styles.statUnitCompact, compact && { fontSize: d.unit }]}> {unit}</Text> : null}
       </Text>
-      <Text style={[styles.statLabel, compact && styles.statLabelCompact]}>{label}</Text>
+      <Text style={[styles.statLabel, compact && styles.statLabelCompact, compact && { fontSize: d.label }]} numberOfLines={1}>{label}</Text>
     </View>
   );
 }

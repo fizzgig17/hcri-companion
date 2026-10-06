@@ -34,6 +34,7 @@ import { useLog } from '../contexts/LogContext';
 import { withBackgroundDisconnectSuppressed, isBackgroundDisconnectSuppressed } from '../ble/backgroundDisconnectGuard';
 import TabBar from '../components/TabBar';
 import InfoButton from '../components/InfoButton';
+import ActionBar from '../components/ActionBar';
 import MainTab, { Status, FoundDevice } from './tabs/MainTab';
 import DataTab from './tabs/DataTab';
 import LogsTab from './tabs/LogsTab';
@@ -1101,6 +1102,24 @@ export default function HomeScreen({ navigation }: any) {
           />
         )}
       </ScrollView>
+      )}
+      {activeTab === 'main' && (
+        <ActionBar
+          status={status}
+          hasReading={!!(result && analysis)}
+          isSample={!!result?.sampleLabel}
+          connect={() => connect({ promptIfBluetoothOff: true })}
+          measure={measure}
+          disconnect={disconnect}
+          onShowTestReading={showTestReading}
+          loadingTestReading={loadingTestReading}
+          onUpload={upload}
+          uploading={status === 'uploading'}
+          uploadSucceeded={uploadSucceeded}
+          canCopyLink={!!lastUploadedReport}
+          copyingLink={copyingLink}
+          onCopyLink={copyReportLink}
+        />
       )}
     </SafeAreaView>
   );
