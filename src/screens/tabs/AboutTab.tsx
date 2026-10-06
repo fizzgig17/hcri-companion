@@ -139,7 +139,7 @@ export default function AboutTab() {
       <View style={styles.card}>
         <Text style={styles.heading}>Open source</Text>
         <Text style={styles.subheading}>
-          © 2026 Marc Getter. hCRI Companion is free software, licensed under the GNU General Public License v3 or later.
+          © 2026 fizzgig. hCRI Companion is free software, licensed under the GNU General Public License v3 or later.
           It comes with no warranty.
         </Text>
         <TouchableOpacity onPress={() => openUrl(SOURCE_URL)}>
