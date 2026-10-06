@@ -56,6 +56,8 @@ type TabKey = 'main' | 'data' | 'logs';
 // knowing whether a SECOND one is also in range, which means waiting out a
 // real window rather than racing to the first advertisement.
 const CONNECT_SCAN_WINDOW_MS = 5000;
+// Space under the Main page, above the pinned action bar.
+const MAIN_BOTTOM_PAD = 8;
 
 // Confirmed 2026-10-04 (a debug-report capture): backgrounding the app
 // disconnects the meter (see the AppState effect below), and coming back to
@@ -77,6 +79,7 @@ export default function HomeScreen({ navigation }: any) {
   const { colors } = useTheme();
   const { log, appendLog, clearLog, refreshVerboseLogging } = useLog();
   const [activeTab, setActiveTab] = useState<TabKey>('main');
+  const [scrollAreaH, setScrollAreaH] = useState(0);
   const [status, setStatus] = useState<Status>('disconnected');
   const [result, setResult] = useState<MeterResult | null>(null);
   const [deviceName, setDeviceName] = useState<string | null>(null);
@@ -984,6 +987,8 @@ export default function HomeScreen({ navigation }: any) {
     // bar and the first bit of scrolling content, so this would just be a
     // second gap stacked on top of that one.
     content: { paddingHorizontal: 16, paddingBottom: 56 + keyboardHeight },
+    // Main fits the screen without scrolling (see MainTab availableHeight).
+    contentMain: { paddingBottom: MAIN_BOTTOM_PAD + keyboardHeight },
     // Explicit flex:1 (new now that this ScrollView is conditionally
     // rendered as a sibling of LogsTab -- see the activeTab==='logs'
     // branch above) rather than relying on it picking up the remaining
@@ -1051,7 +1056,15 @@ export default function HomeScreen({ navigation }: any) {
       {activeTab === 'logs' ? (
         <LogsTab log={log} onShare={shareLog} onClear={clearLog} />
       ) : (
-      <ScrollView ref={scrollRef} style={styles.scrollArea} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        ref={scrollRef}
+        style={styles.scrollArea}
+        contentContainerStyle={[styles.content, activeTab === 'main' && styles.contentMain]}
+        keyboardShouldPersistTaps="handled"
+        onLayout={(e) => setScrollAreaH(e.nativeEvent.layout.height)}
+        bounces={activeTab !== 'main'}
+        overScrollMode={activeTab === 'main' ? 'never' : 'auto'}
+      >
         {activeTab === 'main' && (
           <MainTab
             status={status}
@@ -1082,6 +1095,7 @@ export default function HomeScreen({ navigation }: any) {
             onUploadTitleChange={setUploadTitle}
             cachedUsername={cachedUsername}
             scrollInputIntoView={scrollInputIntoView}
+            availableHeight={keyboardHeight > 0 || !scrollAreaH ? undefined : scrollAreaH - MAIN_BOTTOM_PAD}
           />
         )}
         {activeTab === 'data' && (

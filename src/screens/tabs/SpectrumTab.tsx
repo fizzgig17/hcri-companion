@@ -58,6 +58,8 @@ interface Props {
    * border. MainTab now passes its real 30px here instead.
    */
   extraHorizontalChrome?: number;
+  /** Chart height override (Main tab shrinks charts so the page fits without scrolling). Defaults: 200 spectrum, 230 chrom/R-values. */
+  chartHeight?: number;
 }
 
 // The screen's own scroll-content padding (HomeScreen's and
@@ -79,7 +81,7 @@ const SCREEN_PADDING = 32;
 // before.
 const CARD_PADDING = 22;
 
-export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 0 }: Props) {
+export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 0, chartHeight }: Props) {
   const { colors } = useTheme();
   // Computed once, here, rather than separately (and inconsistently) in
   // SwipablePages and in each of the three chart components -- see this
@@ -157,7 +159,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
           label: 'Spectrum',
           content: (
             <View style={styles.chartCard}>
-              <SpectrumChart spectrum={result.spectrum} width={chartWidth} />
+              <SpectrumChart spectrum={result.spectrum} width={chartWidth} height={chartHeight ?? 200} />
             </View>
           ),
         },
@@ -173,7 +175,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
                   wider than tall at 280, so this compresses the horseshoe
                   a little further rather than clipping anything -- still
                   fully legible, just slightly flatter-looking. */}
-              <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} height={230} width={chartWidth} />
+              <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} height={chartHeight ?? 230} width={chartWidth} />
             </View>
           ),
         },
@@ -190,7 +192,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
                   "running long on Main" reason as Chrom's -- still room
                   enough per row (~14px) for all 15 R# labels and bars to
                   stay legible without crowding. */}
-              <RValuesBarChart ri={analysis.ri} height={230} width={chartWidth} />
+              <RValuesBarChart ri={analysis.ri} height={chartHeight ?? 230} width={chartWidth} />
             </View>
           ),
         },
