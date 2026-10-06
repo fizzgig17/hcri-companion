@@ -11,6 +11,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
+import { hapticTap } from '../utils/haptics';
 import type { Status } from '../screens/tabs/MainTab';
 
 type IconName = 'play' | 'bluetooth' | 'upload' | 'power' | 'copy' | 'check' | 'activity';
@@ -104,6 +105,7 @@ export default function ActionBar(p: Props) {
     disabled,
     accent,
     busy,
+    tick,
   }: {
     icon: IconName;
     label: string;
@@ -111,10 +113,11 @@ export default function ActionBar(p: Props) {
     disabled?: boolean;
     accent?: boolean;
     busy?: boolean;
+    tick?: boolean;
   }) => (
     <TouchableOpacity
       style={[styles.side, disabled && styles.disabled]}
-      onPress={onPress}
+      onPress={onPress && (() => { if (tick) hapticTap(); onPress(); })}
       disabled={disabled || !onPress}
       activeOpacity={0.7}
       accessibilityRole="button"
@@ -134,8 +137,8 @@ export default function ActionBar(p: Props) {
     <View style={styles.center}>
       <TouchableOpacity
         style={[styles.ring, !onPress && styles.disabled]}
-        onPress={onPress}
-        onLongPress={onLongPress}
+        onPress={onPress && (() => { hapticTap(); onPress(); })}
+        onLongPress={onLongPress && (() => { hapticTap(); onLongPress(); })}
         disabled={!onPress}
         activeOpacity={0.8}
         accessibilityRole="button"
@@ -153,7 +156,7 @@ export default function ActionBar(p: Props) {
     <View style={styles.wrap}>
       <View style={styles.bar}>
         <View style={[styles.slot, styles.slotLeft]}>
-          {connected && <SideButton icon="power" label="Disconnect" onPress={p.disconnect} />}
+          {connected && <SideButton icon="power" label="Disconnect" onPress={p.disconnect} tick />}
           {status === 'disconnected' && (
             <SideButton
               icon="activity"
@@ -176,6 +179,7 @@ export default function ActionBar(p: Props) {
               onPress={p.onUpload}
               disabled={uploadDisabled}
               busy={status === 'uploading'}
+              tick
             />
           )}
           {p.uploadSucceeded && p.canCopyLink && (

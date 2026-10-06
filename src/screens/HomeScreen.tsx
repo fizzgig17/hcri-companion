@@ -884,6 +884,7 @@ export default function HomeScreen({ navigation }: any) {
       // a small inline checkmark next to the Upload button instead, so a
       // routine upload doesn't need a tap-to-dismiss modal every time.
       setUploadSucceeded(true);
+      hapticSuccess();
       // Only set when the server actually returned both fields (see
       // UploadResult's own comment) -- an older/unexpected response shape
       // just means no copy-link icon shows, not a broken upload.
@@ -910,6 +911,7 @@ export default function HomeScreen({ navigation }: any) {
     } else {
       // A failure is still worth interrupting for -- this is the one
       // outcome that keeps the real Alert.
+      hapticFailure();
       Alert.alert('Upload failed', `Could not upload "${label}". Check Logs for details.`);
     }
     setStatus('connected');

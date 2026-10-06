@@ -30,6 +30,10 @@ const DEFAULT_GENERATED_TOKEN_NAME = 'hCRI Companion Data Upload Token';
 const FORGOT_PASSWORD_URL = 'https://www.hcri.io/';
 import {
   loadKeepAwakePreference,
+  loadHapticTapsPreference,
+  saveHapticTapsPreference,
+  loadHapticResultsPreference,
+  saveHapticResultsPreference,
   saveKeepAwakePreference,
   loadVerboseLoggingPreference,
   saveVerboseLoggingPreference,
@@ -49,6 +53,7 @@ import { ThemeMode } from '../theme';
 import AboutTab from './tabs/AboutTab';
 import TabBar from '../components/TabBar';
 import VersionStamp from '../components/VersionStamp';
+import { hapticTap, hapticSuccess, setTapHapticsEnabled, setResultHapticsEnabled } from '../utils/haptics';
 
 // Labels/order for the Light/Dark/System picker below -- System first since
 // it's the default every fresh install starts on (see ThemeContext.tsx).
@@ -83,6 +88,8 @@ export default function SettingsScreen({ navigation }: any) {
   // below: the two are never shown/editable at the same time).
   const [loadedToken, setLoadedToken] = useState('');
   const [keepAwake, setKeepAwake] = useState(false);
+  const [hapticTaps, setHapticTaps] = useState(true);
+  const [hapticResults, setHapticResults] = useState(true);
   // Default true ("stay connected") -- matches loadStayConnectedInBackground
   // Preference()'s own default, so this starts on the right value even
   // before that first load resolves rather than flashing "off" for a frame.
@@ -121,6 +128,8 @@ export default function SettingsScreen({ navigation }: any) {
       }
     });
     loadKeepAwakePreference().then(setKeepAwake);
+    loadHapticTapsPreference().then(setHapticTaps);
+    loadHapticResultsPreference().then(setHapticResults);
     loadStayConnectedInBackgroundPreference().then(setStayConnectedInBackground);
     loadVerboseLoggingPreference().then(setVerboseLogging);
     loadStatDisplayPrefs().then(setStatPrefs);
@@ -156,6 +165,20 @@ export default function SettingsScreen({ navigation }: any) {
     const next = defaultStatDisplayPrefs();
     setStatPrefs(next);
     saveStatDisplayPrefs(next).catch(() => {});
+  };
+
+  const toggleHapticTaps = async (value: boolean) => {
+    setHapticTaps(value);
+    setTapHapticsEnabled(value);
+    if (value) hapticTap(); // let them feel what they just turned on
+    await saveHapticTapsPreference(value);
+  };
+
+  const toggleHapticResults = async (value: boolean) => {
+    setHapticResults(value);
+    setResultHapticsEnabled(value);
+    if (value) hapticSuccess();
+    await saveHapticResultsPreference(value);
   };
 
   const toggleKeepAwake = async (value: boolean) => {
@@ -598,6 +621,22 @@ export default function SettingsScreen({ navigation }: any) {
             );
           })}
         </View>
+      </View>
+
+      <Text style={styles.appearanceLabel}>Feedback</Text>
+      <View style={styles.toggleRow}>
+        <View style={styles.toggleTextWrap}>
+          <Text style={styles.toggleLabel}>Button taps</Text>
+          <Text style={styles.toggleHint}>A tiny tick when you press Connect / Take reading, Upload or Disconnect.</Text>
+        </View>
+        <Switch value={hapticTaps} onValueChange={toggleHapticTaps} trackColor={{ true: colors.accent }} />
+      </View>
+      <View style={styles.toggleRow}>
+        <View style={styles.toggleTextWrap}>
+          <Text style={styles.toggleLabel}>Reading and upload results</Text>
+          <Text style={styles.toggleHint}>A buzz when a reading or upload finishes, and a double buzz when one fails.</Text>
+        </View>
+        <Switch value={hapticResults} onValueChange={toggleHapticResults} trackColor={{ true: colors.accent }} />
       </View>
 
       <View style={styles.toggleRow}>
