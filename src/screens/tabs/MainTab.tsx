@@ -383,7 +383,7 @@ export default function MainTab({
             />
           </>
         )}
-        {result?.sampleLabel ? (
+        {status === 'disconnected' && result?.sampleLabel ? (
           <Text style={styles.sampleNote}>Test reading from a public hCRI.io report: {result.sampleLabel}</Text>
         ) : null}
         {status === 'connecting' && <PrimaryButton title="Connecting…" onPress={() => {}} disabled />}

@@ -11,7 +11,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, ScrollView, StyleSheet, Alert, AppState, Keyboard, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MeterConnection } from '../ble/MeterConnection';
-import { initializeMeter, takeMeasurement } from '../ble/takeMeasurement';
+import { initializeMeter, takeMeasurement, EMPTY_READING_ERROR } from '../ble/takeMeasurement';
 import { MeterResult } from '../ble/parseResult';
 import { analyzeSpectrum } from '../utils/spectralAnalysis';
 import Clipboard from '@react-native-clipboard/clipboard';
@@ -361,6 +361,15 @@ export default function HomeScreen({ navigation }: any) {
    */
   const connect = useCallback(
     async (opts?: { preferLastDeviceOnMultiple?: boolean; promptIfBluetoothOff?: boolean }) => {
+      // Clear a test reading in the same batch as the status change, so it
+      // never gets a rendered frame beside the "Connecting…" button.
+      if (resultRef.current?.sampleLabel) {
+        setResult(null);
+        setUploadTitle('');
+        setUploadSucceeded(false);
+        setLastUploadedReport(null);
+        setCurrentReadingId(null);
+      }
       setStatus('connecting');
       try {
         const conn = getConnection();
@@ -463,6 +472,36 @@ export default function HomeScreen({ navigation }: any) {
     setDevicePickerVisible(false);
   }, []);
 
+  // Starting to connect a meter ends the "test reading" -- the sample's stats/charts,
+  // its note, and the upload title all go away, back to the empty state,
+  // rather than leaving someone else's spectrum on screen looking like a
+  // real reading. Reads `result` through a ref so this fires only on the
+  // status change itself, not every time a result changes.
+  const resultRef = useRef(result);
+  resultRef.current = result;
+  useEffect(() => {
+    // 'connecting' is the moment Connect to Meter is tapped -- clear then,
+    // not once the connection finishes.
+    if (status === 'disconnected' || !resultRef.current?.sampleLabel) return;
+    setResult(null);
+    setUploadTitle('');
+    setUploadSucceeded(false);
+    setLastUploadedReport(null);
+    setCurrentReadingId(null);
+  }, [status]);
+
+  // Tapping the Home tab always lands on Main -- including when you're
+  // already on Home looking at Data or Logs (standard tab-bar behavior:
+  // tapping a tab takes you to its starting page) -- and scrolls it back
+  // to the top.
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('tabPress', () => {
+      setActiveTab('main');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+    });
+    return unsubscribe;
+  }, [navigation]);
+
   // Try to connect automatically as soon as the app opens, rather than
   // requiring a manual tap on "Connect to Meter" every time -- if the
   // meter's already powered on and in range, this gets straight to
@@ -554,7 +593,17 @@ export default function HomeScreen({ navigation }: any) {
     if (!connRef.current) return;
     setStatus('measuring');
     try {
-      const r = await takeMeasurement(connRef.current, appendLog);
+      // An all-zero result (the meter handing back an empty buffer, seen on
+      // the first reading after connecting) is retried once automatically
+      // rather than shown as a blank chart with nonsense stats.
+      let r: MeterResult;
+      try {
+        r = await takeMeasurement(connRef.current, appendLog);
+      } catch (e: any) {
+        if (e?.name !== EMPTY_READING_ERROR) throw e;
+        appendLog('Meter returned an empty reading -- retrying once...');
+        r = await takeMeasurement(connRef.current, appendLog);
+      }
       setResult(r);
       // A fresh reading hasn't been uploaded yet -- clears any checkmark
       // left over from the PREVIOUS reading's upload, which would
@@ -955,7 +1004,7 @@ export default function HomeScreen({ navigation }: any) {
         </View>
         <InfoButton
           title="About hCRI Companion"
-          message="hCRI Companion connects to your Hopoocolor spectrometer over Bluetooth, takes a reading and shows its spectrum and lighting stats (CCT, CRI, TM-30 and more). Every reading is saved to History, and you can optionally upload it to your hCRI.io account to analyze and share it. To upload, add your hCRI.io username and API token in Settings."
+          message="hCRI Companion connects to your Hopoocolor spectrometer over Bluetooth, takes a reading and shows its spectrum and lighting stats (CCT, CRI and TM-30 Rf/Rg). Every reading is saved to History, and you can optionally upload it to your hCRI.io account to see its full TM-30 report and share it. To upload, add your hCRI.io username and API token in Settings."
           style={styles.headerInfo}
         />
       </View>

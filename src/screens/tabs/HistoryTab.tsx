@@ -50,8 +50,10 @@ interface Props {
   bulkUploading: boolean;
   /** Resolves a reading's stored report link and copies it to the clipboard -- same Copy Link affordance Main/Data show, just for a reading that may have been uploaded a while ago (see readingHistory.ts's reportId/reportIsPublic and HistoryScreen.tsx's copyReportLinkFromHistory). Only ever called for a row that actually has a reportId -- see the pill's own guard below. */
   onCopyLink: (reading: SavedReading) => void;
-  /** Which reading's Copy Link request is in flight, if any -- same single-at-a-time pattern as uploadingId. */
+  /** Which reading's link request (Copy / Report / TM-30 -- they share one in-flight flag) is in flight, if any -- same single-at-a-time pattern as uploadingId. */
   copyingLinkId: string | null;
+  /** Opens the uploaded report on hCRI.io in the browser; `tm30` opens it with the TM-30 report showing. Same guard as onCopyLink: only called for a row that has a reportId. */
+  onOpenReport: (reading: SavedReading, tm30: boolean) => void;
 }
 
 function formatSavedAt(ms: number): string {
@@ -91,6 +93,7 @@ function HistoryRow({
   onToggleSelected,
   onCopyLink,
   copyingLink,
+  onOpenReport,
 }: {
   reading: SavedReading;
   uploading: boolean;
@@ -104,6 +107,7 @@ function HistoryRow({
   onToggleSelected: (id: string) => void;
   onCopyLink: (reading: SavedReading) => void;
   copyingLink: boolean;
+  onOpenReport: (reading: SavedReading, tm30: boolean) => void;
 }) {
   const { colors } = useTheme();
   const [text, setText] = useState(reading.label);
@@ -215,6 +219,8 @@ function HistoryRow({
       paddingVertical: 7,
       marginTop: 6,
     },
+    linkRow: { flexDirection: 'row', marginHorizontal: -3 },
+    linkPill: { flex: 1, marginHorizontal: 3 },
     copyLinkIcon: { fontSize: 13, marginRight: 6 },
     copyLinkSpinner: { marginRight: 6 },
     copyLinkLabel: { color: colors.accent, fontSize: 12, fontWeight: '700' },
@@ -291,18 +297,36 @@ function HistoryRow({
           upload -- Main, Data, or right here -- most recently succeeded
           for it) -- never shown for a reading that's never been uploaded. */}
       {!selectMode && typeof reading.reportId === 'number' && (
-        <TouchableOpacity
-          onPress={() => onCopyLink(reading)}
-          disabled={copyingLink}
-          style={styles.copyLinkPill}
-        >
-          {copyingLink ? (
-            <ActivityIndicator size="small" color={colors.accent} style={styles.copyLinkSpinner} />
-          ) : (
-            <Text style={styles.copyLinkIcon}>🔗</Text>
-          )}
-          <Text style={styles.copyLinkLabel}>{copyingLink ? 'Copying…' : 'Copy Link'}</Text>
-        </TouchableOpacity>
+        <View style={styles.linkRow}>
+          <TouchableOpacity
+            onPress={() => onCopyLink(reading)}
+            disabled={copyingLink}
+            style={[styles.copyLinkPill, styles.linkPill]}
+          >
+            {copyingLink ? (
+              <ActivityIndicator size="small" color={colors.accent} style={styles.copyLinkSpinner} />
+            ) : (
+              <Text style={styles.copyLinkIcon}>🔗</Text>
+            )}
+            <Text style={styles.copyLinkLabel}>{copyingLink ? 'Working…' : 'Copy'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => onOpenReport(reading, false)}
+            disabled={copyingLink}
+            style={[styles.copyLinkPill, styles.linkPill]}
+          >
+            <Text style={styles.copyLinkIcon}>↗</Text>
+            <Text style={styles.copyLinkLabel}>Report</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => onOpenReport(reading, true)}
+            disabled={copyingLink}
+            style={[styles.copyLinkPill, styles.linkPill]}
+          >
+            <Text style={styles.copyLinkIcon}>◐</Text>
+            <Text style={styles.copyLinkLabel}>TM-30</Text>
+          </TouchableOpacity>
+        </View>
       )}
     </>
   );
@@ -353,6 +377,7 @@ export default function HistoryTab({
   bulkUploading,
   onCopyLink,
   copyingLinkId,
+  onOpenReport,
 }: Props) {
   const { colors } = useTheme();
   const [selectMode, setSelectMode] = useState(false);
@@ -585,6 +610,7 @@ export default function HistoryTab({
           onToggleSelected={toggleSelected}
           onCopyLink={onCopyLink}
           copyingLink={copyingLinkId === r.id}
+          onOpenReport={onOpenReport}
         />
       ))}
 
@@ -610,6 +636,7 @@ export default function HistoryTab({
                 onToggleSelected={toggleSelected}
                 onCopyLink={onCopyLink}
                 copyingLink={copyingLinkId === r.id}
+                onOpenReport={onOpenReport}
               />
             ))}
           </View>
