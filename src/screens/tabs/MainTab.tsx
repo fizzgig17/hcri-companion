@@ -15,20 +15,23 @@
 // (the overwhelmingly common case) connects straight through with no
 // extra UI at all, same as before.
 
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Modal, StyleSheet } from 'react-native';
 import InfoButton from '../../components/InfoButton';
-import PrimaryButton from '../../components/PrimaryButton';
-import StatCard from '../../components/StatCard';
+import StatCard, { statDensity } from '../../components/StatCard';
+import { defaultLabel } from '../../hcri/buildCsv';
 import SpectrumTab from './SpectrumTab';
 import { statusLabels } from '../../theme';
 import { useTheme } from '../../contexts/ThemeContext';
 import { MeterResult } from '../../ble/parseResult';
+import type { BatteryStatus } from '../../ble/protocol';
 import { SpectralAnalysis } from '../../utils/spectralAnalysis';
 import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
-import { HCRI_BRAND_HOST } from '../../hcri/buildTarget';
 import { EMPTY_METER_RESULT, EMPTY_SPECTRAL_ANALYSIS } from '../../utils/placeholderReading';
-import { defaultLabel } from '../../hcri/buildCsv';
+
+// Title field (56) + its top margin (8), always subtracted so the charts are
+// the same size whether or not a reading (and so the title) is showing.
+const TITLE_BLOCK_H = 64;
 
 export type Status = 'disconnected' | 'connecting' | 'connected' | 'measuring' | 'uploading';
 
@@ -96,6 +99,8 @@ interface Props {
    * Home's own header (dropped along with the rest of that header -- see
    * HomeScreen.tsx), so this is the one place it's still visible at all. */
   connectedDeviceName?: string | null;
+  /** Meter battery level from 8C C3, or null/undefined until the meter has answered (then nothing is shown). */
+  battery?: BatteryStatus | null;
   /** Upload title/label -- the SAME state DataTab's own Upload Title field
    * reads/writes, lifted up to HomeScreen so it survives switching tabs and
    * taking multiple readings, only resetting when the app itself restarts
@@ -142,6 +147,7 @@ export default function MainTab({
   onCopyLink,
   statIds,
   connectedDeviceName,
+  battery,
   uploadTitle,
   onUploadTitleChange,
   cachedUsername,
@@ -160,13 +166,38 @@ export default function MainTab({
   // actual TextInput, not just a position, since it measures this input's
   // layout relative to the ScrollView HomeScreen owns.
   const titleInputRef = useRef<TextInput>(null);
+  const [titleModalVisible, setTitleModalVisible] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
+  // Tiles that actually have a value, and how densely to pack them: the
+  // more the person chooses, the more columns/smaller text, so the chart
+  // stays on screen without scrolling.
+  const visibleStats = statIds.flatMap((id) => {
+    const metric = STAT_METRIC_BY_ID[id];
+    const out = metric ? metric.format(displayResult, displayAnalysis) : null;
+    return metric && out ? [{ id, metric, out }] : [];
+  });
+  const density = statDensity(visibleStats.length);
+  // Height of the chart region (the card's flexible middle) -- measured, but
+  // it never depends on the charts' own size, so there's no feedback loop.
+  // Room for the charts = this tab's height minus the status row, stat grid
+  // and the card's own padding -- none of which depend on the chart size, so
+  // there's no feedback loop and the charts never shift when something below
+  // (the docked title) appears.
+  const [rootH, setRootH] = useState(0);
+  const [statusH, setStatusH] = useState(0);
+  const [gridH, setGridH] = useState(0);
+  const chartRegionH = rootH && statusH && gridH ? Math.max(0, rootH - statusH - 6 - 6 - 30 - gridH - 2 - TITLE_BLOCK_H) : 0;
 
   const styles = StyleSheet.create({
-    statusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+    statusRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', rowGap: 4, marginBottom: 6 },
     resetLink: { alignItems: 'center', paddingVertical: 8 },
     resetLinkText: { color: colors.muted, fontSize: 12 },
     sampleNote: { color: colors.muted, fontSize: 12, fontStyle: 'italic', textAlign: 'center', marginTop: 8 },
     statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
+    batteryWrap: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', paddingLeft: 10 },
+    batteryBody: { width: 20, height: 10, borderWidth: 1.5, borderRadius: 2.5, padding: 1 },
+    batteryNub: { width: 2, height: 4, borderTopRightRadius: 1, borderBottomRightRadius: 1, marginLeft: 1 },
+    batteryText: { fontSize: 13, fontWeight: '600', marginLeft: 5 },
     statusText: { color: colors.muted, fontSize: 14 },
     deviceNameText: { color: colors.text, fontSize: 14, fontWeight: '600' },
 
@@ -174,7 +205,10 @@ export default function MainTab({
     switchMeterIcon: { color: colors.info, fontSize: 14, marginRight: 4 },
     switchMeterText: { color: colors.info, fontSize: 12, fontWeight: '600' },
 
+    root: { flex: 1 },
+    chartRegion: { overflow: 'hidden' },
     resultCard: {
+      flex: 1,
       backgroundColor: colors.card,
       borderRadius: 12,
       borderWidth: 1,
@@ -222,9 +256,9 @@ export default function MainTab({
       borderWidth: 1,
       borderColor: colors.cardBorder,
       borderRadius: 8,
-      minHeight: 38,
       position: 'relative',
-      marginBottom: 10,
+      marginTop: 'auto',
+      height: 56,
     },
     // In normal flow (not absolutely positioned) so a default title that wraps
     // onto 2+ lines makes the box grow; the empty TextInput is laid over it.
@@ -240,9 +274,27 @@ export default function MainTab({
       paddingVertical: 8,
       color: colors.text,
       fontSize: 13,
-      minHeight: 38,
+      height: 54,
     },
 
+    titleTextSet: { color: colors.text },
+    titleModalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'flex-start', paddingTop: 70, paddingHorizontal: 24 },
+    titleModalInput: {
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 8,
+      color: colors.text,
+      fontSize: 14,
+      minHeight: 70,
+      maxHeight: 120,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      textAlignVertical: 'top',
+    },
+    titleModalButtons: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 8 },
+    titleSaveButton: { backgroundColor: colors.accent, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 22, marginLeft: 8, marginTop: 6 },
+    titleSaveText: { color: colors.text, fontSize: 14, fontWeight: '700' },
     modalBackdrop: {
       flex: 1,
       backgroundColor: 'rgba(0,0,0,0.6)',
@@ -270,8 +322,8 @@ export default function MainTab({
   });
 
   return (
-    <View>
-      <View style={styles.statusRow}>
+    <View style={styles.root} onLayout={(e) => setRootH(e.nativeEvent.layout.height)}>
+      <View style={styles.statusRow} onLayout={(e) => setStatusH(e.nativeEvent.layout.height)}>
         <View style={[styles.statusDot, { backgroundColor: statusColors[status] }]} />
         {connectedDeviceName ? (
           <Text style={styles.statusText}>
@@ -281,6 +333,29 @@ export default function MainTab({
           <Text style={styles.statusText}>{statusLabels[status]}</Text>
         )}
         {isBusy && <ActivityIndicator size="small" color={colors.muted} style={{ marginLeft: 8 }} />}
+        {/* Meter battery (8C C3). Only while a meter is connected and has
+            actually answered; red at 20% or below (same threshold the
+            vendor app warns at), green otherwise. A bolt means the meter
+            reports it's charging. */}
+        {battery && status !== 'disconnected' && (
+          <View style={styles.batteryWrap} accessibilityLabel={`Meter battery ${battery.percent} percent${battery.charging ? ', charging' : ''}`}>
+            <View style={[styles.batteryBody, { borderColor: battery.percent <= 20 ? colors.danger : colors.accent }]}>
+              <View
+                style={{
+                  width: `${Math.max(0, Math.min(100, battery.percent))}%`,
+                  height: '100%',
+                  backgroundColor: battery.percent <= 20 ? colors.danger : colors.accent,
+                  borderRadius: 1,
+                }}
+              />
+            </View>
+            <View style={[styles.batteryNub, { backgroundColor: battery.percent <= 20 ? colors.danger : colors.accent }]} />
+            <Text style={[styles.batteryText, { color: battery.percent <= 20 ? colors.danger : colors.accent }]}>
+              {battery.charging ? '⚡' : ''}
+              {battery.percent}%
+            </Text>
+          </View>
+        )}
         {/* Only shows up when the meter currently connected was one of
             SEVERAL matches the last scan found -- lets you reopen that same
             list and pick a different one without a fresh scan or having to
@@ -308,7 +383,7 @@ export default function MainTab({
           Reading/Disconnect ABOVE this card and then move them below it
           (in a second copy) the moment a result came in. */}
       <View style={styles.resultCard}>
-        <View style={styles.statGrid}>
+        <View style={styles.statGrid} onLayout={(e) => setGridH(e.nativeEvent.layout.height)}>
           {/* Which measurements show here, and in what order, is the
               person's own choice from Settings (statIds, already
               resolved to just the enabled ids in display order -- see
@@ -325,25 +400,10 @@ export default function MainTab({
               show for this particular meter. displayResult/displayAnalysis
               are 0 for every field until a real reading exists, so every
               tile just reads "0" until then. */}
-          {statIds.map((id) => {
-            const metric = STAT_METRIC_BY_ID[id];
-            if (!metric) return null;
-            const out = metric.format(displayResult, displayAnalysis);
-            if (!out) return null;
-            return <StatCard key={id} label={metric.label} value={out.value} unit={out.unit} compact />;
-          })}
+          {visibleStats.map(({ id, metric, out }) => (
+            <StatCard key={id} label={metric.label} value={out.value} unit={out.unit} compact density={density} />
+          ))}
         </View>
-        {/* numberOfLines + adjustsFontSizeToFit -- shrinks to whatever font
-            size actually fits this phone's width rather than a single
-            hardcoded fontSize that wraps on narrower screens. Confirmed
-            2026-10-04: this line was wrapping to 2+ lines at fontSize 10.5
-            on at least one device. Shortened the text itself too, same day
-            -- the shorter it is, the less it ever needs to shrink, so
-            minimumFontScale's floor stays comfortably readable rather than
-            being relied on to rescue a long sentence. */}
-        <Text style={styles.customizeHint} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
-          Tap ⚙ Settings to customize these measurements.
-        </Text>
         {/* resultCard (below) wraps this in its own padding: 14 AND
             borderWidth: 1 each side (30px combined) -- SpectrumTab/
             SwipablePages/the charts all otherwise only know about the
@@ -357,119 +417,86 @@ export default function MainTab({
             and the reason charts still looked clipped on the right after
             CARD_PADDING alone was fixed. See SpectrumTab.tsx's
             extraHorizontalChrome comment. */}
-        <SpectrumTab result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} />
-
-        {/* The single action-button slot -- exactly one of these renders,
-            picked by `status`, and it's always in this same spot in the
-            card (right under the charts) whether or not a reading has
-            happened yet. That's the actual fix for "the green button
-            should stay in the same place": it was never really about the
-            button itself moving, it was about there being two different
-            layouts (pre-reading vs. post-reading) with the button in a
-            different spot in each. There's only one layout now. */}
-        {status === 'disconnected' && <PrimaryButton title="Connect to Meter" onPress={connect} />}
-        {status === 'disconnected' && (
-          <>
-            <PrimaryButton
-              title={loadingTestReading ? 'Loading test reading…' : 'Show a test reading'}
-              onPress={onShowTestReading}
-              disabled={loadingTestReading}
-              variant="muted"
-            />
-            <InfoButton
-              label="What's this?"
-              title="About test readings"
-              message="Don't have a meter handy? This loads the spectrum from a random public report on hCRI.io, so you can explore the stats and charts. It's sample data, not your own reading: it isn't saved to History and can't be uploaded or shared. Connect a meter and take a reading to replace it."
-            />
-          </>
-        )}
-        {status === 'disconnected' && result?.sampleLabel ? (
-          <Text style={styles.sampleNote}>Test reading from a public hCRI.io report: {result.sampleLabel}</Text>
-        ) : null}
-        {status === 'connecting' && <PrimaryButton title="Connecting…" onPress={() => {}} disabled />}
-        {status === 'connected' && <PrimaryButton title="Take Reading" onPress={measure} />}
-        {status === 'measuring' && <PrimaryButton title="Measuring…" onPress={() => {}} disabled />}
-
-        {/* Same Upload Title field as the Data tab -- see MainTab's own
-            styles comment above. Shown whenever there's something to
-            upload, same as the Upload button right below it. */}
-        {hasReading && (
-          <>
-            <Text style={[styles.fieldLabel, result?.sampleLabel ? styles.fieldLabelAfterSample : null]}>Upload Title</Text>
-            <View style={styles.titleInputWrap}>
-              {uploadTitle.length === 0 && (
-                <Text style={styles.titleInputOverlay} pointerEvents="none">
-                  {defaultLabel(cachedUsername, displayResult.deviceName)}
-                </Text>
-              )}
-              <TextInput
-                ref={titleInputRef}
-                style={[styles.titleInput, uploadTitle.length === 0 && styles.titleInputEmpty]}
-                value={uploadTitle}
-                onChangeText={onUploadTitleChange}
-                onFocus={() => scrollInputIntoView(titleInputRef)}
-                autoCapitalize="none"
-                autoCorrect={false}
-                multiline
-                textAlignVertical="top"
-                editable={!result?.sampleLabel}
-              />
-            </View>
-          </>
-        )}
-
-        <View style={styles.uploadRow}>
-          <PrimaryButton
-            title={`Upload to ${HCRI_BRAND_HOST}`}
-            onPress={onUpload}
-            disabled={uploading || !hasReading || !!result?.sampleLabel}
-            variant="muted"
-            style={styles.uploadButton}
-          />
-          {/* Replaces the old "Uploaded"/"Upload failed" Alert on success --
-              a failed attempt still raises a real Alert (see HomeScreen.tsx's
-              upload()), since that's the one outcome actually worth
-              interrupting for. This pill IS the success confirmation (its
-              outline only appears once uploadSucceeded is true) as well as
-              the copy-link action, replacing the old separate checkmark +
-              bare-icon pair. Falls back to a plain "Uploaded" pill (no tap
-              action) on the rare report canCopyLink never goes true for --
-              still a clear success signal even without a link to copy. */}
-          {uploadSucceeded && canCopyLink && (
-            <TouchableOpacity
-              onPress={onCopyLink}
-              disabled={copyingLink}
-              style={styles.copyLinkPill}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              {copyingLink ? (
-                <ActivityIndicator size="small" color={colors.accent} style={styles.copyLinkSpinner} />
-              ) : (
-                <Text style={styles.copyLinkIcon}>🔗</Text>
-              )}
-              <Text style={styles.copyLinkLabel}>{copyingLink ? 'Copying…' : 'Copy Link'}</Text>
-            </TouchableOpacity>
-          )}
-          {uploadSucceeded && !canCopyLink && (
-            <View style={styles.copyLinkPill}>
-              <Text style={styles.copyLinkIcon}>✓</Text>
-              <Text style={styles.copyLinkLabel}>Uploaded</Text>
-            </View>
-          )}
+        <View style={styles.chartRegion}>
+          <SpectrumTab result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} sampleLabel={result?.sampleLabel} />
         </View>
-        {status === 'connected' && <PrimaryButton title="Disconnect" onPress={disconnect} variant="muted" />}
+        {!hasReading && <View style={[styles.titleInputWrap, { opacity: 0 }]} />}
+        {hasReading && (
+          <TouchableOpacity
+            style={styles.titleInputWrap}
+            activeOpacity={result?.sampleLabel ? 1 : 0.7}
+            onPress={() => {
+              if (result?.sampleLabel) return;
+              setTitleDraft(uploadTitle);
+              setTitleModalVisible(true);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Upload title. Tap to edit."
+          >
+            <Text
+              style={[styles.titleInputOverlay, uploadTitle.length > 0 && styles.titleTextSet]}
+              numberOfLines={2}
+              ellipsizeMode="tail"
+            >
+              {uploadTitle.length > 0 ? uploadTitle : defaultLabel(cachedUsername, displayResult.deviceName)}
+            </Text>
+          </TouchableOpacity>
+        )}
+
       </View>
 
-      {status === 'disconnected' && (
-        /* Troubleshooting for "meter won't reconnect after I reloaded the
-           app without disconnecting it first" -- normally required a
-           power cycle. connect() already tries this automatically, but a
-           visible manual retry is worth having when it doesn't help on
-           the first try. */
-        <TouchableOpacity onPress={resetConnection} style={styles.resetLink}>
-          <Text style={styles.resetLinkText}>Meter won't connect? Reset connection</Text>
-        </TouchableOpacity>
-      )}
+      {/* Title editor: a popup at the top of the screen instead of typing into the
+          box in place, so the keyboard can never cover it and the charts
+          never resize while typing. */}
+      <Modal
+        visible={titleModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTitleModalVisible(false)}
+        // autoFocus alone often doesn't raise the keyboard inside an Android
+        // Modal; focusing explicitly once it's on screen does.
+        onShow={() => {
+          setTimeout(() => (titleInputRef.current as any)?.focus(), 150);
+        }}
+      >
+        <View style={styles.titleModalBackdrop}>
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>Upload title</Text>
+            <Text style={styles.modalSubtitle}>Leave it empty to use the default.</Text>
+            <TextInput
+              ref={titleInputRef}
+              style={styles.titleModalInput}
+              value={titleDraft}
+              onChangeText={setTitleDraft}
+              placeholder={defaultLabel(cachedUsername, displayResult.deviceName)}
+              placeholderTextColor={colors.muted}
+              multiline
+              autoCapitalize="none"
+              autoCorrect={false}
+              submitBehavior="blurAndSubmit"
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                onUploadTitleChange(titleDraft.trim());
+                setTitleModalVisible(false);
+              }}
+            />
+            <View style={styles.titleModalButtons}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setTitleModalVisible(false)}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.titleSaveButton}
+                onPress={() => {
+                  onUploadTitleChange(titleDraft.trim());
+                  setTitleModalVisible(false);
+                }}
+              >
+                <Text style={styles.titleSaveText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Opens right after connect()'s scan finds more than one matching
           meter, or later via the "switch meter" icon above -- a plain

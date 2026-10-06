@@ -21,7 +21,9 @@
 // down to clear the TALLEST page instead of sitting right under whichever
 // one is actually on screen.
 
-import React, { useRef, useState } from 'react';
+import InfoButton from './InfoButton';
+import { PagerLockContext } from './PagerLock';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   ScrollView,
@@ -53,15 +55,21 @@ export interface Page {
   key: string;
   label: string;
   content: React.ReactNode;
+  /** Optional "What's this?" help for this page, shown at the bottom-left under the card. */
+  info?: { title: string; message: string };
 }
 
 interface Props {
   pages: Page[];
   /** Total horizontal chrome (both sides combined) already reserved by whatever wraps this component, beyond... well, instead of the default screen-only padding. Pass this whenever a host screen adds its own card/padding around SpectrumTab, so pages come out the real width rather than an estimate that's too wide. */
   horizontalChrome?: number;
+  /** Force the pager's height (Main tab fits the screen); otherwise it follows the active page. */
+  fixedHeight?: number;
+  /** Changing this value sends the pager back to its first page (e.g. a new reading arrived). */
+  resetKey?: unknown;
 }
 
-export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZONTAL_PADDING }: Props) {
+export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZONTAL_PADDING, fixedHeight, resetKey }: Props) {
   const { colors } = useTheme();
   // Confirmed 2026-10-03: measuring this via onLayout at all -- even
   // seeded with a close estimate that onLayout then "corrects" -- means
@@ -78,7 +86,18 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
   const { width: windowWidth } = useWindowDimensions();
   const width = windowWidth - horizontalChrome;
   const [activeIndex, setActiveIndex] = useState(0);
+  const [scrollLocked, setScrollLocked] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  // Back to the first page whenever resetKey changes (not on first mount).
+  const firstKey = useRef(true);
+  useEffect(() => {
+    if (firstKey.current) {
+      firstKey.current = false;
+      return;
+    }
+    setActiveIndex(0);
+    scrollRef.current?.scrollTo({ x: 0, animated: false });
+  }, [resetKey]);
   // One measured height per page, filled in as each page's onLayout fires
   // (all three mount at once, so in practice all three arrive almost
   // immediately). Undefined entries (nothing measured yet) just mean the
@@ -97,13 +116,15 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
   };
 
   const styles = StyleSheet.create({
-    dotsRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 8, marginBottom: 4 },
+    dotsRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 8, marginBottom: 4, height: 26 },
+    infoLeft: { position: 'absolute', left: 4, top: 0, bottom: 0, justifyContent: 'center' },
     dotTouchable: { padding: 4 },
     dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.cardBorder },
     dotActive: { backgroundColor: colors.accent, width: 16 },
   });
 
   return (
+    <PagerLockContext.Provider value={setScrollLocked}>
     <View>
       {width > 0 && (
         <>
@@ -112,18 +133,21 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
               file-level comment. Falls back to undefined (auto) for the
               very first render, before any page has reported a height
               yet, so there's no flash of a 0-height pager. */}
-          <View style={{ height: pageHeights[pages[activeIndex]?.key] }}>
+          <View style={{ height: fixedHeight ?? pageHeights[pages[activeIndex]?.key], overflow: 'hidden' }}>
             <ScrollView
               ref={scrollRef}
               horizontal
               pagingEnabled
+              scrollEnabled={!scrollLocked}
               showsHorizontalScrollIndicator={false}
               onMomentumScrollEnd={onScrollEnd}
+              contentOffset={{ x: activeIndex * width, y: 0 }}
+              onContentSizeChange={() => scrollRef.current?.scrollTo({ x: activeIndex * width, animated: false })}
             >
               {pages.map((p) => (
                 <View
                   key={p.key}
-                  style={{ width }}
+                  style={{ width, height: fixedHeight }}
                   onLayout={(e) => {
                     const h = e.nativeEvent.layout.height;
                     setPageHeights((prev) => (prev[p.key] === h ? prev : { ...prev, [p.key]: h }));
@@ -139,6 +163,15 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
               Chrom without swiping too, same as tapping a page dot anywhere
               else in the app's UI conventions. */}
           <View style={styles.dotsRow}>
+            {pages[activeIndex]?.info && (
+              <View style={styles.infoLeft}>
+                <InfoButton
+                  title={pages[activeIndex].info!.title}
+                  message={pages[activeIndex].info!.message}
+                  style={{ width: 24, height: 24, borderRadius: 12 }}
+                />
+              </View>
+            )}
             {pages.map((p, i) => (
               <TouchableOpacity key={p.key} onPress={() => goTo(i)} hitSlop={8} style={styles.dotTouchable}>
                 <View style={[styles.dot, i === activeIndex && styles.dotActive]} />
@@ -148,5 +181,6 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
         </>
       )}
     </View>
+    </PagerLockContext.Provider>
   );
 }

@@ -22,7 +22,7 @@
 
 import React from 'react';
 import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
-import SpectrumChart from '../../components/SpectrumChart';
+import SpectrumChart, { SPECTRUM_HEADER_H } from '../../components/SpectrumChart';
 import ChromaticityChart from '../../components/ChromaticityChart';
 import RValuesBarChart from '../../components/RValuesBarChart';
 import SwipablePages from '../../components/SwipablePages';
@@ -58,6 +58,10 @@ interface Props {
    * border. MainTab now passes its real 30px here instead.
    */
   extraHorizontalChrome?: number;
+  /** Main tab: the exact height the swipeable pager (charts + dots) may fill. Charts are sized to fit it so nothing scrolls. Omit for the natural sizes (200 spectrum, 230 chrom/R-values). */
+  regionHeight?: number;
+  /** Set when `result` is a sample from a public hCRI.io report (not a reading from the person's own meter) -- only changes the "What's this?" text. */
+  sampleLabel?: string;
 }
 
 // The screen's own scroll-content padding (HomeScreen's and
@@ -78,9 +82,22 @@ const SCREEN_PADDING = 32;
 // now, when it was only ever cosmetically overlapping the border line
 // before.
 const CARD_PADDING = 22;
+// Spectrum plot proportions (width : height), matching the vendor app's wide,
+// short plot rather than filling all the vertical room it's offered.
+const SPECTRUM_ASPECT = 1.65;
 
-export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 0 }: Props) {
+export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 0, regionHeight, sampleLabel }: Props) {
+  const source = sampleLabel
+    ? `This is a sample from a public hCRI.io report (${sampleLabel}), not a reading from your own meter. It isn't saved to History and can't be uploaded or shared.`
+    : 'This comes from the reading your meter just took.';
   const { colors } = useTheme();
+  // Main tab: charts grow to fill the room they're given (up to 320/340) and
+  // shrink if the region is short; elsewhere they keep 200/230. Overheads: pager dots (~26),
+  // card padding/border (22), card bottom margin (12), R-values title (15).
+  const fit = regionHeight && regionHeight > 0 ? Math.max(90, Math.floor(regionHeight - 26 - 22 - 12 - 15)) : undefined;
+  const chartHeight = fit === undefined ? undefined : Math.min(fit, 300);
+  const fill = chartHeight !== undefined;
+  const spectrumHeight = chartHeight === undefined ? 200 : Math.min(chartHeight, 260);
   // Computed once, here, rather than separately (and inconsistently) in
   // SwipablePages and in each of the three chart components -- see this
   // file's own Props comment above for why a hardcoded per-component
@@ -137,6 +154,10 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
       overflow: 'hidden',
     },
 
+    // Main tab: every page's card is the pager's full height, content centered,
+    // so the dots (and the ? beside them) sit directly under the card on every page.
+    fillCard: { flex: 1, marginBottom: 0, justifyContent: 'center' },
+
     rvaluesTitle: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
   });
 
@@ -150,22 +171,42 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
 
   return (
     <SwipablePages
+      resetKey={result}
       horizontalChrome={totalChrome}
+      fixedHeight={chartHeight === undefined ? undefined : chartHeight + 22 + 12 + 15}
       pages={[
         {
           key: 'spectrum',
           label: 'Spectrum',
+          info: {
+            title: 'Spectrum',
+            message: `${source}\n\nThe spectral power distribution: how much light the source puts out at each wavelength from about 380 to 780 nm (violet to red), scaled so the tallest point is 1. The red line starts at the peak: press and hold it, then drag to read the wavelength and spectral value anywhere on the curve (a quick swipe still changes charts). Everything else here (CCT, CRI, TM-30) is calculated from this curve.`,
+          },
           content: (
-            <View style={styles.chartCard}>
-              <SpectrumChart spectrum={result.spectrum} width={chartWidth} />
+            <View style={[styles.chartCard, fill && styles.fillCard]}>
+              <SpectrumChart
+                spectrum={result.spectrum}
+                width={chartWidth}
+                height={Math.max(60, Math.min(spectrumHeight - SPECTRUM_HEADER_H, Math.round(chartWidth / SPECTRUM_ASPECT)))}
+                details={{
+                  integrationMs: result.integrationTimeMs,
+                  peakSignal: result.peakSignal,
+                  darkSignal: result.darkSignal,
+                  showSpectral: !sampleLabel,
+                }}
+              />
             </View>
           ),
         },
         {
           key: 'chrom',
           label: 'Chrom',
+          info: {
+            title: 'CIE 1931 chromaticity',
+            message: `${source}\n\nThe colored horseshoe is every color the eye can see (CIE 1931 x,y). The black curve is the Planckian locus, the colors of a heated blackbody from 2,000 K to 10,000 K, and the blue dot is where this light falls. The closer the dot is to the curve, the closer to a natural white (Duv is the distance).`,
+          },
           content: (
-            <View style={styles.chromCard}>
+            <View style={[styles.chromCard, fill && styles.fillCard]}>
               {/* Shorter than the original 280 -- trimmed because this
                   page (plus the measurement grid and docked tab bar above
                   it) was running long on Main. The diagram's X/Y domain
@@ -173,15 +214,25 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
                   wider than tall at 280, so this compresses the horseshoe
                   a little further rather than clipping anything -- still
                   fully legible, just slightly flatter-looking. */}
-              <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} height={230} width={chartWidth} />
+              {/* (0,0) is the "no reading yet" placeholder: leave the card blank
+                  rather than drawing the empty CIE diagram. */}
+              {analysis.x > 0 || analysis.y > 0 ? (
+                <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} height={chartHeight ?? 230} width={chartWidth} />
+              ) : (
+                <View style={{ height: chartHeight ?? 230 }} />
+              )}
             </View>
           ),
         },
         {
           key: 'rvalues',
           label: 'R-Values',
+          info: {
+            title: 'CRI R1-R15',
+            message: `${source}\n\nHow faithfully this light renders 15 reference colors compared with a natural light of the same color temperature. 100 is perfect. Ra is the average of R1-R8; R9 (saturated red) is the one most often low in LED lights.`,
+          },
           content: (
-            <View style={styles.chartCard}>
+            <View style={[styles.chartCard, fill && styles.fillCard]}>
               <Text style={styles.rvaluesTitle}>CRI R1-R15</Text>
               {/* Explicit height, same as the Chrom page's chart just
                   above -- left to its own default (rowCount*22+28, ~360px
@@ -190,7 +241,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
                   "running long on Main" reason as Chrom's -- still room
                   enough per row (~14px) for all 15 R# labels and bars to
                   stay legible without crowding. */}
-              <RValuesBarChart ri={analysis.ri} height={230} width={chartWidth} />
+              <RValuesBarChart ri={analysis.ri} height={chartHeight ?? 230} width={chartWidth} />
             </View>
           ),
         },

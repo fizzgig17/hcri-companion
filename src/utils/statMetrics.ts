@@ -48,6 +48,12 @@ const CORE_METRICS: StatMetric[] = [
   // the person explicitly asked for.
   { id: 'x', label: 'x', format: (_r, a) => ({ value: a.x.toFixed(4) }) },
   { id: 'y', label: 'y', format: (_r, a) => ({ value: a.y.toFixed(4) }) },
+  // Reading-quality values straight from the meter (MeterResult). Hidden by
+  // default; handy for judging whether a reading was well exposed.
+  { id: 'peakSignal', label: 'Peak signal', format: (r) => ({ value: r.peakSignal.toFixed(0) }) },
+  { id: 'darkSignal', label: 'Dark signal', format: (r) => ({ value: r.darkSignal.toFixed(0) }) },
+  { id: 'integrationTime', label: 'Integ. time', format: (r) => ({ value: r.integrationTimeMs.toFixed(0), unit: 'ms' }) },
+  { id: 'compensateLevel', label: 'Compensate', format: (r) => ({ value: r.compensateLevel.toFixed(0) }) },
 ];
 
 // R1-R15, individually selectable -- analysis.ri[0] is R1, ri[14] is R15.

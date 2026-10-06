@@ -85,6 +85,34 @@ export const CMD_STOP_SAMPLING = [0x8c, 0x25];
 export const CMD_READ_RESULT = [0x8c, 0x13, 0x31]; // reads stored result, does NOT start a measurement
 
 /**
+ * Battery status query. Found by reading the vendor app's own protocol
+ * handling (2026-10-06): it sends 8C C3 routinely, right after the identify
+ * step and again before reading each result. The reply is 4 bytes:
+ *   8C C3 <battery percent 0-100> <status>
+ * where the LOW NIBBLE of <status> being 0 is what the vendor app treats as
+ * "charging" (it shows its charging icon exactly then). The charging
+ * interpretation comes from the vendor app's own UI logic and hasn't been
+ * independently confirmed on a plugged-in meter yet -- see the raw-byte log
+ * line MeterConnection.readBattery() writes.
+ */
+export const CMD_READ_BATTERY = [0x8c, 0xc3];
+
+export interface BatteryStatus {
+  /** 0-100 */
+  percent: number;
+  /** True when the status byte's low nibble is 0 (vendor app's "charging" indicator). */
+  charging: boolean;
+}
+
+/** Parses a full 8C C3 reply (echo included). Returns null for anything that isn't a well-formed 4-byte reply. */
+export function parseBatteryReply(body: Uint8Array): BatteryStatus | null {
+  if (body.length < 4 || body[0] !== 0x8c || body[1] !== 0xc3) return null;
+  const percent = body[2];
+  if (percent > 100) return null;
+  return { percent, charging: (body[3] & 0x0f) === 0 };
+}
+
+/**
  * NEVER SEND THIS. 0x8C 0x01 (set integration time) forces the meter into
  * locked/manual exposure mode and permanently breaks auto-exposure for every
  * subsequent reading until power-cycled. Documented here only as a warning,

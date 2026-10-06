@@ -11,6 +11,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, ScrollView, StyleSheet, Alert, AppState, Keyboard, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MeterConnection } from '../ble/MeterConnection';
+import type { BatteryStatus } from '../ble/protocol';
 import { initializeMeter, takeMeasurement, EMPTY_READING_ERROR } from '../ble/takeMeasurement';
 import { MeterResult } from '../ble/parseResult';
 import { analyzeSpectrum } from '../utils/spectralAnalysis';
@@ -33,6 +34,7 @@ import { useLog } from '../contexts/LogContext';
 import { withBackgroundDisconnectSuppressed, isBackgroundDisconnectSuppressed } from '../ble/backgroundDisconnectGuard';
 import TabBar from '../components/TabBar';
 import InfoButton from '../components/InfoButton';
+import ActionBar from '../components/ActionBar';
 import MainTab, { Status, FoundDevice } from './tabs/MainTab';
 import DataTab from './tabs/DataTab';
 import LogsTab from './tabs/LogsTab';
@@ -54,6 +56,8 @@ type TabKey = 'main' | 'data' | 'logs';
 // knowing whether a SECOND one is also in range, which means waiting out a
 // real window rather than racing to the first advertisement.
 const CONNECT_SCAN_WINDOW_MS = 5000;
+// Space under the Main page, above the pinned action bar.
+const MAIN_BOTTOM_PAD = 8;
 
 // Confirmed 2026-10-04 (a debug-report capture): backgrounding the app
 // disconnects the meter (see the AppState effect below), and coming back to
@@ -78,6 +82,8 @@ export default function HomeScreen({ navigation }: any) {
   const [status, setStatus] = useState<Status>('disconnected');
   const [result, setResult] = useState<MeterResult | null>(null);
   const [deviceName, setDeviceName] = useState<string | null>(null);
+  // Meter battery (8C C3) -- null until the meter has answered, cleared on disconnect. See the polling effect below.
+  const [battery, setBattery] = useState<BatteryStatus | null>(null);
   // The upload title/label the person typed on the Data tab. Deliberately
   // lifted up here rather than kept as local state inside DataTab -- state
   // local to a tab component gets torn down and reset the moment that tab
@@ -706,6 +712,34 @@ export default function HomeScreen({ navigation }: any) {
     statusRef.current = status;
   }, [status]);
 
+  // Meter battery: read once shortly after each (re)entry into 'connected'
+  // -- which also happens right after every reading and upload finishes --
+  // then every 60s while it stays connected. Never runs during 'measuring'
+  // (the effect only polls while status === 'connected'), so it can't
+  // overlap a reading. A missing/invalid answer just leaves the last value
+  // (or nothing) showing.
+  useEffect(() => {
+    if (status === 'disconnected') {
+      setBattery(null);
+      return;
+    }
+    if (status !== 'connected') return;
+    let cancelled = false;
+    const poll = async () => {
+      const conn = connRef.current;
+      if (!conn || !conn.isConnected()) return;
+      const b = await conn.readBattery();
+      if (!cancelled && b && statusRef.current === 'connected') setBattery(b);
+    };
+    const first = setTimeout(poll, 400);
+    const id = setInterval(poll, 60000);
+    return () => {
+      cancelled = true;
+      clearTimeout(first);
+      clearInterval(id);
+    };
+  }, [status]);
+
   // Whether a share sheet (or anything else that briefly hands control to
   // the OS) is up right now -- see ../ble/backgroundDisconnectGuard.ts.
   // Sharing a CSV (shareCsv.ts's RNShare.open) puts up the native share
@@ -952,6 +986,8 @@ export default function HomeScreen({ navigation }: any) {
     // bar and the first bit of scrolling content, so this would just be a
     // second gap stacked on top of that one.
     content: { paddingHorizontal: 16, paddingBottom: 56 + keyboardHeight },
+    // Main fits the screen without scrolling (see MainTab availableHeight).
+    mainArea: { flex: 1, paddingHorizontal: 16, paddingBottom: MAIN_BOTTOM_PAD },
     // Explicit flex:1 (new now that this ScrollView is conditionally
     // rendered as a sibling of LogsTab -- see the activeTab==='logs'
     // branch above) rather than relying on it picking up the remaining
@@ -1005,7 +1041,7 @@ export default function HomeScreen({ navigation }: any) {
         </View>
         <InfoButton
           title="About hCRI Companion"
-          message="hCRI Companion connects to your Hopoocolor spectrometer over Bluetooth, takes a reading and shows its spectrum and lighting stats (CCT, CRI and TM-30 Rf/Rg). Every reading is saved to History, and you can optionally upload it to your hCRI.io account to see its full TM-30 report and share it. To upload, add your hCRI.io username and API token in Settings."
+          message="hCRI Companion connects to your Hopoocolor spectrometer over Bluetooth, takes a reading and shows its spectrum and lighting stats (CCT, CRI and TM-30 Rf/Rg). Every reading is saved to History, and you can optionally upload it to your hCRI.io account to see its full TM-30 report and share it. To upload, add your hCRI.io username and API token in Settings. Tap Settings to choose which measurements show. No meter handy? Test reading loads a random public hCRI.io report so you can try the charts (sample data: it isn't saved or uploadable). Meter won't connect? Press and hold Connect to Meter to reset the connection."
           style={styles.headerInfo}
         />
       </View>
@@ -1019,8 +1055,8 @@ export default function HomeScreen({ navigation }: any) {
       {activeTab === 'logs' ? (
         <LogsTab log={log} onShare={shareLog} onClear={clearLog} />
       ) : (
-      <ScrollView ref={scrollRef} style={styles.scrollArea} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        {activeTab === 'main' && (
+      activeTab === 'main' ? (
+      <View style={styles.mainArea}>
           <MainTab
             status={status}
             isBusy={isBusy}
@@ -1045,12 +1081,15 @@ export default function HomeScreen({ navigation }: any) {
             onCopyLink={copyReportLink}
             statIds={statIds}
             connectedDeviceName={deviceName}
+            battery={battery}
             uploadTitle={uploadTitle}
             onUploadTitleChange={setUploadTitle}
             cachedUsername={cachedUsername}
             scrollInputIntoView={scrollInputIntoView}
           />
-        )}
+      </View>
+      ) : (
+      <ScrollView ref={scrollRef} style={styles.scrollArea} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {activeTab === 'data' && (
           <DataTab
             result={result}
@@ -1069,6 +1108,25 @@ export default function HomeScreen({ navigation }: any) {
           />
         )}
       </ScrollView>
+      ))}
+      {activeTab === 'main' && (
+        <ActionBar
+          status={status}
+          hasReading={!!(result && analysis)}
+          isSample={!!result?.sampleLabel}
+          connect={() => connect({ promptIfBluetoothOff: true })}
+          measure={measure}
+          disconnect={disconnect}
+          onShowTestReading={showTestReading}
+          loadingTestReading={loadingTestReading}
+          onUpload={upload}
+          uploading={status === 'uploading'}
+          uploadSucceeded={uploadSucceeded}
+          canCopyLink={!!lastUploadedReport}
+          copyingLink={copyingLink}
+          onCopyLink={copyReportLink}
+          onResetConnection={resetConnection}
+        />
       )}
     </SafeAreaView>
   );
