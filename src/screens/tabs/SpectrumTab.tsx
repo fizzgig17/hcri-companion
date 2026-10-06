@@ -20,7 +20,7 @@
 // "Spectrum/Chrom/R-Values" to keep in sync rather than two that could
 // drift apart.
 
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useContentWidth } from '../../layout';
 import SpectrumChart, { SPECTRUM_HEADER_H } from '../../components/SpectrumChart';
@@ -87,20 +87,35 @@ const CARD_PADDING = 22;
 // short plot rather than filling all the vertical room it's offered.
 const SPECTRUM_ASPECT = 1.65;
 
+// Fills whatever room its card has left and hands that exact height to the chart. The card's own
+// height comes from the (fixed) pager height, never from its content, so measuring here can't feed back
+// into itself. `center` vertically centers the chart in the room (used by the spectrum page only).
+function MeasuredBox({ center, children }: { center?: boolean; children: (height: number) => React.ReactNode }) {
+  const [h, setH] = useState(0);
+  return (
+    <View
+      style={{ flex: 1, minHeight: 0, justifyContent: center ? 'center' : 'flex-start' }}
+      onLayout={(e) => {
+        const v = Math.floor(e.nativeEvent.layout.height);
+        setH((prev) => (prev === v ? prev : v));
+      }}
+    >
+      {h > 0 ? children(h) : null}
+    </View>
+  );
+}
+
 export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 0, regionHeight, sampleLabel }: Props) {
   const source = sampleLabel
     ? `This is a sample from a public hCRI.io report (${sampleLabel}), not a reading from your own meter. It isn't saved to History and can't be uploaded or shared.`
     : 'This comes from the reading your meter just took.';
   const { colors } = useTheme();
-  // Main tab: charts grow to fill the room they're given (up to 320/340) and
-  // shrink if the region is short; elsewhere they keep 200/230. Overheads: pager dots (~26),
-  // card padding/border (22), card bottom margin (12), R-values title (15). The pager dots row
-  // is 26 tall plus 8 above and 4 below = 38 (this used to say 26, which pushed the chart cards ~12px
-  // under the title box and clipped their bottoms).
-  const fit = regionHeight && regionHeight > 0 ? Math.max(90, Math.floor(regionHeight - 38 - 22 - 12 - 15)) : undefined;
-  const chartHeight = fit === undefined ? undefined : Math.min(fit, 300);
-  const fill = chartHeight !== undefined;
-  const spectrumHeight = chartHeight === undefined ? 200 : Math.min(chartHeight, 260);
+  // Main tab (regionHeight given): the pager is exactly the region minus its dots row (26 tall + 8 above +
+  // 4 below = 38), every page's card fills it, and each chart is sized from the space its card actually has
+  // (see MeasuredBox) instead of from hand-added overhead constants -- those kept drifting a few px short
+  // and clipped the bottom of the cards. Elsewhere (no regionHeight) charts keep their fixed default sizes.
+  const fill = !!regionHeight && regionHeight > 0;
+  const pagerHeight = fill ? Math.max(120, Math.floor((regionHeight as number) - 38)) : undefined;
   // Computed once, here, rather than separately (and inconsistently) in
   // SwipablePages and in each of the three chart components -- see this
   // file's own Props comment above for why a hardcoded per-component
@@ -159,7 +174,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
 
     // Main tab: every page's card is the pager's full height, content centered,
     // so the dots (and the ? beside them) sit directly under the card on every page.
-    fillCard: { flex: 1, marginBottom: 0, justifyContent: 'center' },
+    fillCard: { flex: 1, marginBottom: 0, minHeight: 0 },
 
     rvaluesTitle: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
   });
@@ -176,7 +191,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
     <SwipablePages
       resetKey={result}
       horizontalChrome={totalChrome}
-      fixedHeight={chartHeight === undefined ? undefined : chartHeight + 22 + 12 + 15}
+      fixedHeight={pagerHeight}
       pages={[
         {
           key: 'spectrum',
@@ -187,15 +202,15 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
           },
           content: (
             <View style={[styles.chartCard, fill && styles.fillCard]}>
-              <SpectrumChart
+              {fill ? <MeasuredBox center>{(h) => (<SpectrumChart
                 spectrum={result.spectrum}
                 width={chartWidth}
-                height={Math.max(60, Math.min(spectrumHeight - SPECTRUM_HEADER_H, Math.round(chartWidth / SPECTRUM_ASPECT)))}
+                height={Math.max(60, Math.min(h - SPECTRUM_HEADER_H, Math.round(chartWidth / SPECTRUM_ASPECT)))}
                 // A test reading only shows the wavelength under the red line; a real
                 // reading adds the integration time and peak/dark signal (and the spectral value).
                 details={
                   sampleLabel
-                    ? {}
+                    ? { showRelative: true }
                     : {
                         integrationMs: result.integrationTimeMs,
                         peakSignal: result.peakSignal,
@@ -203,7 +218,23 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
                         showSpectral: true,
                       }
                 }
-              />
+              />)}</MeasuredBox> : (((h) => (<SpectrumChart
+                spectrum={result.spectrum}
+                width={chartWidth}
+                height={Math.max(60, Math.min(h - SPECTRUM_HEADER_H, Math.round(chartWidth / SPECTRUM_ASPECT)))}
+                // A test reading only shows the wavelength under the red line; a real
+                // reading adds the integration time and peak/dark signal (and the spectral value).
+                details={
+                  sampleLabel
+                    ? { showRelative: true }
+                    : {
+                        integrationMs: result.integrationTimeMs,
+                        peakSignal: result.peakSignal,
+                        darkSignal: result.darkSignal,
+                        showSpectral: true,
+                      }
+                }
+              />))(200))}
             </View>
           ),
         },
@@ -225,10 +256,19 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
                   fully legible, just slightly flatter-looking. */}
               {/* (0,0) is the "no reading yet" placeholder: leave the card blank
                   rather than drawing the empty CIE diagram. */}
-              {analysis.x > 0 || analysis.y > 0 ? (
-                <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} height={chartHeight ?? 230} width={chartWidth} />
+              {fill ? (
+                <MeasuredBox>
+                  {(h) =>
+                    analysis.x > 0 || analysis.y > 0 ? (
+                      // -6: the chart's own container adds 6px of top padding.
+                      <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} height={h - 6} width={chartWidth} />
+                    ) : null
+                  }
+                </MeasuredBox>
+              ) : analysis.x > 0 || analysis.y > 0 ? (
+                <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} height={230} width={chartWidth} />
               ) : (
-                <View style={{ height: chartHeight ?? 230 }} />
+                <View style={{ height: 230 }} />
               )}
             </View>
           ),
@@ -250,7 +290,11 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
                   "running long on Main" reason as Chrom's -- still room
                   enough per row (~14px) for all 15 R# labels and bars to
                   stay legible without crowding. */}
-              <RValuesBarChart ri={analysis.ri} height={chartHeight ?? 230} width={chartWidth} />
+              {fill ? (
+                <MeasuredBox>{(h) => <RValuesBarChart ri={analysis.ri} height={h} width={chartWidth} />}</MeasuredBox>
+              ) : (
+                <RValuesBarChart ri={analysis.ri} height={230} width={chartWidth} />
+              )}
             </View>
           ),
         },

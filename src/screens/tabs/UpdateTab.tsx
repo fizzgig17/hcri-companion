@@ -19,6 +19,9 @@ export default function UpdateTab() {
     row: { flexDirection: 'row', alignItems: 'center', marginTop: 14 },
   });
 
+  // Play's own wording for a sideloaded install: ERROR_APP_NOT_OWNED (-10).
+  const notFromPlay = !!error && (error.includes('NOT_OWNED') || error.includes('-10'));
+
   const message =
     status === 'checking'
       ? 'Checking Google Play…'
@@ -40,8 +43,9 @@ export default function UpdateTab() {
       </View>
       {status === 'error' && (
         <Text style={styles.note}>
-          {error ? `${error} ` : ''}Updates come through Google Play, so this only works on an install from the Play Store
-          (including the testing track).
+          {notFromPlay
+            ? "This copy of the app wasn't installed from Google Play, so Play can't check it. Updates come through Google Play (including the testing track)."
+            : `${error ?? ''} Updates come through Google Play, so this only works on an install from the Play Store.`}
         </Text>
       )}
       {status === 'available' && <PrimaryButton title="Update now" onPress={startUpdate} />}
