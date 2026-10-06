@@ -463,7 +463,7 @@ export default function HomeScreen({ navigation }: any) {
     setDevicePickerVisible(false);
   }, []);
 
-  // Connecting a meter ends the "test reading" -- the sample's stats/charts,
+  // Starting to connect a meter ends the "test reading" -- the sample's stats/charts,
   // its note, and the upload title all go away, back to the empty state,
   // rather than leaving someone else's spectrum on screen looking like a
   // real reading. Reads `result` through a ref so this fires only on the
@@ -471,7 +471,9 @@ export default function HomeScreen({ navigation }: any) {
   const resultRef = useRef(result);
   resultRef.current = result;
   useEffect(() => {
-    if (status !== 'connected' || !resultRef.current?.sampleLabel) return;
+    // 'connecting' is the moment Connect to Meter is tapped -- clear then,
+    // not once the connection finishes.
+    if (status === 'disconnected' || !resultRef.current?.sampleLabel) return;
     setResult(null);
     setUploadTitle('');
     setUploadSucceeded(false);
