@@ -53,6 +53,8 @@ import { ThemeMode } from '../theme';
 import AboutTab from './tabs/AboutTab';
 import TabBar from '../components/TabBar';
 import VersionStamp from '../components/VersionStamp';
+import UpdateTab from './tabs/UpdateTab';
+import { useUpdate } from '../contexts/UpdateContext';
 import { hapticTap, hapticSuccess, setTapHapticsEnabled, setResultHapticsEnabled } from '../utils/haptics';
 
 // Labels/order for the Light/Dark/System picker below -- System first since
@@ -63,11 +65,21 @@ const THEME_MODE_OPTIONS: { value: ThemeMode; label: string }[] = [
   { value: 'dark', label: 'Dark' },
 ];
 
-export default function SettingsScreen({ navigation }: any) {
+export default function SettingsScreen({ navigation, route }: any) {
   const { colors, mode, setMode } = useTheme();
   // Settings / About sub-tabs -- About used to be a section at the very
   // bottom of this screen, a long scroll past every setting to reach.
-  const [settingsTab, setSettingsTab] = useState<'settings' | 'about'>('settings');
+  const update = useUpdate();
+  const autoUpdate = route?.params?.autoUpdate;
+  const [settingsTab, setSettingsTab] = useState<'settings' | 'update' | 'about'>('settings');
+  // "Update now" on the banner lands here and starts the update.
+  React.useEffect(() => {
+    if (autoUpdate) {
+      setSettingsTab('update');
+      update.startUpdate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoUpdate]);
   // Always open on Settings, never on whichever sub-tab was showing last:
   // this screen stays mounted while you're on other tabs, so reset when
   // leaving it, and when the Settings tab itself is tapped.
@@ -450,13 +462,19 @@ export default function SettingsScreen({ navigation }: any) {
         <TabBar
           tabs={[
             { key: 'settings', label: 'Settings' },
+            { key: 'update', label: 'Update', badge: update.status === 'available' },
             { key: 'about', label: 'About' },
           ]}
           active={settingsTab}
           onChange={setSettingsTab}
         />
       </View>
-      {settingsTab === 'about' ? (
+      {settingsTab === 'update' ? (
+        <ScrollView style={styles.scrollArea} contentContainerStyle={styles.contentContainer}>
+          <VersionStamp />
+          <UpdateTab />
+        </ScrollView>
+      ) : settingsTab === 'about' ? (
         <ScrollView style={styles.scrollArea} contentContainerStyle={styles.contentContainer}>
           <AboutTab />
         </ScrollView>

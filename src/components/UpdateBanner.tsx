@@ -1,0 +1,60 @@
+// src/components/UpdateBanner.tsx
+//
+// One banner, floating just under the status bar, shown only while Google
+// Play has a newer version. "Update now" jumps to Settings > Update and
+// starts the update; the x hides it until the next launch.
+
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../contexts/ThemeContext';
+import { useUpdate } from '../contexts/UpdateContext';
+import { navigationRef } from '../navigationRef';
+
+export default function UpdateBanner() {
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { status, bannerDismissed, dismissBanner } = useUpdate();
+  if (status !== 'available' || bannerDismissed) return null;
+
+  const styles = StyleSheet.create({
+    wrap: {
+      position: 'absolute',
+      top: insets.top + 6,
+      left: 12,
+      right: 12,
+      zIndex: 50,
+      elevation: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.accent,
+      borderRadius: 12,
+      paddingVertical: 8,
+      paddingLeft: 14,
+      paddingRight: 6,
+    },
+    text: { flex: 1, color: '#fff', fontSize: 13, fontWeight: '700' },
+    action: { backgroundColor: '#fff', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, marginLeft: 8 },
+    actionText: { color: colors.accent, fontSize: 13, fontWeight: '800' },
+    close: { paddingHorizontal: 10, paddingVertical: 4 },
+    closeText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  });
+
+  const updateNow = () => {
+    if (navigationRef.isReady()) {
+      navigationRef.navigate('Tabs', { screen: 'Settings', params: { autoUpdate: Date.now() } });
+    }
+  };
+
+  return (
+    <View style={styles.wrap} accessibilityRole="alert">
+      <Text style={styles.text}>A new version is available</Text>
+      <TouchableOpacity style={styles.action} onPress={updateNow} accessibilityLabel="Update now">
+        <Text style={styles.actionText}>Update now</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.close} onPress={dismissBanner} accessibilityLabel="Dismiss">
+        <Text style={styles.closeText}>×</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}

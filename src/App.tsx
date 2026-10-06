@@ -30,6 +30,9 @@ import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { LogProvider } from './contexts/LogContext';
 import { IS_DEV_BUILD } from './hcri/buildTarget';
 import { MAX_CONTENT_WIDTH } from './layout';
+import { navigationRef } from './navigationRef';
+import { UpdateProvider } from './contexts/UpdateContext';
+import UpdateBanner from './components/UpdateBanner';
 import { setTapHapticsEnabled, setResultHapticsEnabled } from './utils/haptics';
 import { loadHapticTapsPreference, loadHapticResultsPreference } from './storage/preferences';
 
@@ -109,7 +112,7 @@ function Navigation() {
   return (
     <View style={{ flex: 1, alignItems: 'center', backgroundColor: colors.background }}>
     <View style={{ flex: 1, width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
-    <NavigationContainer theme={scheme === 'light' ? DefaultTheme : DarkTheme}>
+    <NavigationContainer ref={navigationRef} theme={scheme === 'light' ? DefaultTheme : DarkTheme}>
       {/* Status bar text/icons need to flip too -- dark-on-light is
           unreadable against a light background, and vice versa. */}
       <StatusBar barStyle={scheme === 'light' ? 'dark-content' : 'light-content'} />
@@ -125,6 +128,7 @@ function Navigation() {
         <Stack.Screen name="ReadingDetail" component={ReadingDetailScreen} options={{ title: 'Reading' }} />
       </Stack.Navigator>
     </NavigationContainer>
+    <UpdateBanner />
     </View>
     {/* Title screen over the top for the first moment of every launch --
         the app keeps loading/connecting underneath. See SplashTitle.tsx. */}
@@ -182,7 +186,9 @@ export default function App() {
                 without seeing it -- a no-op view in a production build, see
                 components/DevBuildBanner.tsx. */}
             <DevBuildBanner />
-            <Navigation />
+            <UpdateProvider>
+              <Navigation />
+            </UpdateProvider>
           </ErrorBoundary>
         </LogProvider>
       </ThemeProvider>
