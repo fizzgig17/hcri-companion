@@ -5,6 +5,12 @@ This program is free software: you can redistribute it and/or modify it under th
 
 This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
+Additional permission under GNU GPL version 3 section 7 (App Store distribution):
+
+As the copyright holder of this program, fizzgig gives you additional permission to convey the program, and works based on it, through Apple's App Store (and similar curated app stores such as Google Play) under the terms of the store's standard distribution agreement and usage rules, even where those terms impose restrictions that would otherwise conflict with the GNU General Public License. This permission applies only to the copyright held by fizzgig; it does not grant any permission under the copyrights of third parties whose code is included, which remains under its own license (see THIRD-PARTY-NOTICES.md). The complete corresponding source code remains available under the GNU GPL at https://github.com/fizzgig17/hcri-companion, and anyone may still obtain, modify and redistribute it under the GPL's terms.
+
+If you modify this program, you may extend this additional permission to your version, but you are not obliged to; if you do not wish to, delete this additional-permission paragraph from your version (GPL section 7). 
+
 Third-party components keep their own licenses; see THIRD-PARTY-NOTICES.md. The full license text follows.
 
 ========================================================================
