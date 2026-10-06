@@ -105,7 +105,6 @@ export default function ActionBar(p: Props) {
     disabled,
     accent,
     busy,
-    tick,
   }: {
     icon: IconName;
     label: string;
@@ -113,11 +112,10 @@ export default function ActionBar(p: Props) {
     disabled?: boolean;
     accent?: boolean;
     busy?: boolean;
-    tick?: boolean;
   }) => (
     <TouchableOpacity
       style={[styles.side, disabled && styles.disabled]}
-      onPress={onPress && (() => { if (tick) hapticTap(); onPress(); })}
+      onPress={onPress && (() => { hapticTap(); onPress(); })}
       disabled={disabled || !onPress}
       activeOpacity={0.7}
       accessibilityRole="button"
@@ -156,7 +154,7 @@ export default function ActionBar(p: Props) {
     <View style={styles.wrap}>
       <View style={styles.bar}>
         <View style={[styles.slot, styles.slotLeft]}>
-          {connected && <SideButton icon="power" label="Disconnect" onPress={p.disconnect} tick />}
+          {connected && <SideButton icon="power" label="Disconnect" onPress={p.disconnect} />}
           {status === 'disconnected' && (
             <SideButton
               icon="activity"
@@ -179,7 +177,6 @@ export default function ActionBar(p: Props) {
               onPress={p.onUpload}
               disabled={uploadDisabled}
               busy={status === 'uploading'}
-              tick
             />
           )}
           {p.uploadSucceeded && p.canCopyLink && (
