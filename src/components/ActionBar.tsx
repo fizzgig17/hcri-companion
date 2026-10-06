@@ -7,7 +7,7 @@
 // only). Take Reading keeps the standard accent green.
 
 import React from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import type { Status } from '../screens/tabs/MainTab';
 
@@ -28,10 +28,6 @@ interface Props {
   onCopyLink: () => void;
   /** Long-press Connect: clear a stale BLE connection and retry. */
   onResetConnection: () => void;
-  /** Upload title (docked above the buttons). `defaultTitle` shows greyed while empty. */
-  uploadTitle: string;
-  onUploadTitleChange: (t: string) => void;
-  defaultTitle: string;
 }
 
 export default function ActionBar(p: Props) {
@@ -96,29 +92,6 @@ export default function ActionBar(p: Props) {
 
   return (
     <View style={styles.wrap}>
-      {/* Always occupies its space (invisible until there is a reading) so the
-          bar's height, and so the charts above, never change when it appears. */}
-      {!p.hasReading && <View style={[styles.titleWrap, { opacity: 0, borderWidth: 0 }]} />}
-      {p.hasReading && (
-        <View style={styles.titleWrap}>
-          {p.uploadTitle.length === 0 && (
-            <Text style={styles.titleOverlay} pointerEvents="none">
-              {p.defaultTitle}
-            </Text>
-          )}
-          <TextInput
-            style={[styles.titleInput, p.uploadTitle.length === 0 && styles.titleInputEmpty]}
-            value={p.uploadTitle}
-            onChangeText={p.onUploadTitleChange}
-            autoCapitalize="none"
-            autoCorrect={false}
-            multiline
-            textAlignVertical="top"
-            editable={!p.isSample}
-            accessibilityLabel="Upload title"
-          />
-        </View>
-      )}
       <View style={styles.bar}>
       {status === 'connected' && (
         <TouchableOpacity

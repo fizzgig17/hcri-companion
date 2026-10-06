@@ -60,6 +60,8 @@ interface Props {
   extraHorizontalChrome?: number;
   /** Main tab: the exact height the swipeable pager (charts + dots) may fill. Charts are sized to fit it so nothing scrolls. Omit for the natural sizes (200 spectrum, 230 chrom/R-values). */
   regionHeight?: number;
+  /** Set when `result` is a sample from a public hCRI.io report (not a reading from the person's own meter) -- only changes the "What's this?" text. */
+  sampleLabel?: string;
 }
 
 // The screen's own scroll-content padding (HomeScreen's and
@@ -81,7 +83,10 @@ const SCREEN_PADDING = 32;
 // before.
 const CARD_PADDING = 22;
 
-export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 0, regionHeight }: Props) {
+export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 0, regionHeight, sampleLabel }: Props) {
+  const source = sampleLabel
+    ? `This is a sample from a public hCRI.io report (${sampleLabel}), not a reading from your own meter. It isn't saved to History and can't be uploaded or shared.`
+    : 'This comes from the reading your meter just took.';
   const { colors } = useTheme();
   // Main tab: charts keep their usual sizes (200 spectrum, 230 chrom/R-values)
   // and only shrink if the region is too short. Overheads: pager dots (~26),
@@ -164,6 +169,10 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
         {
           key: 'spectrum',
           label: 'Spectrum',
+          info: {
+            title: 'Spectrum',
+            message: `${source}\n\nThe spectral power distribution: how much light the source puts out at each wavelength from about 380 to 780 nm (violet to red), scaled so the tallest point is 1. Everything else here (CCT, CRI, TM-30) is calculated from this curve.`,
+          },
           content: (
             <View style={styles.chartCard}>
               <SpectrumChart spectrum={result.spectrum} width={chartWidth} height={spectrumHeight} />
@@ -173,6 +182,10 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
         {
           key: 'chrom',
           label: 'Chrom',
+          info: {
+            title: 'CIE 1931 chromaticity',
+            message: `${source}\n\nThe colored horseshoe is every color the eye can see (CIE 1931 x,y). The black curve is the Planckian locus, the colors of a heated blackbody from 2,000 K to 10,000 K, and the blue dot is where this light falls. The closer the dot is to the curve, the closer to a natural white (Duv is the distance).`,
+          },
           content: (
             <View style={styles.chromCard}>
               {/* Shorter than the original 280 -- trimmed because this
@@ -195,6 +208,10 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
         {
           key: 'rvalues',
           label: 'R-Values',
+          info: {
+            title: 'CRI R1-R15',
+            message: `${source}\n\nHow faithfully this light renders 15 reference colors compared with a natural light of the same color temperature. 100 is perfect. Ra is the average of R1-R8; R9 (saturated red) is the one most often low in LED lights.`,
+          },
           content: (
             <View style={styles.chartCard}>
               <Text style={styles.rvaluesTitle}>CRI R1-R15</Text>

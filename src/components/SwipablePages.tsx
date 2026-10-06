@@ -21,6 +21,7 @@
 // down to clear the TALLEST page instead of sitting right under whichever
 // one is actually on screen.
 
+import InfoButton from './InfoButton';
 import React, { useRef, useState } from 'react';
 import {
   View,
@@ -53,6 +54,8 @@ export interface Page {
   key: string;
   label: string;
   content: React.ReactNode;
+  /** Optional "What's this?" help for this page, shown at the bottom-left under the card. */
+  info?: { title: string; message: string };
 }
 
 interface Props {
@@ -99,7 +102,8 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
   };
 
   const styles = StyleSheet.create({
-    dotsRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 8, marginBottom: 4 },
+    dotsRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 8, marginBottom: 4, height: 26 },
+    infoLeft: { position: 'absolute', left: 4, top: 0, bottom: 0, justifyContent: 'center' },
     dotTouchable: { padding: 4 },
     dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.cardBorder },
     dotActive: { backgroundColor: colors.accent, width: 16 },
@@ -143,6 +147,16 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
               Chrom without swiping too, same as tapping a page dot anywhere
               else in the app's UI conventions. */}
           <View style={styles.dotsRow}>
+            {pages[activeIndex]?.info && (
+              <View style={styles.infoLeft}>
+                <InfoButton
+                  label="What's this?"
+                  title={pages[activeIndex].info!.title}
+                  message={pages[activeIndex].info!.message}
+                  style={{ paddingVertical: 2 }}
+                />
+              </View>
+            )}
             {pages.map((p, i) => (
               <TouchableOpacity key={p.key} onPress={() => goTo(i)} hitSlop={8} style={styles.dotTouchable}>
                 <View style={[styles.dot, i === activeIndex && styles.dotActive]} />

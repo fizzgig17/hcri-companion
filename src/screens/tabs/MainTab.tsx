@@ -19,6 +19,7 @@ import React, { useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Modal, StyleSheet } from 'react-native';
 import InfoButton from '../../components/InfoButton';
 import StatCard, { statDensity } from '../../components/StatCard';
+import { defaultLabel } from '../../hcri/buildCsv';
 import SpectrumTab from './SpectrumTab';
 import { statusLabels } from '../../theme';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -27,6 +28,10 @@ import type { BatteryStatus } from '../../ble/protocol';
 import { SpectralAnalysis } from '../../utils/spectralAnalysis';
 import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
 import { EMPTY_METER_RESULT, EMPTY_SPECTRAL_ANALYSIS } from '../../utils/placeholderReading';
+
+// Title field (56) + its top margin (8), always subtracted so the charts are
+// the same size whether or not a reading (and so the title) is showing.
+const TITLE_BLOCK_H = 64;
 
 export type Status = 'disconnected' | 'connecting' | 'connected' | 'measuring' | 'uploading';
 
@@ -179,7 +184,7 @@ export default function MainTab({
   const [rootH, setRootH] = useState(0);
   const [statusH, setStatusH] = useState(0);
   const [gridH, setGridH] = useState(0);
-  const chartRegionH = rootH && statusH && gridH ? Math.max(0, rootH - statusH - 6 - 6 - 30 - gridH - 2) : 0;
+  const chartRegionH = rootH && statusH && gridH ? Math.max(0, rootH - statusH - 6 - 6 - 30 - gridH - 2 - TITLE_BLOCK_H) : 0;
 
   const styles = StyleSheet.create({
     statusRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', rowGap: 4, marginBottom: 6 },
@@ -249,9 +254,9 @@ export default function MainTab({
       borderWidth: 1,
       borderColor: colors.cardBorder,
       borderRadius: 8,
-      minHeight: 38,
       position: 'relative',
-      marginBottom: 10,
+      marginTop: 8,
+      height: 56,
     },
     // In normal flow (not absolutely positioned) so a default title that wraps
     // onto 2+ lines makes the box grow; the empty TextInput is laid over it.
@@ -267,7 +272,7 @@ export default function MainTab({
       paddingVertical: 8,
       color: colors.text,
       fontSize: 13,
-      minHeight: 38,
+      height: 54,
     },
 
     modalBackdrop: {
@@ -393,8 +398,29 @@ export default function MainTab({
             CARD_PADDING alone was fixed. See SpectrumTab.tsx's
             extraHorizontalChrome comment. */}
         <View style={styles.chartRegion}>
-          <SpectrumTab result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} />
+          <SpectrumTab result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} sampleLabel={result?.sampleLabel} />
         </View>
+        {hasReading && (
+          <View style={styles.titleInputWrap}>
+            {uploadTitle.length === 0 && (
+              <Text style={styles.titleInputOverlay} pointerEvents="none">
+                {defaultLabel(cachedUsername, displayResult.deviceName)}
+              </Text>
+            )}
+            <TextInput
+              ref={titleInputRef}
+              style={[styles.titleInput, uploadTitle.length === 0 && styles.titleInputEmpty]}
+              value={uploadTitle}
+              onChangeText={onUploadTitleChange}
+              autoCapitalize="none"
+              autoCorrect={false}
+              multiline
+              textAlignVertical="top"
+              editable={!result?.sampleLabel}
+              accessibilityLabel="Upload title"
+            />
+          </View>
+        )}
 
       </View>
 

@@ -1126,9 +1126,6 @@ export default function HomeScreen({ navigation }: any) {
           copyingLink={copyingLink}
           onCopyLink={copyReportLink}
           onResetConnection={resetConnection}
-          uploadTitle={uploadTitle}
-          onUploadTitleChange={setUploadTitle}
-          defaultTitle={defaultLabel(cachedUsername, result?.deviceName ?? '')}
         />
       )}
     </SafeAreaView>
