@@ -47,6 +47,7 @@ import { maskSecret } from '../utils/maskSecret';
 import { useTheme } from '../contexts/ThemeContext';
 import { ThemeMode } from '../theme';
 import AboutTab from './tabs/AboutTab';
+import TabBar from '../components/TabBar';
 import { APP_VERSION, BUILD_DATE } from '../buildInfo';
 
 // Labels/order for the Light/Dark/System picker below -- System first since
@@ -59,6 +60,9 @@ const THEME_MODE_OPTIONS: { value: ThemeMode; label: string }[] = [
 
 export default function SettingsScreen() {
   const { colors, mode, setMode } = useTheme();
+  // Settings / About sub-tabs -- About used to be a section at the very
+  // bottom of this screen, a long scroll past every setting to reach.
+  const [settingsTab, setSettingsTab] = useState<'settings' | 'about'>('settings');
   const [username, setUsername] = useState('');
   const [token, setToken] = useState('');
   const [hasSaved, setHasSaved] = useState(false);
@@ -263,6 +267,8 @@ export default function SettingsScreen() {
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
+    scrollArea: { flex: 1 },
+    tabBarWrap: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4 },
     // Padding lives here (the scrollable content) rather than on the
     // ScrollView's own `style` -- padding on the outer style can clip the
     // last bit of content at the bottom of a scroll on some platforms.
@@ -415,7 +421,23 @@ export default function SettingsScreen() {
   });
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+    <View style={styles.container}>
+      <View style={styles.tabBarWrap}>
+        <TabBar
+          tabs={[
+            { key: 'settings', label: 'Settings' },
+            { key: 'about', label: 'About' },
+          ]}
+          active={settingsTab}
+          onChange={setSettingsTab}
+        />
+      </View>
+      {settingsTab === 'about' ? (
+        <ScrollView style={styles.scrollArea} contentContainerStyle={styles.contentContainer}>
+          <AboutTab />
+        </ScrollView>
+      ) : (
+    <ScrollView style={styles.scrollArea} contentContainerStyle={styles.contentContainer}>
       {/* Which build you're looking at, at a glance -- came up more than
           once this session when testing against a build that was already
           a few fixes behind develop. See buildInfo.ts for how this stays
@@ -636,17 +658,8 @@ export default function SettingsScreen() {
           onToggle={handleToggleStat}
         />
       </View>
-
-      {/* Used to be its own tab in Home's TabBar -- static reference
-          content (which meter models are supported) you check once, maybe
-          twice ever, not something that deserves a permanent slot next to
-          Main/Data/Logs. Settings is the right home for it: everything
-          else on this screen is also "look at this rarely, not every
-          session." */}
-      <View style={styles.aboutSection}>
-        <Text style={styles.aboutTitle}>About</Text>
-        <AboutTab />
-      </View>
     </ScrollView>
+      )}
+    </View>
   );
 }

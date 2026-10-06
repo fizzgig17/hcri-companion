@@ -463,6 +463,18 @@ export default function HomeScreen({ navigation }: any) {
     setDevicePickerVisible(false);
   }, []);
 
+  // Tapping the Home tab always lands on Main -- including when you're
+  // already on Home looking at Data or Logs (standard tab-bar behavior:
+  // tapping a tab takes you to its starting page) -- and scrolls it back
+  // to the top.
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('tabPress', () => {
+      setActiveTab('main');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+    });
+    return unsubscribe;
+  }, [navigation]);
+
   // Try to connect automatically as soon as the app opens, rather than
   // requiring a manual tap on "Connect to Meter" every time -- if the
   // meter's already powered on and in range, this gets straight to
