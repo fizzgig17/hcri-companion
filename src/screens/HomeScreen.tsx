@@ -361,6 +361,15 @@ export default function HomeScreen({ navigation }: any) {
    */
   const connect = useCallback(
     async (opts?: { preferLastDeviceOnMultiple?: boolean; promptIfBluetoothOff?: boolean }) => {
+      // Clear a test reading in the same batch as the status change, so it
+      // never gets a rendered frame beside the "Connecting…" button.
+      if (resultRef.current?.sampleLabel) {
+        setResult(null);
+        setUploadTitle('');
+        setUploadSucceeded(false);
+        setLastUploadedReport(null);
+        setCurrentReadingId(null);
+      }
       setStatus('connecting');
       try {
         const conn = getConnection();
