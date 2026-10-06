@@ -13,7 +13,7 @@
 // the Android Studio Run button) is needed after installing it.
 
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Path, Line, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -22,9 +22,15 @@ interface Props {
   height?: number;
   /** The chart's actual available content width (inside SpectrumTab's chartCard padding), computed once by SpectrumTab -- see its own comment for why this moved there instead of staying a hardcoded chrome constant in each chart file. */
   width: number;
+  /** Reading details shown above the plot, like the vendor app: peak wavelength and its spectral value, plus the meter's integration time and peak/dark signal. Any piece that's missing is left out. */
+  details?: { integrationMs?: number; peakSignal?: number; darkSignal?: number; showSpectral?: boolean };
 }
 
-const PADDING = { top: 10, right: 10, bottom: 22, left: 28 };
+const PADDING = { top: 8, right: 8, bottom: 24, left: 24 };
+/** Height of the two-line details header drawn above the plot (when `details` is given). */
+export const SPECTRUM_HEADER_H = 34;
+// The vendor app's own full-scale for its Peak/Dark percentages.
+const SIGNAL_FULL_SCALE = 64500;
 
 /**
  * Approximates the perceived color of a wavelength in the visible spectrum
@@ -72,7 +78,7 @@ function wavelengthToColor(wavelengthNm: number): string {
   return `rgb(${to255(r)}, ${to255(g)}, ${to255(b)})`;
 }
 
-export default function SpectrumChart({ spectrum, height = 200, width }: Props) {
+export default function SpectrumChart({ spectrum, height = 200, width, details }: Props) {
   // `width` is computed once by SpectrumTab (the window width minus
   // whatever chrome actually wraps it on THIS host screen) and handed
   // down as a plain prop -- no onLayout, no estimate-then-correct shift.
@@ -92,6 +98,9 @@ export default function SpectrumChart({ spectrum, height = 200, width }: Props) 
   const minNm = spectrum[0].nm;
   const maxNm = spectrum[spectrum.length - 1].nm;
   const nmRange = maxNm - minNm || 1;
+  const peakIndex = values.indexOf(Math.max(...values));
+  const peakNm = spectrum[Math.max(0, peakIndex)].nm;
+  const hasData = Math.max(...values) > 0;
 
   const chartWidth = Math.max(width - PADDING.left - PADDING.right, 0);
   const chartHeight = height - PADDING.top - PADDING.bottom;
@@ -130,8 +139,30 @@ export default function SpectrumChart({ spectrum, height = 200, width }: Props) 
   const firstTick = Math.ceil(minNm / 50) * 50;
   for (let nm = firstTick; nm < maxNm; nm += 50) nmTicks.push(nm);
 
+  const pct = (v: number) => Math.round((v / SIGNAL_FULL_SCALE) * 100);
+  const num = (v: number | undefined) => (hasData && v !== undefined && Number.isFinite(v) ? v.toFixed(0) : null);
+  const line1 =
+    hasData
+      ? `Wavelength:${peakNm}nm` + (details?.showSpectral ? ` Spectral:${maxValue.toFixed(3)}uw/cm²/nm` : '')
+      : '';
+  const integ = num(details?.integrationMs);
+  const peakS = num(details?.peakSignal);
+  const darkS = num(details?.darkSignal);
+
   return (
     <View style={styles.container}>
+      {details && (
+        <View style={{ height: SPECTRUM_HEADER_H, justifyContent: 'center' }}>
+          <Text style={{ color: colors.text, fontSize: 11, textAlign: 'center' }} numberOfLines={1} adjustsFontSizeToFit>
+            {line1}
+          </Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4, marginTop: 2 }}>
+            <Text style={{ color: colors.text, fontSize: 10 }}>{integ !== null ? `Integration Time:${integ}ms` : ''}</Text>
+            <Text style={{ color: colors.text, fontSize: 10 }}>{peakS !== null ? `Peak:${peakS}(${pct(Number(peakS))}%)` : ''}</Text>
+            <Text style={{ color: colors.text, fontSize: 10 }}>{darkS !== null ? `Dark:${darkS}(${pct(Number(darkS))}%)` : ''}</Text>
+          </View>
+        </View>
+      )}
       {width > 0 && (
         <Svg width={width} height={height}>
           <Defs>
@@ -182,6 +213,7 @@ export default function SpectrumChart({ spectrum, height = 200, width }: Props) 
                   stroke={colors.cardBorder}
                   strokeWidth={0.5}
                 />
+                <Line x1={x} y1={baselineY} x2={x} y2={baselineY + 4} stroke={colors.muted} strokeWidth={1} />
                 <SvgText x={x} y={height - 6} fontSize={8} fill={colors.muted} textAnchor="middle">
                   {nm}
                 </SvgText>
@@ -191,6 +223,10 @@ export default function SpectrumChart({ spectrum, height = 200, width }: Props) 
 
           {/* The filled, wavelength-colored spectrum curve itself */}
           <Path d={areaPath} fill="url(#spectrumGradient)" stroke="rgba(0,0,0,0.25)" strokeWidth={1} />
+          {/* Peak wavelength marker, like the vendor app's red line */}
+          {hasData && (
+            <Line x1={xFor(peakNm)} y1={yFor(maxValue)} x2={xFor(peakNm)} y2={baselineY} stroke="#d92b2b" strokeWidth={1} />
+          )}
         </Svg>
       )}
     </View>

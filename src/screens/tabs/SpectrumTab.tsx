@@ -22,7 +22,7 @@
 
 import React from 'react';
 import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
-import SpectrumChart from '../../components/SpectrumChart';
+import SpectrumChart, { SPECTRUM_HEADER_H } from '../../components/SpectrumChart';
 import ChromaticityChart from '../../components/ChromaticityChart';
 import RValuesBarChart from '../../components/RValuesBarChart';
 import SwipablePages from '../../components/SwipablePages';
@@ -180,7 +180,17 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
           },
           content: (
             <View style={[styles.chartCard, fill && styles.fillCard]}>
-              <SpectrumChart spectrum={result.spectrum} width={chartWidth} height={spectrumHeight} />
+              <SpectrumChart
+                spectrum={result.spectrum}
+                width={chartWidth}
+                height={Math.max(60, spectrumHeight - SPECTRUM_HEADER_H)}
+                details={{
+                  integrationMs: result.integrationTimeMs,
+                  peakSignal: result.peakSignal,
+                  darkSignal: result.darkSignal,
+                  showSpectral: !sampleLabel,
+                }}
+              />
             </View>
           ),
         },
