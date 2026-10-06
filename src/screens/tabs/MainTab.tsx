@@ -416,6 +416,8 @@ export default function MainTab({
               autoCapitalize="none"
               autoCorrect={false}
               multiline
+              submitBehavior="blurAndSubmit"
+              returnKeyType="done"
               textAlignVertical="top"
               editable={!result?.sampleLabel}
               accessibilityLabel="Upload title"

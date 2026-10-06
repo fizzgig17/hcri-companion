@@ -8,7 +8,7 @@
 // of whatever the last reading and log happen to be.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, ScrollView, StyleSheet, Alert, AppState, Keyboard, Linking } from 'react-native';
+import { View, ScrollView, StyleSheet, Alert, AppState, Keyboard, KeyboardAvoidingView, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MeterConnection } from '../ble/MeterConnection';
 import type { BatteryStatus } from '../ble/protocol';
@@ -987,6 +987,7 @@ export default function HomeScreen({ navigation }: any) {
     // second gap stacked on top of that one.
     content: { paddingHorizontal: 16, paddingBottom: 56 + keyboardHeight },
     // Main fits the screen without scrolling (see MainTab availableHeight).
+    mainWrap: { flex: 1 },
     mainArea: { flex: 1, paddingHorizontal: 16, paddingBottom: MAIN_BOTTOM_PAD },
     // Explicit flex:1 (new now that this ScrollView is conditionally
     // rendered as a sibling of LogsTab -- see the activeTab==='logs'
@@ -1056,6 +1057,7 @@ export default function HomeScreen({ navigation }: any) {
         <LogsTab log={log} onShare={shareLog} onClear={clearLog} />
       ) : (
       activeTab === 'main' ? (
+      <KeyboardAvoidingView style={styles.mainWrap} behavior="padding">
       <View style={styles.mainArea}>
           <MainTab
             status={status}
@@ -1088,6 +1090,27 @@ export default function HomeScreen({ navigation }: any) {
             scrollInputIntoView={scrollInputIntoView}
           />
       </View>
+      {/* Hidden while typing so the title field sits right above the keyboard. */}
+      {keyboardHeight === 0 && (
+        <ActionBar
+          status={status}
+          hasReading={!!(result && analysis)}
+          isSample={!!result?.sampleLabel}
+          connect={() => connect({ promptIfBluetoothOff: true })}
+          measure={measure}
+          disconnect={disconnect}
+          onShowTestReading={showTestReading}
+          loadingTestReading={loadingTestReading}
+          onUpload={upload}
+          uploading={status === 'uploading'}
+          uploadSucceeded={uploadSucceeded}
+          canCopyLink={!!lastUploadedReport}
+          copyingLink={copyingLink}
+          onCopyLink={copyReportLink}
+          onResetConnection={resetConnection}
+        />
+      )}
+      </KeyboardAvoidingView>
       ) : (
       <ScrollView ref={scrollRef} style={styles.scrollArea} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {activeTab === 'data' && (
@@ -1109,25 +1132,6 @@ export default function HomeScreen({ navigation }: any) {
         )}
       </ScrollView>
       ))}
-      {activeTab === 'main' && (
-        <ActionBar
-          status={status}
-          hasReading={!!(result && analysis)}
-          isSample={!!result?.sampleLabel}
-          connect={() => connect({ promptIfBluetoothOff: true })}
-          measure={measure}
-          disconnect={disconnect}
-          onShowTestReading={showTestReading}
-          loadingTestReading={loadingTestReading}
-          onUpload={upload}
-          uploading={status === 'uploading'}
-          uploadSucceeded={uploadSucceeded}
-          canCopyLink={!!lastUploadedReport}
-          copyingLink={copyingLink}
-          onCopyLink={copyReportLink}
-          onResetConnection={resetConnection}
-        />
-      )}
     </SafeAreaView>
   );
 }
