@@ -260,7 +260,10 @@ export class MeterConnection {
    * meter around, but it had no way to notice (or offer a choice) when
    * there were several.
    */
-  async scanForKnownMeters(windowMs = 3000): Promise<Device[]> {
+  async scanForKnownMeters(
+    windowMs = 3000,
+    opts?: { preferDeviceId?: string | null; minListenMs?: number }
+  ): Promise<Device[]> {
     const authorized = await requestBlePermissions();
     if (!authorized) {
       throw new Error(
@@ -274,8 +277,29 @@ export class MeterConnection {
 
     this.log(`Scanning for known meter models (${METER_NAME_PREFIXES.join(', ')})...`);
 
+    // Fast path: if the caller knows which meter it's after (the one used
+    // last time) and that exact meter shows up, don't sit out the rest of
+    // the window -- stop once a short minimum listen time (so any OTHER
+    // meters advertising nearby are very likely already heard, keeping the
+    // multi-meter picker behavior intact) has passed. Anything else (no
+    // remembered meter, or it isn't heard) listens for the full window,
+    // exactly as before.
+    const preferId = opts?.preferDeviceId ?? null;
+    const minListenMs = opts?.minListenMs ?? 1500;
+    const startedAt = Date.now();
+
     const found = new Map<string, Device>();
     await new Promise<void>((resolve) => {
+      let done = false;
+      let earlyTimer: ReturnType<typeof setTimeout> | null = null;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        if (earlyTimer) clearTimeout(earlyTimer);
+        clearTimeout(windowTimer);
+        this.manager.stopDeviceScan();
+        resolve();
+      };
       this.manager.startDeviceScan(null, { allowDuplicates: false }, (error, device) => {
         if (error) {
           this.log(`Scan error: ${error.message}`);
@@ -283,12 +307,13 @@ export class MeterConnection {
         }
         if (matchesKnownMeter(device?.name)) {
           found.set(device!.id, device!);
+          if (preferId && device!.id === preferId && !earlyTimer) {
+            const wait = Math.max(0, minListenMs - (Date.now() - startedAt));
+            earlyTimer = setTimeout(finish, wait);
+          }
         }
       });
-      setTimeout(() => {
-        this.manager.stopDeviceScan();
-        resolve();
-      }, windowMs);
+      const windowTimer = setTimeout(finish, windowMs);
     });
 
     const devices = Array.from(found.values()).sort((a, b) => (b.rssi ?? -999) - (a.rssi ?? -999));

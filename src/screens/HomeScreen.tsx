@@ -392,7 +392,8 @@ export default function HomeScreen({ navigation }: any) {
         // reloading the app with the meter still connected). Cheap/harmless
         // when there's nothing stale to clear.
         await conn.resetStaleConnection();
-        const candidates = await conn.scanForKnownMeters(CONNECT_SCAN_WINDOW_MS);
+        const lastIdForScan = await loadLastDeviceId().catch(() => null);
+        const candidates = await conn.scanForKnownMeters(CONNECT_SCAN_WINDOW_MS, { preferDeviceId: lastIdForScan });
 
         if (candidates.length === 0) {
           setMultiMeterCandidates(null);
