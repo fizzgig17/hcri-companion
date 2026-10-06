@@ -448,7 +448,15 @@ export default function MainTab({
       {/* Title editor: a popup at the top of the screen instead of typing into the
           box in place, so the keyboard can never cover it and the charts
           never resize while typing. */}
-      <Modal visible={titleModalVisible} transparent animationType="fade" onRequestClose={() => setTitleModalVisible(false)}>
+      <Modal
+        visible={titleModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTitleModalVisible(false)}
+        // autoFocus alone often doesn't raise the keyboard inside an Android
+        // Modal; focusing explicitly once it's on screen does.
+        onShow={() => setTimeout(() => titleInputRef.current?.focus(), 150)}
+      >
         <View style={styles.titleModalBackdrop}>
           <View style={styles.modalSheet}>
             <Text style={styles.modalTitle}>Upload title</Text>
@@ -460,7 +468,6 @@ export default function MainTab({
               onChangeText={setTitleDraft}
               placeholder={defaultLabel(cachedUsername, displayResult.deviceName)}
               placeholderTextColor={colors.muted}
-              autoFocus
               multiline
               autoCapitalize="none"
               autoCorrect={false}
