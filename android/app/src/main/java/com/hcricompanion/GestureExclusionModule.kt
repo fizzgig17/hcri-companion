@@ -1,7 +1,10 @@
 package com.hcricompanion
 
 import android.graphics.Rect
+import android.content.Context
 import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
 import androidx.core.view.ViewCompat
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.ReactApplicationContext
@@ -50,9 +53,34 @@ class GestureExclusionModule(private val ctx: ReactApplicationContext) :
   @ReactMethod fun removeListeners(count: Double) {}
 }
 
+// A crisp button "click" haptic. React's Vibration.vibrate(ms) is a plain
+// motor buzz at default strength, and very short ones (under ~40ms) are
+// often too faint to feel on many phones. This uses the system's own
+// predefined click effect where available (Android 10+), else a short
+// full-strength one-shot.
+class HapticTapModule(private val ctx: ReactApplicationContext) : ReactContextBaseJavaModule(ctx) {
+
+  override fun getName() = "HapticTap"
+
+  @ReactMethod
+  fun click() {
+    try {
+      val v = ctx.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator ?: return
+      if (!v.hasVibrator()) return
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        v.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
+      } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        v.vibrate(VibrationEffect.createOneShot(35, 255))
+      } else {
+        @Suppress("DEPRECATION") v.vibrate(35)
+      }
+    } catch (_: Exception) {}
+  }
+}
+
 class GestureExclusionPackage : ReactPackage {
   override fun createNativeModules(c: ReactApplicationContext) =
-      listOf(GestureExclusionModule(c))
+      listOf(GestureExclusionModule(c), HapticTapModule(c))
 
   override fun createViewManagers(c: ReactApplicationContext): List<ViewManager<*, *>> = emptyList()
 }
