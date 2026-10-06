@@ -4,6 +4,7 @@
 // shares the result with the banner and the Settings > Update tab.
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert } from 'react-native';
 import { checkForUpdate, startImmediateUpdate, updatesSupported } from '../utils/inAppUpdate';
 
 export type UpdateStatus = 'idle' | 'checking' | 'uptodate' | 'available' | 'error';
@@ -16,6 +17,9 @@ interface UpdateState {
   bannerDismissed: boolean;
   check: () => Promise<void>;
   startUpdate: () => Promise<void>;
+  /** Test aid: pretend an update is available so the banner / flow can be tried on a sideloaded build. */
+  simulated: boolean;
+  simulate: () => void;
   dismissBanner: () => void;
 }
 
@@ -26,6 +30,7 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
   const [availableVersionCode, setCode] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [dismissedCode, setDismissedCode] = useState(0);
+  const [simulated, setSimulated] = useState(false);
   const busy = useRef(false);
 
   const check = useCallback(async () => {
@@ -36,6 +41,7 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     busy.current = true;
+    setSimulated(false);
     setStatus('checking');
     setError(null);
     try {
@@ -52,13 +58,25 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const startUpdate = useCallback(async () => {
+    if (simulated) {
+      Alert.alert('Simulated update', "On a Google Play install, this would start Google's update screen now.");
+      return;
+    }
     try {
       if (status !== 'available') await check();
       await startImmediateUpdate();
     } catch (e: any) {
       setError(e?.message || 'Could not start the update.');
     }
-  }, [status, check]);
+  }, [status, check, simulated]);
+
+  const simulate = useCallback(() => {
+    setSimulated(true);
+    setError(null);
+    setCode(999999);
+    setDismissedCode(0);
+    setStatus('available');
+  }, []);
 
   // Every time the app loads.
   useEffect(() => {
@@ -73,9 +91,11 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
       bannerDismissed: dismissedCode === availableVersionCode && availableVersionCode !== 0,
       check,
       startUpdate,
+      simulated,
+      simulate,
       dismissBanner: () => setDismissedCode(availableVersionCode),
     }),
-    [status, availableVersionCode, error, dismissedCode, check, startUpdate],
+    [status, availableVersionCode, error, dismissedCode, check, startUpdate, simulated, simulate],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

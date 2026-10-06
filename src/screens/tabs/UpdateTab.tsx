@@ -9,7 +9,7 @@ import PrimaryButton from '../../components/PrimaryButton';
 
 export default function UpdateTab() {
   const { colors } = useTheme();
-  const { status, error, check, startUpdate } = useUpdate();
+  const { status, error, check, startUpdate, simulated, simulate } = useUpdate();
   const styles = StyleSheet.create({
     card: { backgroundColor: colors.card, borderRadius: 12, borderWidth: 1, borderColor: colors.cardBorder, padding: 16 },
     title: { color: colors.text, fontSize: 16, fontWeight: '700' },
@@ -46,6 +46,10 @@ export default function UpdateTab() {
       )}
       {status === 'available' && <PrimaryButton title="Update now" onPress={startUpdate} />}
       <PrimaryButton title="Check for updates" onPress={check} disabled={status === 'checking'} variant="muted" />
+      {/* Testing aid (kept during testing): fakes an available update so the banner and
+          Update now flow can be tried on a sideloaded build. Check for updates clears it. */}
+      <PrimaryButton title="Show test update banner" onPress={simulate} variant="muted" />
+      {simulated && <Text style={styles.note}>Simulated update: tap Check for updates to clear it.</Text>}
     </View>
   );
 }
