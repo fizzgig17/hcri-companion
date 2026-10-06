@@ -79,8 +79,7 @@ export const STAT_METRIC_BY_ID: Record<string, StatMetric> = Object.fromEntries(
 
 /**
  * Shown on the Main tab's result card out of the box, in this order,
- * before anyone touches Settings -- CCT/Ra/Duv/Lux/Rf/R9/Rg, matching
- * what the app already showed prior to this being configurable (just
- * reordered to the sequence requested: CCT, Ra, Duv, Lux, Rf, R9, Rg).
+ * before anyone touches Settings -- CCT/Ra/Duv/Lux/Rf/R9/Rg plus x/y --
+ * nine tiles, which fill three even rows of three.
  */
-export const DEFAULT_VISIBLE_STAT_IDS: string[] = ['cct', 'ra', 'duv', 'lux', 'rf', 'r9', 'rg'];
+export const DEFAULT_VISIBLE_STAT_IDS: string[] = ['cct', 'ra', 'duv', 'lux', 'rf', 'r9', 'rg', 'x', 'y'];
