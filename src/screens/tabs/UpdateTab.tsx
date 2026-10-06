@@ -48,12 +48,17 @@ export default function UpdateTab() {
             : `${error ?? ''} Updates come through Google Play, so this only works on an install from the Play Store.`}
         </Text>
       )}
-      {status === 'available' && <PrimaryButton title="Update now" onPress={startUpdate} />}
-      <PrimaryButton title="Check for updates" onPress={check} disabled={status === 'checking'} variant="muted" />
+      {/* One button: "Update now" once Play has a newer version, else "Check for updates".
+          A check made here only updates this text; the top banner is for the launch check. */}
+      {status === 'available' ? (
+        <PrimaryButton title="Update now" onPress={startUpdate} />
+      ) : (
+        <PrimaryButton title="Check for updates" onPress={() => check(false)} disabled={status === 'checking'} variant="muted" />
+      )}
       {/* Testing aid (kept during testing): fakes an available update so the banner and
           Update now flow can be tried on a sideloaded build. Check for updates clears it. */}
       <PrimaryButton title="Show test update banner" onPress={simulate} variant="muted" />
-      {simulated && <Text style={styles.note}>Simulated update: tap Check for updates to clear it.</Text>}
+      {simulated && <Text style={styles.note}>Simulated update. Tap Update now to try the flow; restart the app to clear it.</Text>}
     </View>
   );
 }

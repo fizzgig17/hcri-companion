@@ -15,7 +15,10 @@ interface UpdateState {
   error: string | null;
   /** The banner was dismissed for this version (reappears next launch). */
   bannerDismissed: boolean;
-  check: () => Promise<void>;
+  /** announce=true (the launch check) lets the top banner appear; the Update tab's own check just updates its text. */
+  check: (announce?: boolean) => Promise<void>;
+  /** The banner may show (set by the launch check or the test button). */
+  bannerEligible: boolean;
   startUpdate: () => Promise<void>;
   /** Test aid: pretend an update is available so the banner / flow can be tried on a sideloaded build. */
   simulated: boolean;
@@ -31,9 +34,10 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [dismissedCode, setDismissedCode] = useState(0);
   const [simulated, setSimulated] = useState(false);
+  const [bannerEligible, setBannerEligible] = useState(false);
   const busy = useRef(false);
 
-  const check = useCallback(async () => {
+  const check = useCallback(async (announce: boolean = false) => {
     if (busy.current) return;
     if (!updatesSupported) {
       setStatus('error');
@@ -42,12 +46,14 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
     }
     busy.current = true;
     setSimulated(false);
+    setBannerEligible(false);
     setStatus('checking');
     setError(null);
     try {
       const info = await checkForUpdate();
       setCode(info.versionCode);
       setStatus(info.available ? 'available' : 'uptodate');
+      setBannerEligible(announce && info.available);
     } catch (e: any) {
       // Typically: not installed from Google Play (sideloaded/debug build).
       setStatus('error');
@@ -75,12 +81,13 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     setCode(999999);
     setDismissedCode(0);
+    setBannerEligible(true);
     setStatus('available');
   }, []);
 
   // Every time the app loads.
   useEffect(() => {
-    check();
+    check(true);
   }, [check]);
 
   const value = useMemo<UpdateState>(
@@ -90,12 +97,13 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
       error,
       bannerDismissed: dismissedCode === availableVersionCode && availableVersionCode !== 0,
       check,
+      bannerEligible,
       startUpdate,
       simulated,
       simulate,
       dismissBanner: () => setDismissedCode(availableVersionCode),
     }),
-    [status, availableVersionCode, error, dismissedCode, check, startUpdate, simulated, simulate],
+    [status, availableVersionCode, error, dismissedCode, check, bannerEligible, startUpdate, simulated, simulate],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
