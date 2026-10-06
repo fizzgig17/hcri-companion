@@ -23,7 +23,7 @@
 
 import InfoButton from './InfoButton';
 import { PagerLockContext } from './PagerLock';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   ScrollView,
@@ -32,7 +32,12 @@ import {
   StyleSheet,
   TouchableOpacity,
   useWindowDimensions,
+  Platform,
+  NativeModules,
 } from 'react-native';
+
+const GestureExclusion: { setRects: (r: { x: number; y: number; width: number; height: number }[]) => void } | undefined =
+  NativeModules.GestureExclusion;
 import { useTheme } from '../contexts/ThemeContext';
 
 // Horizontal chrome this component sits inside on BOTH screens that use
@@ -88,6 +93,28 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
   const [activeIndex, setActiveIndex] = useState(0);
   const [scrollLocked, setScrollLocked] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  // With Android 10+ gesture navigation, a swipe that starts at a screen
+  // edge is the system Back gesture, which fought with paging the charts.
+  // Tell Android that the strips at both edges of the pager belong to the
+  // app (it caps this at 200dp tall per edge, hence the clamp).
+  const pagerRef = useRef<any>(null);
+  const EDGE_DP = 40;
+  const MAX_EXCLUDE_H = 200;
+  const updateExclusion = useCallback(() => {
+    if (Platform.OS !== 'android' || !GestureExclusion) return;
+    pagerRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => {
+      if (!w || !h) return;
+      const eh = Math.min(h, MAX_EXCLUDE_H);
+      const ey = y + (h - eh) / 2;
+      GestureExclusion.setRects([
+        { x: 0, y: ey, width: EDGE_DP, height: eh },
+        { x: windowWidth - EDGE_DP, y: ey, width: EDGE_DP, height: eh },
+      ]);
+    });
+  }, [windowWidth]);
+  useEffect(() => () => {
+    if (Platform.OS === 'android') GestureExclusion?.setRects([]);
+  }, []);
   // Back to the first page whenever resetKey changes (not on first mount).
   const firstKey = useRef(true);
   useEffect(() => {
@@ -125,7 +152,7 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
 
   return (
     <PagerLockContext.Provider value={setScrollLocked}>
-    <View>
+    <View ref={pagerRef} collapsable={false} onLayout={updateExclusion}>
       {width > 0 && (
         <>
           {/* Height comes from the active page's own measurement, not the
@@ -138,6 +165,8 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
               ref={scrollRef}
               horizontal
               pagingEnabled
+              decelerationRate="fast"
+              nestedScrollEnabled
               scrollEnabled={!scrollLocked}
               overScrollMode="never"
               bounces={false}
