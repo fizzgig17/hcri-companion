@@ -7,7 +7,7 @@
 // only). Take Reading keeps the standard accent green.
 
 import React from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import type { Status } from '../screens/tabs/MainTab';
 
@@ -26,20 +26,37 @@ interface Props {
   canCopyLink: boolean;
   copyingLink: boolean;
   onCopyLink: () => void;
+  /** Long-press Connect: clear a stale BLE connection and retry. */
+  onResetConnection: () => void;
+  /** Upload title (docked above the buttons). `defaultTitle` shows greyed while empty. */
+  uploadTitle: string;
+  onUploadTitleChange: (t: string) => void;
+  defaultTitle: string;
 }
 
 export default function ActionBar(p: Props) {
   const { colors } = useTheme();
   const styles = StyleSheet.create({
-    bar: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 12,
-      paddingVertical: 8,
+    wrap: {
       backgroundColor: colors.card,
       borderTopWidth: 1,
       borderTopColor: colors.cardBorder,
+      paddingHorizontal: 12,
+      paddingTop: 8,
+      paddingBottom: 8,
     },
+    bar: { flexDirection: 'row', alignItems: 'center' },
+    titleWrap: {
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 8,
+      minHeight: 38,
+      marginBottom: 8,
+    },
+    titleOverlay: { paddingHorizontal: 10, paddingVertical: 8, color: colors.muted, fontSize: 13 },
+    titleInput: { paddingHorizontal: 10, paddingVertical: 8, color: colors.text, fontSize: 13, minHeight: 38 },
+    titleInputEmpty: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
     main: { flex: 1, borderRadius: 10, paddingVertical: 13, alignItems: 'center', justifyContent: 'center' },
     mainAccent: { backgroundColor: colors.accent },
     mainMuted: { backgroundColor: colors.background, borderWidth: 1, borderColor: colors.cardBorder },
@@ -78,7 +95,28 @@ export default function ActionBar(p: Props) {
   const uploadDisabled = p.uploading || !p.hasReading || p.isSample;
 
   return (
-    <View style={styles.bar}>
+    <View style={styles.wrap}>
+      {p.hasReading && (
+        <View style={styles.titleWrap}>
+          {p.uploadTitle.length === 0 && (
+            <Text style={styles.titleOverlay} pointerEvents="none">
+              {p.defaultTitle}
+            </Text>
+          )}
+          <TextInput
+            style={[styles.titleInput, p.uploadTitle.length === 0 && styles.titleInputEmpty]}
+            value={p.uploadTitle}
+            onChangeText={p.onUploadTitleChange}
+            autoCapitalize="none"
+            autoCorrect={false}
+            multiline
+            textAlignVertical="top"
+            editable={!p.isSample}
+            accessibilityLabel="Upload title"
+          />
+        </View>
+      )}
+      <View style={styles.bar}>
       {status === 'connected' && (
         <TouchableOpacity
           style={styles.plug}
@@ -93,7 +131,12 @@ export default function ActionBar(p: Props) {
 
       {status === 'disconnected' && (
         <>
-          <TouchableOpacity style={[styles.main, styles.mainAccent]} onPress={p.connect} activeOpacity={0.8}>
+          <TouchableOpacity
+            style={[styles.main, styles.mainAccent]}
+            onPress={p.connect}
+            onLongPress={p.onResetConnection}
+            activeOpacity={0.8}
+          >
             <Text style={styles.mainText}>Connect to Meter</Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -151,6 +194,7 @@ export default function ActionBar(p: Props) {
           <Text style={styles.pillText}>✓ Uploaded</Text>
         </View>
       )}
+      </View>
     </View>
   );
 }

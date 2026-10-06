@@ -987,7 +987,7 @@ export default function HomeScreen({ navigation }: any) {
     // second gap stacked on top of that one.
     content: { paddingHorizontal: 16, paddingBottom: 56 + keyboardHeight },
     // Main fits the screen without scrolling (see MainTab availableHeight).
-    mainArea: { flex: 1, paddingHorizontal: 16, paddingBottom: MAIN_BOTTOM_PAD + keyboardHeight },
+    mainArea: { flex: 1, paddingHorizontal: 16, paddingBottom: MAIN_BOTTOM_PAD },
     // Explicit flex:1 (new now that this ScrollView is conditionally
     // rendered as a sibling of LogsTab -- see the activeTab==='logs'
     // branch above) rather than relying on it picking up the remaining
@@ -1041,7 +1041,7 @@ export default function HomeScreen({ navigation }: any) {
         </View>
         <InfoButton
           title="About hCRI Companion"
-          message="hCRI Companion connects to your Hopoocolor spectrometer over Bluetooth, takes a reading and shows its spectrum and lighting stats (CCT, CRI and TM-30 Rf/Rg). Every reading is saved to History, and you can optionally upload it to your hCRI.io account to see its full TM-30 report and share it. To upload, add your hCRI.io username and API token in Settings."
+          message="hCRI Companion connects to your Hopoocolor spectrometer over Bluetooth, takes a reading and shows its spectrum and lighting stats (CCT, CRI and TM-30 Rf/Rg). Every reading is saved to History, and you can optionally upload it to your hCRI.io account to see its full TM-30 report and share it. To upload, add your hCRI.io username and API token in Settings. Tap Settings to choose which measurements show. No meter handy? Test reading loads a random public hCRI.io report so you can try the charts (sample data: it isn't saved or uploadable). Meter won't connect? Press and hold Connect to Meter to reset the connection."
           style={styles.headerInfo}
         />
       </View>
@@ -1125,6 +1125,10 @@ export default function HomeScreen({ navigation }: any) {
           canCopyLink={!!lastUploadedReport}
           copyingLink={copyingLink}
           onCopyLink={copyReportLink}
+          onResetConnection={resetConnection}
+          uploadTitle={uploadTitle}
+          onUploadTitleChange={setUploadTitle}
+          defaultTitle={defaultLabel(cachedUsername, result?.deviceName ?? '')}
         />
       )}
     </SafeAreaView>

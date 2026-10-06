@@ -27,7 +27,6 @@ import type { BatteryStatus } from '../../ble/protocol';
 import { SpectralAnalysis } from '../../utils/spectralAnalysis';
 import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
 import { EMPTY_METER_RESULT, EMPTY_SPECTRAL_ANALYSIS } from '../../utils/placeholderReading';
-import { defaultLabel } from '../../hcri/buildCsv';
 
 export type Status = 'disconnected' | 'connecting' | 'connected' | 'measuring' | 'uploading';
 
@@ -193,7 +192,7 @@ export default function MainTab({
     switchMeterText: { color: colors.info, fontSize: 12, fontWeight: '600' },
 
     root: { flex: 1 },
-    chartRegion: { flex: 1, minHeight: 0, overflow: 'hidden' },
+    chartRegion: { flex: 1, minHeight: 0, overflow: 'hidden', justifyContent: 'center' },
     resultCard: {
       flex: 1,
       backgroundColor: colors.card,
@@ -373,17 +372,6 @@ export default function MainTab({
             <StatCard key={id} label={metric.label} value={out.value} unit={out.unit} compact density={density} />
           ))}
         </View>
-        {/* numberOfLines + adjustsFontSizeToFit -- shrinks to whatever font
-            size actually fits this phone's width rather than a single
-            hardcoded fontSize that wraps on narrower screens. Confirmed
-            2026-10-04: this line was wrapping to 2+ lines at fontSize 10.5
-            on at least one device. Shortened the text itself too, same day
-            -- the shorter it is, the less it ever needs to shrink, so
-            minimumFontScale's floor stays comfortably readable rather than
-            being relied on to rescue a long sentence. */}
-        <Text style={styles.customizeHint} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
-          Tap ⚙ Settings to customize these measurements.
-        </Text>
         {/* resultCard (below) wraps this in its own padding: 14 AND
             borderWidth: 1 each side (30px combined) -- SpectrumTab/
             SwipablePages/the charts all otherwise only know about the
@@ -401,60 +389,7 @@ export default function MainTab({
           <SpectrumTab result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} />
         </View>
 
-        {/* Connect / Take Reading / Upload / Disconnect live in the pinned
-            ActionBar (components/ActionBar.tsx), docked above the bottom
-            nav by HomeScreen. Only the explanatory bits stay in the page. */}
-        {status === 'disconnected' && (
-          <InfoButton
-            label="What's this?"
-            title="About test readings"
-            message="Don't have a meter handy? Test reading loads the spectrum from a random public report on hCRI.io, so you can explore the stats and charts. It's sample data, not your own reading: it isn't saved to History and can't be uploaded or shared. Connect a meter and take a reading to replace it."
-          />
-        )}
-        {status === 'disconnected' && result?.sampleLabel ? (
-          <Text style={styles.sampleNote}>Test reading from a public hCRI.io report: {result.sampleLabel}</Text>
-        ) : null}
-
-        {/* Same Upload Title field as the Data tab -- see MainTab's own
-            styles comment above. Shown whenever there's something to
-            upload, same as the Upload button right below it. */}
-        {hasReading && (
-          <>
-            <Text style={[styles.fieldLabel, result?.sampleLabel ? styles.fieldLabelAfterSample : null]}>Upload Title</Text>
-            <View style={styles.titleInputWrap}>
-              {uploadTitle.length === 0 && (
-                <Text style={styles.titleInputOverlay} pointerEvents="none">
-                  {defaultLabel(cachedUsername, displayResult.deviceName)}
-                </Text>
-              )}
-              <TextInput
-                ref={titleInputRef}
-                style={[styles.titleInput, uploadTitle.length === 0 && styles.titleInputEmpty]}
-                value={uploadTitle}
-                onChangeText={onUploadTitleChange}
-                onFocus={() => scrollInputIntoView(titleInputRef)}
-                autoCapitalize="none"
-                autoCorrect={false}
-                multiline
-                textAlignVertical="top"
-                editable={!result?.sampleLabel}
-              />
-            </View>
-          </>
-        )}
-
       </View>
-
-      {status === 'disconnected' && (
-        /* Troubleshooting for "meter won't reconnect after I reloaded the
-           app without disconnecting it first" -- normally required a
-           power cycle. connect() already tries this automatically, but a
-           visible manual retry is worth having when it doesn't help on
-           the first try. */
-        <TouchableOpacity onPress={resetConnection} style={styles.resetLink}>
-          <Text style={styles.resetLinkText}>Meter won't connect? Reset connection</Text>
-        </TouchableOpacity>
-      )}
 
       {/* Opens right after connect()'s scan finds more than one matching
           meter, or later via the "switch meter" icon above -- a plain

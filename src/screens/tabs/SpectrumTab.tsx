@@ -82,9 +82,13 @@ const SCREEN_PADDING = 32;
 const CARD_PADDING = 22;
 
 export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 0, regionHeight }: Props) {
-  // pager dots row (~26) + card padding/border (22) + card bottom margin (12) + R-values title (15)
-  const chartHeight = regionHeight && regionHeight > 0 ? Math.max(90, Math.floor(regionHeight - 26 - 22 - 12 - 15)) : undefined;
   const { colors } = useTheme();
+  // Main tab: charts keep their usual sizes (200 spectrum, 230 chrom/R-values)
+  // and only shrink if the region is too short. Overheads: pager dots (~26),
+  // card padding/border (22), card bottom margin (12), R-values title (15).
+  const fit = regionHeight && regionHeight > 0 ? Math.max(90, Math.floor(regionHeight - 26 - 22 - 12 - 15)) : undefined;
+  const chartHeight = fit === undefined ? undefined : Math.min(fit, 230);
+  const spectrumHeight = chartHeight === undefined ? 200 : Math.min(chartHeight, 200);
   // Computed once, here, rather than separately (and inconsistently) in
   // SwipablePages and in each of the three chart components -- see this
   // file's own Props comment above for why a hardcoded per-component
@@ -155,14 +159,14 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
   return (
     <SwipablePages
       horizontalChrome={totalChrome}
-      fixedHeight={regionHeight && regionHeight > 0 ? regionHeight - 26 : undefined}
+      fixedHeight={chartHeight === undefined ? undefined : chartHeight + 22 + 12 + 15}
       pages={[
         {
           key: 'spectrum',
           label: 'Spectrum',
           content: (
             <View style={styles.chartCard}>
-              <SpectrumChart spectrum={result.spectrum} width={chartWidth} height={chartHeight ?? 200} />
+              <SpectrumChart spectrum={result.spectrum} width={chartWidth} height={spectrumHeight} />
             </View>
           ),
         },

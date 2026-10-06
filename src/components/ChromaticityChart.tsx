@@ -143,6 +143,8 @@ function wavelengthToColor(wavelengthNm: number): string {
 }
 
 export default function ChromaticityChart({ x, y, cct, height = 300, width }: Props) {
+  // (0,0) is the "no reading yet" placeholder -- draw no marker or x/y text then.
+  const hasPoint = Number.isFinite(x) && Number.isFinite(y) && (x > 0 || y > 0);
   const chartWidth = Math.max(width - PADDING.left - PADDING.right, 0);
   const chartHeight = height - PADDING.top - PADDING.bottom;
 
@@ -327,7 +329,7 @@ export default function ChromaticityChart({ x, y, cct, height = 300, width }: Pr
           })}
 
           {/* Current reading's chromaticity point */}
-          {Number.isFinite(x) && Number.isFinite(y) && (
+          {hasPoint && (
             <Circle cx={xFor(x)} cy={yFor(y)} r={6} fill="#1e5fd9" stroke="#fff" strokeWidth={1.5} />
           )}
 
@@ -353,7 +355,7 @@ export default function ChromaticityChart({ x, y, cct, height = 300, width }: Pr
               Up here there's nothing underneath but blank white canvas, so
               no backing card is needed to keep it legible the way the old
               in-box placement did. */}
-          {Number.isFinite(x) && Number.isFinite(y) && (
+          {hasPoint && (
             <>
               <SvgText x={PADDING.left} y={12} fontSize={10} fill="#333" fontFamily="monospace">
                 x {x.toFixed(4)}
