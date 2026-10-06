@@ -58,11 +58,22 @@ const THEME_MODE_OPTIONS: { value: ThemeMode; label: string }[] = [
   { value: 'dark', label: 'Dark' },
 ];
 
-export default function SettingsScreen() {
+export default function SettingsScreen({ navigation }: any) {
   const { colors, mode, setMode } = useTheme();
   // Settings / About sub-tabs -- About used to be a section at the very
   // bottom of this screen, a long scroll past every setting to reach.
   const [settingsTab, setSettingsTab] = useState<'settings' | 'about'>('settings');
+  // Always open on Settings, never on whichever sub-tab was showing last:
+  // this screen stays mounted while you're on other tabs, so reset when
+  // leaving it, and when the Settings tab itself is tapped.
+  useEffect(() => {
+    const offBlur = navigation.addListener('blur', () => setSettingsTab('settings'));
+    const offPress = navigation.addListener('tabPress', () => setSettingsTab('settings'));
+    return () => {
+      offBlur();
+      offPress();
+    };
+  }, [navigation]);
   const [username, setUsername] = useState('');
   const [token, setToken] = useState('');
   const [hasSaved, setHasSaved] = useState(false);
