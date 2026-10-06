@@ -188,12 +188,18 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
                 spectrum={result.spectrum}
                 width={chartWidth}
                 height={Math.max(60, Math.min(spectrumHeight - SPECTRUM_HEADER_H, Math.round(chartWidth / SPECTRUM_ASPECT)))}
-                details={{
-                  integrationMs: result.integrationTimeMs,
-                  peakSignal: result.peakSignal,
-                  darkSignal: result.darkSignal,
-                  showSpectral: !sampleLabel,
-                }}
+                // A test reading only shows the wavelength under the red line; a real
+                // reading adds the integration time and peak/dark signal (and the spectral value).
+                details={
+                  sampleLabel
+                    ? {}
+                    : {
+                        integrationMs: result.integrationTimeMs,
+                        peakSignal: result.peakSignal,
+                        darkSignal: result.darkSignal,
+                        showSpectral: true,
+                      }
+                }
               />
             </View>
           ),
