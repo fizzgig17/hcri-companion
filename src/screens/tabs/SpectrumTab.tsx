@@ -171,6 +171,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
 
   return (
     <SwipablePages
+      resetKey={result}
       horizontalChrome={totalChrome}
       fixedHeight={chartHeight === undefined ? undefined : chartHeight + 22 + 12 + 15}
       pages={[
@@ -179,7 +180,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
           label: 'Spectrum',
           info: {
             title: 'Spectrum',
-            message: `${source}\n\nThe spectral power distribution: how much light the source puts out at each wavelength from about 380 to 780 nm (violet to red), scaled so the tallest point is 1. Everything else here (CCT, CRI, TM-30) is calculated from this curve.`,
+            message: `${source}\n\nThe spectral power distribution: how much light the source puts out at each wavelength from about 380 to 780 nm (violet to red), scaled so the tallest point is 1. The red line starts at the peak: press and hold it, then drag to read the wavelength and spectral value anywhere on the curve (a quick swipe still changes charts). Everything else here (CCT, CRI, TM-30) is calculated from this curve.`,
           },
           content: (
             <View style={[styles.chartCard, fill && styles.fillCard]}>

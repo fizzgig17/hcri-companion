@@ -12,7 +12,8 @@
 // first time it's added -- a full rebuild (npx react-native run-android, or
 // the Android Studio Run button) is needed after installing it.
 
-import React from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
+import { PagerLockContext } from './PagerLock';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Path, Line, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
@@ -88,6 +89,22 @@ export default function SpectrumChart({ spectrum, height = 200, width, details }
   // about, which is what caused charts to render wider than their actual
   // box on that screen.
   const { colors } = useTheme();
+  const lockPager = useContext(PagerLockContext);
+  // The red line's wavelength; null = at the peak (reset on every new spectrum).
+  const [selectedNm, setSelectedNm] = useState<number | null>(null);
+  const grabTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const grabbed = useRef(false);
+  const startPt = useRef({ x: 0, y: 0 });
+  useEffect(() => {
+    setSelectedNm(null);
+  }, [spectrum]);
+  useEffect(
+    () => () => {
+      if (grabTimer.current) clearTimeout(grabTimer.current);
+      lockPager(false);
+    },
+    [lockPager],
+  );
 
   if (spectrum.length < 2) {
     return <View style={{ height }} />;
@@ -100,6 +117,8 @@ export default function SpectrumChart({ spectrum, height = 200, width, details }
   const nmRange = maxNm - minNm || 1;
   const peakIndex = values.indexOf(Math.max(...values));
   const peakNm = spectrum[Math.max(0, peakIndex)].nm;
+  const lineNm = selectedNm !== null && selectedNm >= minNm && selectedNm <= maxNm ? selectedNm : peakNm;
+  const lineValue = spectrum.find((p) => p.nm === lineNm)?.value ?? maxValue;
   const hasData = Math.max(...values) > 0;
 
   const chartWidth = Math.max(width - PADDING.left - PADDING.right, 0);
@@ -143,7 +162,7 @@ export default function SpectrumChart({ spectrum, height = 200, width, details }
   const num = (v: number | undefined) => (hasData && v !== undefined && Number.isFinite(v) ? v.toFixed(0) : null);
   const line1 =
     hasData
-      ? `Wavelength:${peakNm}nm` + (details?.showSpectral ? ` Spectral:${maxValue.toFixed(3)}uw/cm²/nm` : '')
+      ? `Wavelength:${lineNm}nm` + (details?.showSpectral ? ` Spectral:${(lineValue * 0.1).toFixed(3)}uw/cm²/nm` : '')
       : '';
   const integ = num(details?.integrationMs);
   const peakS = num(details?.peakSignal);
@@ -223,11 +242,60 @@ export default function SpectrumChart({ spectrum, height = 200, width, details }
 
           {/* The filled, wavelength-colored spectrum curve itself */}
           <Path d={areaPath} fill="url(#spectrumGradient)" stroke="rgba(0,0,0,0.25)" strokeWidth={1} />
-          {/* Peak wavelength marker, like the vendor app's red line */}
+          {/* Draggable wavelength marker (starts at the peak), like the vendor app's red line */}
           {hasData && (
-            <Line x1={xFor(peakNm)} y1={yFor(maxValue)} x2={xFor(peakNm)} y2={baselineY} stroke="#d92b2b" strokeWidth={1} />
+            <Line x1={xFor(lineNm)} y1={PADDING.top} x2={xFor(lineNm)} y2={baselineY} stroke="#d92b2b" strokeWidth={1} />
           )}
         </Svg>
+      )}
+      {width > 0 && hasData && (
+        <View
+          style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height }}
+          onTouchStart={(e) => {
+            const { locationX, locationY } = e.nativeEvent;
+            startPt.current = { x: locationX, y: locationY };
+            grabbed.current = false;
+            if (grabTimer.current) clearTimeout(grabTimer.current);
+            // Only a finger resting on the line (not a quick swipe) grabs it.
+            if (Math.abs(locationX - xFor(lineNm)) <= 22) {
+              grabTimer.current = setTimeout(() => {
+                grabbed.current = true;
+                lockPager(true);
+              }, 180);
+            }
+          }}
+          onTouchMove={(e) => {
+            const { locationX, locationY } = e.nativeEvent;
+            if (!grabbed.current) {
+              // Moved before the line was grabbed: it's a swipe, leave it to the pager.
+              if (
+                grabTimer.current &&
+                (Math.abs(locationX - startPt.current.x) > 6 || Math.abs(locationY - startPt.current.y) > 6)
+              ) {
+                clearTimeout(grabTimer.current);
+                grabTimer.current = null;
+              }
+              return;
+            }
+            const raw = minNm + ((locationX - PADDING.left) / (chartWidth || 1)) * nmRange;
+            const nm = Math.round(Math.max(minNm, Math.min(maxNm, raw)));
+            setSelectedNm(nm);
+          }}
+          onTouchEnd={() => {
+            if (grabTimer.current) clearTimeout(grabTimer.current);
+            grabTimer.current = null;
+            if (grabbed.current) {
+              grabbed.current = false;
+              lockPager(false);
+            }
+          }}
+          onTouchCancel={() => {
+            if (grabTimer.current) clearTimeout(grabTimer.current);
+            grabTimer.current = null;
+            grabbed.current = false;
+            lockPager(false);
+          }}
+        />
       )}
     </View>
   );

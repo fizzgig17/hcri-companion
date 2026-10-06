@@ -22,7 +22,8 @@
 // one is actually on screen.
 
 import InfoButton from './InfoButton';
-import React, { useRef, useState } from 'react';
+import { PagerLockContext } from './PagerLock';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   ScrollView,
@@ -64,9 +65,11 @@ interface Props {
   horizontalChrome?: number;
   /** Force the pager's height (Main tab fits the screen); otherwise it follows the active page. */
   fixedHeight?: number;
+  /** Changing this value sends the pager back to its first page (e.g. a new reading arrived). */
+  resetKey?: unknown;
 }
 
-export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZONTAL_PADDING, fixedHeight }: Props) {
+export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZONTAL_PADDING, fixedHeight, resetKey }: Props) {
   const { colors } = useTheme();
   // Confirmed 2026-10-03: measuring this via onLayout at all -- even
   // seeded with a close estimate that onLayout then "corrects" -- means
@@ -83,7 +86,18 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
   const { width: windowWidth } = useWindowDimensions();
   const width = windowWidth - horizontalChrome;
   const [activeIndex, setActiveIndex] = useState(0);
+  const [scrollLocked, setScrollLocked] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  // Back to the first page whenever resetKey changes (not on first mount).
+  const firstKey = useRef(true);
+  useEffect(() => {
+    if (firstKey.current) {
+      firstKey.current = false;
+      return;
+    }
+    setActiveIndex(0);
+    scrollRef.current?.scrollTo({ x: 0, animated: false });
+  }, [resetKey]);
   // One measured height per page, filled in as each page's onLayout fires
   // (all three mount at once, so in practice all three arrive almost
   // immediately). Undefined entries (nothing measured yet) just mean the
@@ -110,6 +124,7 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
   });
 
   return (
+    <PagerLockContext.Provider value={setScrollLocked}>
     <View>
       {width > 0 && (
         <>
@@ -123,6 +138,7 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
               ref={scrollRef}
               horizontal
               pagingEnabled
+              scrollEnabled={!scrollLocked}
               showsHorizontalScrollIndicator={false}
               onMomentumScrollEnd={onScrollEnd}
               contentOffset={{ x: activeIndex * width, y: 0 }}
@@ -165,5 +181,6 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
         </>
       )}
     </View>
+    </PagerLockContext.Provider>
   );
 }
