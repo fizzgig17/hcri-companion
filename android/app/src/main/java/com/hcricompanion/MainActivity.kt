@@ -69,7 +69,18 @@ class MainActivity : ReactActivity() {
     if (hasFocus) hideNavigationBar()
   }
 
+  // True when the phone uses Android 10+ full-gesture navigation (the thin
+  // pill) rather than the 3-button/2-button bars. Hiding the bar there
+  // is what made Home need two swipes up: the first only revealed the
+  // hidden pill, the second was the real gesture. The pill is slim and
+  // transparent, so leave it alone and only hide the classic button bar.
+  private fun usesGestureNavigation(): Boolean {
+    val id = resources.getIdentifier("config_navBarInteractionMode", "integer", "android")
+    return id > 0 && resources.getInteger(id) == 2
+  }
+
   private fun hideNavigationBar() {
+    if (usesGestureNavigation()) return
     val controller = WindowCompat.getInsetsController(window, window.decorView)
     controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
     controller.hide(WindowInsetsCompat.Type.navigationBars())

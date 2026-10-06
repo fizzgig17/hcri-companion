@@ -48,7 +48,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { ThemeMode } from '../theme';
 import AboutTab from './tabs/AboutTab';
 import TabBar from '../components/TabBar';
-import { APP_VERSION, BUILD_DATE } from '../buildInfo';
+import VersionStamp from '../components/VersionStamp';
 
 // Labels/order for the Light/Dark/System picker below -- System first since
 // it's the default every fresh install starts on (see ThemeContext.tsx).
@@ -289,7 +289,6 @@ export default function SettingsScreen({ navigation }: any) {
     // and the draggable measurement list (DraggableStatList) can run long
     // enough that a tighter value left it crowding the bottom of the screen.
     contentContainer: { padding: 16, paddingBottom: 56 },
-    versionText: { color: colors.mutedFaint, fontSize: 11, textAlign: 'center', marginBottom: 18 },
     label: { color: colors.muted, marginTop: 14, marginBottom: 6 },
     input: {
       backgroundColor: colors.card,
@@ -422,15 +421,6 @@ export default function SettingsScreen({ navigation }: any) {
     aboutTitle: { color: colors.text, fontSize: 14, fontWeight: '600', marginBottom: 12 },
   });
 
-  // Formatted once per render from the plain 'YYYY-MM-DD' in buildInfo.ts --
-  // not worth memoizing, this screen doesn't re-render often enough for it
-  // to matter.
-  const builtOn = new Date(`${BUILD_DATE}T00:00:00`).toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-
   return (
     <View style={styles.container}>
       <View style={styles.tabBarWrap}>
@@ -453,9 +443,7 @@ export default function SettingsScreen({ navigation }: any) {
           once this session when testing against a build that was already
           a few fixes behind develop. See buildInfo.ts for how this stays
           in sync with the native versionName/versionCode. */}
-      <Text style={styles.versionText}>
-        hCRI Companion v{APP_VERSION} · Built {builtOn}
-      </Text>
+      <VersionStamp />
 
       {hasSaved ? (
         // Locked view: credentials are already saved, so the fields are

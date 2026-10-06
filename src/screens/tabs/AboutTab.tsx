@@ -27,6 +27,7 @@ import { View, Text, StyleSheet, Linking, Alert, TouchableOpacity } from 'react-
 import { useTheme } from '../../contexts/ThemeContext';
 import { SUPPORTED_DEVICES } from '../../ble/supportedDevices';
 import PrimaryButton from '../../components/PrimaryButton';
+import VersionStamp from '../../components/VersionStamp';
 
 const FEEDBACK_EMAIL = 'fizzgig@hcri.io';
 const FEEDBACK_SUBJECT = 'hCRI Companion Feedback';
@@ -104,6 +105,7 @@ export default function AboutTab() {
 
   return (
     <View>
+      <VersionStamp />
       <PrimaryButton title="Send Feedback" onPress={sendFeedback} variant="muted" style={styles.feedbackButton} />
 
       <TouchableOpacity onPress={openCompanionPage} style={styles.companionLink}>
