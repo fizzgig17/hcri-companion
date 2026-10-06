@@ -24,6 +24,7 @@ import SpectrumTab from './SpectrumTab';
 import { statusLabels } from '../../theme';
 import { useTheme } from '../../contexts/ThemeContext';
 import { MeterResult } from '../../ble/parseResult';
+import type { BatteryStatus } from '../../ble/protocol';
 import { SpectralAnalysis } from '../../utils/spectralAnalysis';
 import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
 import { HCRI_BRAND_HOST } from '../../hcri/buildTarget';
@@ -96,6 +97,8 @@ interface Props {
    * Home's own header (dropped along with the rest of that header -- see
    * HomeScreen.tsx), so this is the one place it's still visible at all. */
   connectedDeviceName?: string | null;
+  /** Meter battery level from 8C C3, or null/undefined until the meter has answered (then nothing is shown). */
+  battery?: BatteryStatus | null;
   /** Upload title/label -- the SAME state DataTab's own Upload Title field
    * reads/writes, lifted up to HomeScreen so it survives switching tabs and
    * taking multiple readings, only resetting when the app itself restarts
@@ -142,6 +145,7 @@ export default function MainTab({
   onCopyLink,
   statIds,
   connectedDeviceName,
+  battery,
   uploadTitle,
   onUploadTitleChange,
   cachedUsername,
@@ -162,11 +166,15 @@ export default function MainTab({
   const titleInputRef = useRef<TextInput>(null);
 
   const styles = StyleSheet.create({
-    statusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+    statusRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', rowGap: 4, marginBottom: 6 },
     resetLink: { alignItems: 'center', paddingVertical: 8 },
     resetLinkText: { color: colors.muted, fontSize: 12 },
     sampleNote: { color: colors.muted, fontSize: 12, fontStyle: 'italic', textAlign: 'center', marginTop: 8 },
     statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
+    batteryWrap: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', paddingLeft: 10 },
+    batteryBody: { width: 20, height: 10, borderWidth: 1.5, borderRadius: 2.5, padding: 1 },
+    batteryNub: { width: 2, height: 4, borderTopRightRadius: 1, borderBottomRightRadius: 1, marginLeft: 1 },
+    batteryText: { fontSize: 13, fontWeight: '600', marginLeft: 5 },
     statusText: { color: colors.muted, fontSize: 14 },
     deviceNameText: { color: colors.text, fontSize: 14, fontWeight: '600' },
 
@@ -281,6 +289,29 @@ export default function MainTab({
           <Text style={styles.statusText}>{statusLabels[status]}</Text>
         )}
         {isBusy && <ActivityIndicator size="small" color={colors.muted} style={{ marginLeft: 8 }} />}
+        {/* Meter battery (8C C3). Only while a meter is connected and has
+            actually answered; red at 20% or below (same threshold the
+            vendor app warns at), green otherwise. A bolt means the meter
+            reports it's charging. */}
+        {battery && status !== 'disconnected' && (
+          <View style={styles.batteryWrap} accessibilityLabel={`Meter battery ${battery.percent} percent${battery.charging ? ', charging' : ''}`}>
+            <View style={[styles.batteryBody, { borderColor: battery.percent <= 20 ? colors.danger : colors.accent }]}>
+              <View
+                style={{
+                  width: `${Math.max(0, Math.min(100, battery.percent))}%`,
+                  height: '100%',
+                  backgroundColor: battery.percent <= 20 ? colors.danger : colors.accent,
+                  borderRadius: 1,
+                }}
+              />
+            </View>
+            <View style={[styles.batteryNub, { backgroundColor: battery.percent <= 20 ? colors.danger : colors.accent }]} />
+            <Text style={[styles.batteryText, { color: battery.percent <= 20 ? colors.danger : colors.accent }]}>
+              {battery.charging ? '⚡' : ''}
+              {battery.percent}%
+            </Text>
+          </View>
+        )}
         {/* Only shows up when the meter currently connected was one of
             SEVERAL matches the last scan found -- lets you reopen that same
             list and pick a different one without a fresh scan or having to

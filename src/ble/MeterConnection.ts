@@ -15,9 +15,12 @@ import { PermissionsAndroid, Platform } from 'react-native';
 import {
   METER_NAME_PREFIXES,
   METER_SERVICE_UUID_PLACEHOLDER,
+  CMD_READ_BATTERY,
+  parseBatteryReply,
   METER_CHARACTERISTIC_UUID_PLACEHOLDER,
   RESULT_HEADER_LENGTH,
 } from './protocol';
+import type { BatteryStatus } from './protocol';
 import {
   saveLastDeviceId,
   loadLastDeviceId,
@@ -601,6 +604,40 @@ export class MeterConnection {
     // different) than getting 8C 05 replies that just never stabilize.
     this.log(`-> write (${bytes.length}B): ${toHex(bytes)}`, true);
     await this.characteristic.writeWithoutResponse(base64);
+  }
+
+  /**
+   * Asks the meter for its battery level (8C C3 -- see protocol.ts) and
+   * resolves with the parsed reply, or null if there's no (valid) answer
+   * within timeoutMs. Never throws, and never touches measurement state --
+   * it only adds a short-lived message listener of its own, so a failed or
+   * ignored battery read can't affect connecting or measuring. Callers
+   * should avoid starting it while a measurement is in flight.
+   */
+  readBattery(timeoutMs = 1500): Promise<BatteryStatus | null> {
+    if (!this.isConnected()) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      let settled = false;
+      let off: () => void = () => {};
+      const timer = setTimeout(() => finish(null), timeoutMs);
+      const finish = (value: BatteryStatus | null) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        off();
+        resolve(value);
+      };
+      off = this.onMessage((msg) => {
+        if (msg.subCommand !== CMD_READ_BATTERY[1]) return;
+        const parsed = parseBatteryReply(msg.body);
+        this.log(
+          `Battery reply (${toHex(msg.body)}): ${parsed ? `${parsed.percent}%${parsed.charging ? ', charging' : ''}` : 'unrecognized'}`,
+          true
+        );
+        finish(parsed);
+      });
+      this.sendCommand(CMD_READ_BATTERY).catch(() => finish(null));
+    });
   }
 
   isConnected(): boolean {

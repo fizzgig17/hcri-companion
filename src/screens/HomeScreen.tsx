@@ -11,6 +11,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, ScrollView, StyleSheet, Alert, AppState, Keyboard, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MeterConnection } from '../ble/MeterConnection';
+import type { BatteryStatus } from '../ble/protocol';
 import { initializeMeter, takeMeasurement, EMPTY_READING_ERROR } from '../ble/takeMeasurement';
 import { MeterResult } from '../ble/parseResult';
 import { analyzeSpectrum } from '../utils/spectralAnalysis';
@@ -78,6 +79,8 @@ export default function HomeScreen({ navigation }: any) {
   const [status, setStatus] = useState<Status>('disconnected');
   const [result, setResult] = useState<MeterResult | null>(null);
   const [deviceName, setDeviceName] = useState<string | null>(null);
+  // Meter battery (8C C3) -- null until the meter has answered, cleared on disconnect. See the polling effect below.
+  const [battery, setBattery] = useState<BatteryStatus | null>(null);
   // The upload title/label the person typed on the Data tab. Deliberately
   // lifted up here rather than kept as local state inside DataTab -- state
   // local to a tab component gets torn down and reset the moment that tab
@@ -706,6 +709,34 @@ export default function HomeScreen({ navigation }: any) {
     statusRef.current = status;
   }, [status]);
 
+  // Meter battery: read once shortly after each (re)entry into 'connected'
+  // -- which also happens right after every reading and upload finishes --
+  // then every 60s while it stays connected. Never runs during 'measuring'
+  // (the effect only polls while status === 'connected'), so it can't
+  // overlap a reading. A missing/invalid answer just leaves the last value
+  // (or nothing) showing.
+  useEffect(() => {
+    if (status === 'disconnected') {
+      setBattery(null);
+      return;
+    }
+    if (status !== 'connected') return;
+    let cancelled = false;
+    const poll = async () => {
+      const conn = connRef.current;
+      if (!conn || !conn.isConnected()) return;
+      const b = await conn.readBattery();
+      if (!cancelled && b && statusRef.current === 'connected') setBattery(b);
+    };
+    const first = setTimeout(poll, 400);
+    const id = setInterval(poll, 60000);
+    return () => {
+      cancelled = true;
+      clearTimeout(first);
+      clearInterval(id);
+    };
+  }, [status]);
+
   // Whether a share sheet (or anything else that briefly hands control to
   // the OS) is up right now -- see ../ble/backgroundDisconnectGuard.ts.
   // Sharing a CSV (shareCsv.ts's RNShare.open) puts up the native share
@@ -1045,6 +1076,7 @@ export default function HomeScreen({ navigation }: any) {
             onCopyLink={copyReportLink}
             statIds={statIds}
             connectedDeviceName={deviceName}
+            battery={battery}
             uploadTitle={uploadTitle}
             onUploadTitleChange={setUploadTitle}
             cachedUsername={cachedUsername}
