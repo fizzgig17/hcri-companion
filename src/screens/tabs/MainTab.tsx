@@ -455,7 +455,9 @@ export default function MainTab({
         onRequestClose={() => setTitleModalVisible(false)}
         // autoFocus alone often doesn't raise the keyboard inside an Android
         // Modal; focusing explicitly once it's on screen does.
-        onShow={() => setTimeout(() => titleInputRef.current?.focus(), 150)}
+        onShow={() => {
+          setTimeout(() => (titleInputRef.current as any)?.focus(), 150);
+        }}
       >
         <View style={styles.titleModalBackdrop}>
           <View style={styles.modalSheet}>
