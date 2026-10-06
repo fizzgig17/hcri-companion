@@ -51,11 +51,11 @@ export default function ActionBar(p: Props) {
       borderWidth: 1,
       borderColor: colors.cardBorder,
       borderRadius: 8,
-      minHeight: 38,
+      height: 56,
       marginBottom: 8,
     },
     titleOverlay: { paddingHorizontal: 10, paddingVertical: 8, color: colors.muted, fontSize: 13 },
-    titleInput: { paddingHorizontal: 10, paddingVertical: 8, color: colors.text, fontSize: 13, minHeight: 38 },
+    titleInput: { paddingHorizontal: 10, paddingVertical: 8, color: colors.text, fontSize: 13, height: 54 },
     titleInputEmpty: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
     main: { flex: 1, borderRadius: 10, paddingVertical: 13, alignItems: 'center', justifyContent: 'center' },
     mainAccent: { backgroundColor: colors.accent },
@@ -96,6 +96,9 @@ export default function ActionBar(p: Props) {
 
   return (
     <View style={styles.wrap}>
+      {/* Always occupies its space (invisible until there is a reading) so the
+          bar's height, and so the charts above, never change when it appears. */}
+      {!p.hasReading && <View style={[styles.titleWrap, { opacity: 0, borderWidth: 0 }]} />}
       {p.hasReading && (
         <View style={styles.titleWrap}>
           {p.uploadTitle.length === 0 && (

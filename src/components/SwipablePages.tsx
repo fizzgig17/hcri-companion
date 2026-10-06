@@ -121,6 +121,8 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
               pagingEnabled
               showsHorizontalScrollIndicator={false}
               onMomentumScrollEnd={onScrollEnd}
+              contentOffset={{ x: activeIndex * width, y: 0 }}
+              onContentSizeChange={() => scrollRef.current?.scrollTo({ x: activeIndex * width, animated: false })}
             >
               {pages.map((p) => (
                 <View
