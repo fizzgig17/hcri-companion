@@ -17,7 +17,7 @@
 // meter connection itself lives entirely in HomeScreen/MainTab, not here.
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Text, ScrollView, StyleSheet, Alert } from 'react-native';
+import { Text, ScrollView, StyleSheet, Alert, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { useTheme } from '../contexts/ThemeContext';
@@ -228,8 +228,12 @@ export default function HistoryScreen({ navigation }: any) {
    * button makes for the "current" reading, just reusable for ANY past
    * reading that's ever been uploaded, however long ago.
    */
-  const copyReportLinkFromHistory = useCallback(
-    async (reading: SavedReading) => {
+  // Shared by Copy / Report / TM-30: resolves the stored report's link (a
+  // private report's first resolve mints its share link -- see
+  // getReportLink.ts) and hands it to `then`. One in-flight flag for all
+  // three, so only one request runs at a time.
+  const withReportLink = useCallback(
+    async (reading: SavedReading, then: (link: string) => void | Promise<void>) => {
       if (typeof reading.reportId !== 'number' || typeof reading.reportIsPublic !== 'boolean') return;
       const creds = await loadHcriCredentials();
       if (!creds) {
@@ -243,8 +247,7 @@ export default function HistoryScreen({ navigation }: any) {
       try {
         const res = await getReportLink(reading.reportId, reading.reportIsPublic, creds.token, appendLog);
         if (res.success && res.link) {
-          Clipboard.setString(res.link);
-          appendLog(`Copied report link: ${res.link}`);
+          await then(res.link);
         } else {
           Alert.alert('Could not get link', res.message || 'Something went wrong. Please try again.');
         }
@@ -253,6 +256,32 @@ export default function HistoryScreen({ navigation }: any) {
       }
     },
     [navigation, appendLog]
+  );
+
+  const copyReportLinkFromHistory = useCallback(
+    (reading: SavedReading) =>
+      withReportLink(reading, (link) => {
+        Clipboard.setString(link);
+        appendLog(`Copied report link: ${link}`);
+      }),
+    [withReportLink, appendLog]
+  );
+
+  // Opens the report in the browser; `tm30` appends ?tm30=1 (the report page
+  // opens its TM-30 report straight away on that flag). The link already has
+  // a query string (?report=ID or ?share=TOKEN), so it's always `&`.
+  const openReportFromHistory = useCallback(
+    (reading: SavedReading, tm30: boolean) =>
+      withReportLink(reading, async (link) => {
+        const url = tm30 ? `${link}${link.includes('?') ? '&' : '?'}tm30=1` : link;
+        appendLog(`Opening report: ${url}`);
+        try {
+          await Linking.openURL(url);
+        } catch {
+          Alert.alert('Could not open the report', 'No browser was available to open the link.');
+        }
+      }),
+    [withReportLink, appendLog]
   );
 
   const shareOneFromHistory = useCallback((reading: SavedReading) => {
@@ -291,6 +320,7 @@ export default function HistoryScreen({ navigation }: any) {
           uploadingId={historyUploadingId}
           bulkUploading={historyBulkUploading}
           onCopyLink={copyReportLinkFromHistory}
+          onOpenReport={openReportFromHistory}
           copyingLinkId={copyingLinkId}
         />
       </ScrollView>

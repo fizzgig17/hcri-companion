@@ -955,7 +955,7 @@ export default function HomeScreen({ navigation }: any) {
         </View>
         <InfoButton
           title="About hCRI Companion"
-          message="hCRI Companion connects to your Hopoocolor spectrometer over Bluetooth, takes a reading and shows its spectrum and lighting stats (CCT, CRI, TM-30 and more). Every reading is saved to History, and you can optionally upload it to your hCRI.io account to analyze and share it. To upload, add your hCRI.io username and API token in Settings."
+          message="hCRI Companion connects to your Hopoocolor spectrometer over Bluetooth, takes a reading and shows its spectrum and lighting stats (CCT, CRI and TM-30 Rf/Rg). Every reading is saved to History, and you can optionally upload it to your hCRI.io account to see its full TM-30 report and share it. To upload, add your hCRI.io username and API token in Settings."
           style={styles.headerInfo}
         />
       </View>
