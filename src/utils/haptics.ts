@@ -10,7 +10,7 @@
 // linking, which matters more here than getting the exact feel of a "real"
 // system haptic right.
 
-import { Vibration, Platform, NativeModules } from 'react-native';
+import { Vibration, Platform } from 'react-native';
 
 // Vibration.vibrate() throws (not a rejected promise -- a synchronous throw
 // straight out of the native module) if the VIBRATE permission isn't
@@ -57,16 +57,5 @@ export function hapticFailure(): void {
 /** Short tick for pressing any of the action-bar buttons. */
 export function hapticTap(): void {
   if (!tapsEnabled) return;
-  // Native system "click" effect when the module is there (Android); the
-  // plain Vibration call is only a fallback, and very short buzzes are
-  // often too faint to feel.
-  try {
-    if (NativeModules.HapticTap?.click) {
-      NativeModules.HapticTap.click();
-      return;
-    }
-  } catch {
-    // fall through to the plain buzz
-  }
-  safeVibrate(Platform.OS === 'android' ? 45 : 15);
+  safeVibrate(Platform.OS === 'android' ? 25 : 15);
 }
