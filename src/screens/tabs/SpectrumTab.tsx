@@ -58,8 +58,8 @@ interface Props {
    * border. MainTab now passes its real 30px here instead.
    */
   extraHorizontalChrome?: number;
-  /** Chart height override (Main tab shrinks charts so the page fits without scrolling). Defaults: 200 spectrum, 230 chrom/R-values. */
-  chartHeight?: number;
+  /** Main tab: the exact height the swipeable pager (charts + dots) may fill. Charts are sized to fit it so nothing scrolls. Omit for the natural sizes (200 spectrum, 230 chrom/R-values). */
+  regionHeight?: number;
 }
 
 // The screen's own scroll-content padding (HomeScreen's and
@@ -81,7 +81,9 @@ const SCREEN_PADDING = 32;
 // before.
 const CARD_PADDING = 22;
 
-export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 0, chartHeight }: Props) {
+export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 0, regionHeight }: Props) {
+  // pager dots row (~26) + card padding/border (22) + card bottom margin (12) + R-values title (15)
+  const chartHeight = regionHeight && regionHeight > 0 ? Math.max(90, Math.floor(regionHeight - 26 - 22 - 12 - 15)) : undefined;
   const { colors } = useTheme();
   // Computed once, here, rather than separately (and inconsistently) in
   // SwipablePages and in each of the three chart components -- see this
@@ -153,6 +155,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
   return (
     <SwipablePages
       horizontalChrome={totalChrome}
+      fixedHeight={regionHeight && regionHeight > 0 ? regionHeight - 26 : undefined}
       pages={[
         {
           key: 'spectrum',

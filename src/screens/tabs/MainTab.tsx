@@ -15,7 +15,7 @@
 // (the overwhelmingly common case) connects straight through with no
 // extra UI at all, same as before.
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Modal, StyleSheet } from 'react-native';
 import InfoButton from '../../components/InfoButton';
 import StatCard, { statDensity } from '../../components/StatCard';
@@ -28,9 +28,6 @@ import { SpectralAnalysis } from '../../utils/spectralAnalysis';
 import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
 import { EMPTY_METER_RESULT, EMPTY_SPECTRAL_ANALYSIS } from '../../utils/placeholderReading';
 import { defaultLabel } from '../../hcri/buildCsv';
-
-const MIN_CHART_H = 110;
-const MAX_CHART_H = 260;
 
 export type Status = 'disconnected' | 'connecting' | 'connected' | 'measuring' | 'uploading';
 
@@ -120,8 +117,6 @@ interface Props {
    * to the ScrollView HomeScreen owns, which this tab has no ref to
    * itself. */
   scrollInputIntoView: (inputRef: React.RefObject<any>) => void;
-  /** Height the page may occupy without scrolling (undefined = don't adapt, e.g. keyboard open). The chart shrinks/grows to fill it. */
-  availableHeight?: number;
 }
 
 export default function MainTab({
@@ -153,7 +148,6 @@ export default function MainTab({
   onUploadTitleChange,
   cachedUsername,
   scrollInputIntoView,
-  availableHeight,
 }: Props) {
   const { colors, statusColors } = useTheme();
   const canSwitchMeters = status === 'connected' && (devicePickerDevices?.length ?? 0) > 1;
@@ -177,17 +171,9 @@ export default function MainTab({
     return metric && out ? [{ id, metric, out }] : [];
   });
   const density = statDensity(visibleStats.length);
-  // Fit the page to the screen: chart height = whatever makes total content
-  // height equal the room available (content height is chart height plus a
-  // fixed amount, so one correction step lands on it). Clamped so charts stay
-  // legible; below the minimum the page just scrolls as a last resort.
-  const [contentH, setContentH] = useState(0);
-  const [chartH, setChartH] = useState(200);
-  useEffect(() => {
-    if (!availableHeight || !contentH) return;
-    const next = Math.max(MIN_CHART_H, Math.min(MAX_CHART_H, Math.round(chartH + availableHeight - contentH)));
-    if (Math.abs(next - chartH) >= 2) setChartH(next);
-  }, [availableHeight, contentH, chartH]);
+  // Height of the chart region (the card's flexible middle) -- measured, but
+  // it never depends on the charts' own size, so there's no feedback loop.
+  const [chartRegionH, setChartRegionH] = useState(0);
 
   const styles = StyleSheet.create({
     statusRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', rowGap: 4, marginBottom: 6 },
@@ -206,7 +192,10 @@ export default function MainTab({
     switchMeterIcon: { color: colors.info, fontSize: 14, marginRight: 4 },
     switchMeterText: { color: colors.info, fontSize: 12, fontWeight: '600' },
 
+    root: { flex: 1 },
+    chartRegion: { flex: 1, minHeight: 0, overflow: 'hidden' },
     resultCard: {
+      flex: 1,
       backgroundColor: colors.card,
       borderRadius: 12,
       borderWidth: 1,
@@ -302,7 +291,7 @@ export default function MainTab({
   });
 
   return (
-    <View onLayout={(e) => setContentH(e.nativeEvent.layout.height)}>
+    <View style={styles.root}>
       <View style={styles.statusRow}>
         <View style={[styles.statusDot, { backgroundColor: statusColors[status] }]} />
         {connectedDeviceName ? (
@@ -408,7 +397,9 @@ export default function MainTab({
             and the reason charts still looked clipped on the right after
             CARD_PADDING alone was fixed. See SpectrumTab.tsx's
             extraHorizontalChrome comment. */}
-        <SpectrumTab result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} chartHeight={availableHeight ? chartH : undefined} />
+        <View style={styles.chartRegion} onLayout={(e) => setChartRegionH(e.nativeEvent.layout.height)}>
+          <SpectrumTab result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} />
+        </View>
 
         {/* Connect / Take Reading / Upload / Disconnect live in the pinned
             ActionBar (components/ActionBar.tsx), docked above the bottom

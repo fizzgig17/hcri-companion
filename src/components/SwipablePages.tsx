@@ -59,9 +59,11 @@ interface Props {
   pages: Page[];
   /** Total horizontal chrome (both sides combined) already reserved by whatever wraps this component, beyond... well, instead of the default screen-only padding. Pass this whenever a host screen adds its own card/padding around SpectrumTab, so pages come out the real width rather than an estimate that's too wide. */
   horizontalChrome?: number;
+  /** Force the pager's height (Main tab fits the screen); otherwise it follows the active page. */
+  fixedHeight?: number;
 }
 
-export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZONTAL_PADDING }: Props) {
+export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZONTAL_PADDING, fixedHeight }: Props) {
   const { colors } = useTheme();
   // Confirmed 2026-10-03: measuring this via onLayout at all -- even
   // seeded with a close estimate that onLayout then "corrects" -- means
@@ -112,7 +114,7 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
               file-level comment. Falls back to undefined (auto) for the
               very first render, before any page has reported a height
               yet, so there's no flash of a 0-height pager. */}
-          <View style={{ height: pageHeights[pages[activeIndex]?.key] }}>
+          <View style={{ height: fixedHeight ?? pageHeights[pages[activeIndex]?.key], overflow: 'hidden' }}>
             <ScrollView
               ref={scrollRef}
               horizontal
