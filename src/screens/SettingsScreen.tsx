@@ -623,11 +623,10 @@ export default function SettingsScreen({ navigation }: any) {
         </View>
       </View>
 
-      <Text style={styles.appearanceLabel}>Feedback</Text>
       <View style={styles.toggleRow}>
         <View style={styles.toggleTextWrap}>
           <Text style={styles.toggleLabel}>Button taps</Text>
-          <Text style={styles.toggleHint}>A tiny tick when you press Connect / Take reading, Upload or Disconnect.</Text>
+          <Text style={styles.toggleHint}>A short tick when you press a button in the bar at the bottom of the Main screen.</Text>
         </View>
         <Switch value={hapticTaps} onValueChange={toggleHapticTaps} trackColor={{ true: colors.accent }} />
       </View>

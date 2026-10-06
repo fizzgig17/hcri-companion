@@ -42,20 +42,20 @@ function safeVibrate(pattern: number | number[]): void {
   }
 }
 
-/** Short buzz for a successful reading or upload. */
+/** Firm double buzz for a successful reading or upload -- clearly longer than the button tick. */
 export function hapticSuccess(): void {
   if (!resultsEnabled) return;
-  safeVibrate(Platform.OS === 'android' ? 40 : 30);
+  safeVibrate(Platform.OS === 'android' ? [0, 140, 70, 140] : [0, 100, 60, 100]);
 }
 
-/** Slightly longer double-buzz for a failed/timed-out reading -- deliberately distinct from the success buzz so the two are tellable apart without looking at the screen. */
+/** Triple buzz for a failed/timed-out reading or upload -- deliberately distinct from the success buzz so the two are tellable apart without looking at the screen. */
 export function hapticFailure(): void {
   if (!resultsEnabled) return;
-  safeVibrate(Platform.OS === 'android' ? [0, 60, 80, 60] : [0, 40, 60, 40]);
+  safeVibrate(Platform.OS === 'android' ? [0, 90, 80, 90, 80, 90] : [0, 70, 60, 70, 60, 70]);
 }
 
-/** Very short tick for the buttons whose effect isn't instantly visible (Connect/Take reading, Upload, Disconnect). */
+/** Short tick for pressing any of the action-bar buttons. */
 export function hapticTap(): void {
   if (!tapsEnabled) return;
-  safeVibrate(Platform.OS === 'android' ? 12 : 10);
+  safeVibrate(Platform.OS === 'android' ? 25 : 15);
 }
