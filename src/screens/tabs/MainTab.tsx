@@ -166,6 +166,8 @@ export default function MainTab({
   // actual TextInput, not just a position, since it measures this input's
   // layout relative to the ScrollView HomeScreen owns.
   const titleInputRef = useRef<TextInput>(null);
+  const [titleModalVisible, setTitleModalVisible] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
   // Tiles that actually have a value, and how densely to pack them: the
   // more the person chooses, the more columns/smaller text, so the chart
   // stays on screen without scrolling.
@@ -275,6 +277,24 @@ export default function MainTab({
       height: 54,
     },
 
+    titleTextSet: { color: colors.text },
+    titleModalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'flex-start', paddingTop: 70, paddingHorizontal: 24 },
+    titleModalInput: {
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 8,
+      color: colors.text,
+      fontSize: 14,
+      minHeight: 70,
+      maxHeight: 120,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      textAlignVertical: 'top',
+    },
+    titleModalButtons: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 8 },
+    titleSaveButton: { backgroundColor: colors.accent, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 22, marginLeft: 8, marginTop: 6 },
+    titleSaveText: { color: colors.text, fontSize: 14, fontWeight: '700' },
     modalBackdrop: {
       flex: 1,
       backgroundColor: 'rgba(0,0,0,0.6)',
@@ -402,30 +422,72 @@ export default function MainTab({
         </View>
         {!hasReading && <View style={[styles.titleInputWrap, { opacity: 0 }]} />}
         {hasReading && (
-          <View style={styles.titleInputWrap}>
-            {uploadTitle.length === 0 && (
-              <Text style={styles.titleInputOverlay} pointerEvents="none">
-                {defaultLabel(cachedUsername, displayResult.deviceName)}
-              </Text>
-            )}
-            <TextInput
-              ref={titleInputRef}
-              style={[styles.titleInput, uploadTitle.length === 0 && styles.titleInputEmpty]}
-              value={uploadTitle}
-              onChangeText={onUploadTitleChange}
-              autoCapitalize="none"
-              autoCorrect={false}
-              multiline
-              submitBehavior="blurAndSubmit"
-              returnKeyType="done"
-              textAlignVertical="top"
-              editable={!result?.sampleLabel}
-              accessibilityLabel="Upload title"
-            />
-          </View>
+          <TouchableOpacity
+            style={styles.titleInputWrap}
+            activeOpacity={result?.sampleLabel ? 1 : 0.7}
+            onPress={() => {
+              if (result?.sampleLabel) return;
+              setTitleDraft(uploadTitle);
+              setTitleModalVisible(true);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Upload title. Tap to edit."
+          >
+            <Text
+              style={[styles.titleInputOverlay, uploadTitle.length > 0 && styles.titleTextSet]}
+              numberOfLines={2}
+              ellipsizeMode="tail"
+            >
+              {uploadTitle.length > 0 ? uploadTitle : defaultLabel(cachedUsername, displayResult.deviceName)}
+            </Text>
+          </TouchableOpacity>
         )}
 
       </View>
+
+      {/* Title editor: a popup at the top of the screen instead of typing into the
+          box in place, so the keyboard can never cover it and the charts
+          never resize while typing. */}
+      <Modal visible={titleModalVisible} transparent animationType="fade" onRequestClose={() => setTitleModalVisible(false)}>
+        <View style={styles.titleModalBackdrop}>
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>Upload title</Text>
+            <Text style={styles.modalSubtitle}>Leave it empty to use the default.</Text>
+            <TextInput
+              ref={titleInputRef}
+              style={styles.titleModalInput}
+              value={titleDraft}
+              onChangeText={setTitleDraft}
+              placeholder={defaultLabel(cachedUsername, displayResult.deviceName)}
+              placeholderTextColor={colors.muted}
+              autoFocus
+              multiline
+              autoCapitalize="none"
+              autoCorrect={false}
+              submitBehavior="blurAndSubmit"
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                onUploadTitleChange(titleDraft.trim());
+                setTitleModalVisible(false);
+              }}
+            />
+            <View style={styles.titleModalButtons}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setTitleModalVisible(false)}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.titleSaveButton}
+                onPress={() => {
+                  onUploadTitleChange(titleDraft.trim());
+                  setTitleModalVisible(false);
+                }}
+              >
+                <Text style={styles.titleSaveText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Opens right after connect()'s scan finds more than one matching
           meter, or later via the "switch meter" icon above -- a plain
