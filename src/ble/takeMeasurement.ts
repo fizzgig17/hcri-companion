@@ -96,6 +96,8 @@ export async function takeMeasurement(
   // reply at all on this firmware, on ANY of its exposed characteristics.
   let stableIntegTimeUs: number | null = null;
   let stableDetectedAt: number | null = null;
+  // True once any 8C 03 state-check reply has arrived during this measurement -- see handleMessage().
+  let stateReplySeen = false;
   const testStartedAt = Date.now();
 
   // Two separate states, deliberately kept apart:
@@ -196,6 +198,14 @@ export async function takeMeasurement(
     function handleMessage(msg: MeterMessage) {
       if (settled) return;
 
+      // The meter DOES answer 8C 03 state checks (confirmed 2026-10-04/05),
+      // so once any reply has arrived the elapsed-time fallback below must
+      // stand down: a 2026-10-05 capture showed it firing 160ms after a
+      // state reply that said "still testing", reading the result before
+      // the exposure had finished -- an all-zero body, shown as a blank
+      // chart. The fallback is only for a firmware that never replies.
+      if (msg.subCommand === 0x03) stateReplySeen = true;
+
       if (msg.subCommand === 0x05 && !pollingDone) {
         // 7-byte reply: 8C 05 <4-byte LE µs> <mode byte>. Body here still
         // includes the 8C 05 prefix since short replies aren't header-
@@ -258,7 +268,13 @@ export async function takeMeasurement(
         // settled integration time, plus a safety margin -- then read the
         // result directly rather than waiting out the full
         // MEASUREMENT_TIMEOUT_MS on a confirmation that may not come.
-        if (!pollingDone && stableCandidateSeen && stableIntegTimeUs !== null && stableDetectedAt !== null) {
+        if (
+          !pollingDone &&
+          !stateReplySeen &&
+          stableCandidateSeen &&
+          stableIntegTimeUs !== null &&
+          stableDetectedAt !== null
+        ) {
           const now = Date.now();
           const requiredSinceStart = stableIntegTimeUs / 1000 + FALLBACK_SAFETY_MARGIN_MS;
           const settledLongEnough = now - stableDetectedAt >= FALLBACK_MIN_SETTLE_MS;
