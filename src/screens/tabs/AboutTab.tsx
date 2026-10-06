@@ -41,6 +41,12 @@ const FEEDBACK_MAILTO = `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(F
 // dev.hcri.io, the feedback address above), not a separate site.
 const COMPANION_PAGE_URL = 'https://www.hcri.io/companion';
 
+// Open-source details: the app is free software (GPL v3 or later), so the source,
+// the license text and the third-party notices are one tap away from here.
+const SOURCE_URL = 'https://github.com/fizzgig17/hcri-companion';
+const LICENSE_URL = `${SOURCE_URL}/blob/master/LICENSE`;
+const NOTICES_URL = `${SOURCE_URL}/blob/master/THIRD-PARTY-NOTICES.md`;
+
 export default function AboutTab() {
   const { colors } = useTheme();
 
@@ -62,7 +68,14 @@ export default function AboutTab() {
     });
   };
 
+  const openUrl = (url: string) => {
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Could not open browser', `Visit ${url} directly instead.`);
+    });
+  };
+
   const styles = StyleSheet.create({
+    openLink: { color: colors.info, fontSize: 13, fontWeight: '600', paddingVertical: 6 },
     feedbackButton: { marginBottom: 14 },
     companionLink: { alignItems: 'center', paddingVertical: 4, marginBottom: 14 },
     companionLinkText: { color: colors.info, fontSize: 13, fontWeight: '600' },
@@ -122,6 +135,23 @@ export default function AboutTab() {
           ))}
         </View>
       ))}
+
+      <View style={styles.card}>
+        <Text style={styles.heading}>Open source</Text>
+        <Text style={styles.subheading}>
+          © 2026 fizzgig. hCRI Companion is free software, licensed under the GNU General Public License v3 or later.
+          It comes with no warranty.
+        </Text>
+        <TouchableOpacity onPress={() => openUrl(SOURCE_URL)}>
+          <Text style={styles.openLink}>Source code →</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => openUrl(LICENSE_URL)}>
+          <Text style={styles.openLink}>License (GPL v3) →</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => openUrl(NOTICES_URL)}>
+          <Text style={styles.openLink}>Third-party licenses →</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
