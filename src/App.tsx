@@ -29,8 +29,8 @@ import { HomeIcon, HistoryIcon, SettingsIcon } from './components/TabBarIcons';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { LogProvider } from './contexts/LogContext';
 import { IS_DEV_BUILD } from './hcri/buildTarget';
-import { hapticTap, setHapticsEnabled } from './utils/haptics';
-import { loadHapticsPreference } from './storage/preferences';
+import { setTapHapticsEnabled, setResultHapticsEnabled } from './utils/haptics';
+import { loadHapticTapsPreference, loadHapticResultsPreference } from './storage/preferences';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -47,7 +47,6 @@ function Tabs() {
 
   return (
     <Tab.Navigator
-      screenListeners={{ tabPress: () => hapticTap() }}
       screenOptions={{
         headerStyle: { backgroundColor: colors.card },
         headerTintColor: colors.text,
@@ -102,7 +101,8 @@ function Tabs() {
 function Navigation() {
   const { colors, scheme } = useTheme();
   useEffect(() => {
-    loadHapticsPreference().then(setHapticsEnabled).catch(() => {});
+    loadHapticTapsPreference().then(setTapHapticsEnabled).catch(() => {});
+    loadHapticResultsPreference().then(setResultHapticsEnabled).catch(() => {});
   }, []);
 
   return (

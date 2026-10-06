@@ -19,16 +19,20 @@ import { Vibration, Platform } from 'react-native';
 // crash the whole app for something as minor as a buzz -- so every call
 // here is wrapped and just silently no-ops if the native call fails for any
 // reason, instead of taking down the screen.
-// Master switch (Settings > "Haptic feedback"), loaded once at app start
-// and updated live by the Settings toggle. On by default.
-let hapticsEnabled = true;
+// Two switches (Settings > Feedback), loaded once at app start and updated
+// live by the Settings toggles. Both on by default.
+let tapsEnabled = true;
+let resultsEnabled = true;
 
-export function setHapticsEnabled(enabled: boolean): void {
-  hapticsEnabled = enabled;
+export function setTapHapticsEnabled(enabled: boolean): void {
+  tapsEnabled = enabled;
+}
+
+export function setResultHapticsEnabled(enabled: boolean): void {
+  resultsEnabled = enabled;
 }
 
 function safeVibrate(pattern: number | number[]): void {
-  if (!hapticsEnabled) return;
   try {
     Vibration.vibrate(pattern);
   } catch {
@@ -38,17 +42,20 @@ function safeVibrate(pattern: number | number[]): void {
   }
 }
 
-/** Short buzz for a successful reading. */
+/** Short buzz for a successful reading or upload. */
 export function hapticSuccess(): void {
+  if (!resultsEnabled) return;
   safeVibrate(Platform.OS === 'android' ? 40 : 30);
 }
 
 /** Slightly longer double-buzz for a failed/timed-out reading -- deliberately distinct from the success buzz so the two are tellable apart without looking at the screen. */
 export function hapticFailure(): void {
+  if (!resultsEnabled) return;
   safeVibrate(Platform.OS === 'android' ? [0, 60, 80, 60] : [0, 40, 60, 40]);
 }
 
-/** Very short tick for pressing a primary button or switching tabs. */
+/** Very short tick for the buttons whose effect isn't instantly visible (Connect/Take reading, Upload, Disconnect). */
 export function hapticTap(): void {
+  if (!tapsEnabled) return;
   safeVibrate(Platform.OS === 'android' ? 12 : 10);
 }

@@ -24,16 +24,21 @@ export async function saveKeepAwakePreference(enabled: boolean): Promise<void> {
   await AsyncStorage.setItem(KEEP_AWAKE_KEY, enabled ? 'true' : 'false');
 }
 
-const HAPTICS_KEY = 'hcri.io.pref.hapticFeedback';
+const HAPTIC_TAPS_KEY = 'hcri.io.pref.hapticTaps';
+const HAPTIC_RESULTS_KEY = 'hcri.io.pref.hapticResults';
 
-// Default ON: only an explicit 'false' turns button/result haptics off.
-export async function loadHapticsPreference(): Promise<boolean> {
-  const raw = await AsyncStorage.getItem(HAPTICS_KEY);
-  return raw !== 'false';
+// Both default ON: only an explicit 'false' turns them off.
+export async function loadHapticTapsPreference(): Promise<boolean> {
+  return (await AsyncStorage.getItem(HAPTIC_TAPS_KEY)) !== 'false';
 }
-
-export async function saveHapticsPreference(enabled: boolean): Promise<void> {
-  await AsyncStorage.setItem(HAPTICS_KEY, enabled ? 'true' : 'false');
+export async function saveHapticTapsPreference(enabled: boolean): Promise<void> {
+  await AsyncStorage.setItem(HAPTIC_TAPS_KEY, enabled ? 'true' : 'false');
+}
+export async function loadHapticResultsPreference(): Promise<boolean> {
+  return (await AsyncStorage.getItem(HAPTIC_RESULTS_KEY)) !== 'false';
+}
+export async function saveHapticResultsPreference(enabled: boolean): Promise<void> {
+  await AsyncStorage.setItem(HAPTIC_RESULTS_KEY, enabled ? 'true' : 'false');
 }
 
 // Default OFF -- the standard (non-verbose) log already covers most
