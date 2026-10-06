@@ -19,14 +19,14 @@ interface Props {
   value: string;
   unit?: string;
   compact?: boolean;
-  /** Packing for compact tiles: 3 columns (<=8 values), 4 (<=12) or 6 (more). */
+  /** Packing for compact tiles: 3 columns (<=9 values), 4 (<=12) or 6 (more). */
   density?: Density;
 }
 
 export type Density = 'roomy' | 'medium' | 'tight';
 
 export function statDensity(count: number): Density {
-  return count <= 8 ? 'roomy' : count <= 12 ? 'medium' : 'tight';
+  return count <= 9 ? 'roomy' : count <= 12 ? 'medium' : 'tight';
 }
 
 const DENSITY = {
