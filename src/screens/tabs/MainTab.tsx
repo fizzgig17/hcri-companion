@@ -206,7 +206,7 @@ export default function MainTab({
     root: { flex: 1 },
     chartRegion: { overflow: 'hidden' },
     resultCard: {
-      alignSelf: 'stretch',
+      flex: 1,
       backgroundColor: colors.card,
       borderRadius: 12,
       borderWidth: 1,
@@ -255,7 +255,7 @@ export default function MainTab({
       borderColor: colors.cardBorder,
       borderRadius: 8,
       position: 'relative',
-      marginTop: 8,
+      marginTop: 'auto',
       height: 56,
     },
     // In normal flow (not absolutely positioned) so a default title that wraps
@@ -400,6 +400,7 @@ export default function MainTab({
         <View style={styles.chartRegion}>
           <SpectrumTab result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} sampleLabel={result?.sampleLabel} />
         </View>
+        {!hasReading && <View style={[styles.titleInputWrap, { opacity: 0 }]} />}
         {hasReading && (
           <View style={styles.titleInputWrap}>
             {uploadTitle.length === 0 && (

@@ -88,12 +88,12 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
     ? `This is a sample from a public hCRI.io report (${sampleLabel}), not a reading from your own meter. It isn't saved to History and can't be uploaded or shared.`
     : 'This comes from the reading your meter just took.';
   const { colors } = useTheme();
-  // Main tab: charts keep their usual sizes (200 spectrum, 230 chrom/R-values)
-  // and only shrink if the region is too short. Overheads: pager dots (~26),
+  // Main tab: charts grow to fill the room they're given (up to 320/340) and
+  // shrink if the region is short; elsewhere they keep 200/230. Overheads: pager dots (~26),
   // card padding/border (22), card bottom margin (12), R-values title (15).
   const fit = regionHeight && regionHeight > 0 ? Math.max(90, Math.floor(regionHeight - 26 - 22 - 12 - 15)) : undefined;
-  const chartHeight = fit === undefined ? undefined : Math.min(fit, 230);
-  const spectrumHeight = chartHeight === undefined ? 200 : Math.min(chartHeight, 200);
+  const chartHeight = fit === undefined ? undefined : Math.min(fit, 340);
+  const spectrumHeight = chartHeight === undefined ? 200 : Math.min(chartHeight, 320);
   // Computed once, here, rather than separately (and inconsistently) in
   // SwipablePages and in each of the three chart components -- see this
   // file's own Props comment above for why a hardcoded per-component
