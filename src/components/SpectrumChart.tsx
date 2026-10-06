@@ -32,6 +32,8 @@ const PADDING = { top: 8, right: 8, bottom: 24, left: 24 };
 export const SPECTRUM_HEADER_H = 34;
 // The vendor app's own full-scale for its Peak/Dark percentages.
 const SIGNAL_FULL_SCALE = 64500;
+/** Half-width (px) of the touch strip around the red line. */
+const LINE_GRAB_PX = 22;
 
 /**
  * Approximates the perceived color of a wavelength in the visible spectrum
@@ -95,6 +97,7 @@ export default function SpectrumChart({ spectrum, height = 200, width, details }
   const grabTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const grabbed = useRef(false);
   const startPt = useRef({ x: 0, y: 0 });
+  const lineStartX = useRef(0);
   useEffect(() => {
     setSelectedNm(null);
   }, [spectrum]);
@@ -249,37 +252,39 @@ export default function SpectrumChart({ spectrum, height = 200, width, details }
         </Svg>
       )}
       {width > 0 && hasData && (
+        // Touch target is only a narrow strip around the red line, so a press
+        // anywhere else on the chart is ignored by it (and just belongs to the pager).
         <View
-          style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height }}
+          style={{ position: 'absolute', left: xFor(lineNm) - LINE_GRAB_PX, width: LINE_GRAB_PX * 2, bottom: 0, height }}
           onTouchStart={(e) => {
-            const { locationX, locationY } = e.nativeEvent;
-            startPt.current = { x: locationX, y: locationY };
+            const { pageX, pageY } = e.nativeEvent;
+            startPt.current = { x: pageX, y: pageY };
+            lineStartX.current = xFor(lineNm);
             grabbed.current = false;
             if (grabTimer.current) clearTimeout(grabTimer.current);
             // Only a finger resting on the line (not a quick swipe) grabs it.
-            if (Math.abs(locationX - xFor(lineNm)) <= 22) {
-              grabTimer.current = setTimeout(() => {
-                grabbed.current = true;
-                lockPager(true);
-              }, 180);
-            }
+            grabTimer.current = setTimeout(() => {
+              grabbed.current = true;
+              lockPager(true);
+            }, 180);
           }}
           onTouchMove={(e) => {
-            const { locationX, locationY } = e.nativeEvent;
+            const { pageX, pageY } = e.nativeEvent;
             if (!grabbed.current) {
               // Moved before the line was grabbed: it's a swipe, leave it to the pager.
               if (
                 grabTimer.current &&
-                (Math.abs(locationX - startPt.current.x) > 6 || Math.abs(locationY - startPt.current.y) > 6)
+                (Math.abs(pageX - startPt.current.x) > 6 || Math.abs(pageY - startPt.current.y) > 6)
               ) {
                 clearTimeout(grabTimer.current);
                 grabTimer.current = null;
               }
               return;
             }
-            const raw = minNm + ((locationX - PADDING.left) / (chartWidth || 1)) * nmRange;
-            const nm = Math.round(Math.max(minNm, Math.min(maxNm, raw)));
-            setSelectedNm(nm);
+            // The strip moves with the line, so track the finger's movement from where it started.
+            const x = lineStartX.current + (pageX - startPt.current.x);
+            const raw = minNm + ((x - PADDING.left) / (chartWidth || 1)) * nmRange;
+            setSelectedNm(Math.round(Math.max(minNm, Math.min(maxNm, raw))));
           }}
           onTouchEnd={() => {
             if (grabTimer.current) clearTimeout(grabTimer.current);

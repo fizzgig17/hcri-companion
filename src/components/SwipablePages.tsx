@@ -139,6 +139,8 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
               horizontal
               pagingEnabled
               scrollEnabled={!scrollLocked}
+              overScrollMode="never"
+              bounces={false}
               showsHorizontalScrollIndicator={false}
               onMomentumScrollEnd={onScrollEnd}
               contentOffset={{ x: activeIndex * width, y: 0 }}
