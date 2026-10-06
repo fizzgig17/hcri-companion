@@ -15,6 +15,7 @@
 // (the overwhelmingly common case) connects straight through with no
 // extra UI at all, same as before.
 
+import { APP_VERSION } from '../../buildInfo';
 import React, { useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Modal, StyleSheet } from 'react-native';
 import InfoButton from '../../components/InfoButton';
@@ -199,6 +200,7 @@ export default function MainTab({
     batteryNub: { width: 2, height: 4, borderTopRightRadius: 1, borderBottomRightRadius: 1, marginLeft: 1 },
     batteryText: { fontSize: 13, fontWeight: '600', marginLeft: 5 },
     statusText: { color: colors.muted, fontSize: 14 },
+    versionTiny: { marginLeft: 'auto', color: colors.mutedFaint, fontSize: 10 },
     deviceNameText: { color: colors.text, fontSize: 14, fontWeight: '600' },
 
     switchMeterButton: { flexDirection: 'row', alignItems: 'center', marginLeft: 12 },
@@ -371,6 +373,7 @@ export default function MainTab({
             <Text style={styles.switchMeterText}>Switch meter</Text>
           </TouchableOpacity>
         )}
+        <Text style={styles.versionTiny}>v{APP_VERSION}</Text>
       </View>
 
       {/* Always rendered, whether or not a reading (or even a connection)
