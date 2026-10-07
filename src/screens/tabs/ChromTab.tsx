@@ -6,7 +6,8 @@
 // own Chrom. tab. Read-only, like Spectrum/Data/Logs.
 
 import React from 'react';
-import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import { useContentWidth } from '../../layout';
 import ChromaticityChart from '../../components/ChromaticityChart';
 import StatCard from '../../components/StatCard';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -23,7 +24,7 @@ export default function ChromTab({ result }: Props) {
   // `width` prop now instead of measuring itself (see its own comment),
   // so this keeps compiling with a reasonable stand-in rather than the
   // real per-host chrome math SpectrumTab.tsx now owns.
-  const { width: windowWidth } = useWindowDimensions();
+  const windowWidth = useContentWidth();
   const chartWidth = Math.max(windowWidth - 32 - 28, 0);
 
   const styles = StyleSheet.create({

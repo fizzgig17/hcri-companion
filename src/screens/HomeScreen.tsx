@@ -7,8 +7,9 @@
 // (connect/disconnect/scan); Spectrum, Data, and Logs are read-only views
 // of whatever the last reading and log happen to be.
 
+import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, ScrollView, StyleSheet, Alert, AppState, Keyboard, Linking } from 'react-native';
+import { BackHandler, View, ScrollView, StyleSheet, Alert, AppState, Keyboard, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MeterConnection } from '../ble/MeterConnection';
 import type { BatteryStatus } from '../ble/protocol';
@@ -501,6 +502,21 @@ export default function HomeScreen({ navigation }: any) {
   // already on Home looking at Data or Logs (standard tab-bar behavior:
   // tapping a tab takes you to its starting page) -- and scrolls it back
   // to the top.
+  // Android Back: from Data/Logs go back to Main first (Main then lets the tab navigator / system
+  // handle it, which returns to the app's first screen or leaves the app).
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (activeTab !== 'main') {
+          setActiveTab('main');
+          return true;
+        }
+        return false;
+      });
+      return () => sub.remove();
+    }, [activeTab]),
+  );
+
   useEffect(() => {
     const unsubscribe = navigation.addListener('tabPress', () => {
       setActiveTab('main');

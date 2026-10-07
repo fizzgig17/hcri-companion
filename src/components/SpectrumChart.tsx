@@ -24,7 +24,7 @@ interface Props {
   /** The chart's actual available content width (inside SpectrumTab's chartCard padding), computed once by SpectrumTab -- see its own comment for why this moved there instead of staying a hardcoded chrome constant in each chart file. */
   width: number;
   /** Reading details shown above the plot, like the vendor app: peak wavelength and its spectral value, plus the meter's integration time and peak/dark signal. Any piece that's missing is left out. */
-  details?: { integrationMs?: number; peakSignal?: number; darkSignal?: number; showSpectral?: boolean };
+  details?: { integrationMs?: number; peakSignal?: number; darkSignal?: number; showSpectral?: boolean; showRelative?: boolean };
 }
 
 const PADDING = { top: 8, right: 8, bottom: 24, left: 24 };
@@ -121,7 +121,23 @@ export default function SpectrumChart({ spectrum, height = 200, width, details }
   const peakIndex = values.indexOf(Math.max(...values));
   const peakNm = spectrum[Math.max(0, peakIndex)].nm;
   const lineNm = selectedNm !== null && selectedNm >= minNm && selectedNm <= maxNm ? selectedNm : peakNm;
-  const lineValue = spectrum.find((p) => p.nm === lineNm)?.value ?? maxValue;
+  // The cursor can sit between two samples while dragging, so interpolate instead of requiring an exact
+  // match (an exact-match lookup failed mid-drag and fell back to the peak, which made Relative read 1.00).
+  const lineValue = (() => {
+    const exact = spectrum.find((p) => p.nm === lineNm);
+    if (exact) return exact.value;
+    let lo = spectrum[0];
+    let hi = spectrum[spectrum.length - 1];
+    for (let i = 0; i < spectrum.length - 1; i++) {
+      if (spectrum[i].nm <= lineNm && spectrum[i + 1].nm >= lineNm) {
+        lo = spectrum[i];
+        hi = spectrum[i + 1];
+        break;
+      }
+    }
+    const span = hi.nm - lo.nm || 1;
+    return lo.value + ((lineNm - lo.nm) / span) * (hi.value - lo.value);
+  })();
   const hasData = Math.max(...values) > 0;
 
   const chartWidth = Math.max(width - PADDING.left - PADDING.right, 0);
@@ -165,7 +181,8 @@ export default function SpectrumChart({ spectrum, height = 200, width, details }
   const num = (v: number | undefined) => (hasData && v !== undefined && Number.isFinite(v) ? v.toFixed(0) : null);
   const line1 =
     hasData
-      ? `Wavelength:${lineNm}nm` + (details?.showSpectral ? ` Spectral:${(lineValue * 0.1).toFixed(3)}uw/cm²/nm` : '')
+      ? `Wavelength:${lineNm}nm` + (details?.showSpectral ? ` Spectral:${(lineValue * 0.1).toFixed(3)}uw/cm²/nm` : '') +
+        (details?.showRelative && maxValue > 0 ? ` Relative:${(lineValue / maxValue).toFixed(2)}` : '')
       : '';
   const integ = num(details?.integrationMs);
   const peakS = num(details?.peakSignal);

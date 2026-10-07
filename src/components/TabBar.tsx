@@ -10,6 +10,8 @@ import { useTheme } from '../contexts/ThemeContext';
 interface Tab<T extends string> {
   key: T;
   label: string;
+  /** Small dot after the label, e.g. an update is waiting. */
+  badge?: boolean;
 }
 
 interface Props<T extends string> {
@@ -66,9 +68,16 @@ export default function TabBar<T extends string>({ tabs, active, onChange }: Pro
             onPress={() => onChange(t.key)}
             activeOpacity={0.7}
           >
-            <Text style={[styles.tabText, isActive && styles.tabTextActive]} numberOfLines={1}>
-              {t.label}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={[styles.tabText, isActive && styles.tabTextActive]} numberOfLines={1}>
+                {t.label}
+              </Text>
+              {t.badge && (
+                <View
+                  style={{ width: 8, height: 8, borderRadius: 4, marginLeft: 5, backgroundColor: isActive ? colors.text : colors.accent }}
+                />
+              )}
+            </View>
           </TouchableOpacity>
         );
       })}

@@ -65,28 +65,24 @@ interface Props {
 export default function ActionBar(p: Props) {
   const { colors } = useTheme();
   const styles = StyleSheet.create({
-    wrap: { paddingHorizontal: 12, paddingTop: 4, paddingBottom: 6 },
+    wrap: { paddingHorizontal: 12, paddingTop: 2, paddingBottom: 2 },
     bar: { flexDirection: 'row', alignItems: 'center' },
-    slot: { flex: 1, marginBottom: 16 },
+    slot: { flex: 1, marginBottom: 14 },
     slotLeft: { alignItems: 'flex-start' },
     slotRight: { alignItems: 'flex-end' },
-    center: { alignItems: 'center', width: 104 },
+    center: { alignItems: 'center', width: 150 },
     ring: {
-      width: 72,
-      height: 72,
-      borderRadius: 36,
-      borderWidth: 3,
-      borderColor: colors.accent,
-      backgroundColor: colors.card,
+      width: 58,
+      height: 58,
+      borderRadius: 29,
+      borderWidth: 1.5,
+      // Softer, see-through ring and fill: the accent at partial opacity instead of solid.
+      borderColor: colors.accent + '88',
+      backgroundColor: 'transparent',
       padding: 4,
-      elevation: 4,
-      shadowColor: '#000',
-      shadowOpacity: 0.2,
-      shadowRadius: 6,
-      shadowOffset: { width: 0, height: 2 },
     },
-    inner: { flex: 1, borderRadius: 32, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
-    caption: { marginTop: 4, color: colors.accent, fontSize: 11.5, fontWeight: '700' },
+    inner: { flex: 1, borderRadius: 25, backgroundColor: colors.accent + 'D9', alignItems: 'center', justifyContent: 'center' },
+    caption: { marginTop: 2, color: colors.accent, fontSize: 11.5, fontWeight: '700', textAlign: 'center', alignSelf: 'stretch' },
     side: { minWidth: 64, paddingVertical: 4, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
     sideLabel: { color: colors.muted, fontSize: 11, marginTop: 3, fontWeight: '600' },
     sideLabelAccent: { color: colors.accent },
@@ -143,10 +139,10 @@ export default function ActionBar(p: Props) {
         accessibilityLabel={caption}
       >
         <View style={[styles.inner, icon === 'play' && { paddingLeft: 3 }]}>
-          {busyLabel ? <ActivityIndicator color="#fff" /> : <Icon name={icon} size={icon === 'play' ? 30 : 28} color="#fff" />}
+          {busyLabel ? <ActivityIndicator color="#fff" /> : <Icon name={icon} size={icon === 'play' ? 26 : 24} color="#fff" />}
         </View>
       </TouchableOpacity>
-      <Text style={styles.caption}>{caption}</Text>
+      <Text style={styles.caption} numberOfLines={1} adjustsFontSizeToFit>{caption}</Text>
     </View>
   );
 

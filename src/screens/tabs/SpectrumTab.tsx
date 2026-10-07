@@ -20,8 +20,9 @@
 // "Spectrum/Chrom/R-Values" to keep in sync rather than two that could
 // drift apart.
 
-import React from 'react';
-import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import { useContentWidth } from '../../layout';
 import SpectrumChart, { SPECTRUM_HEADER_H } from '../../components/SpectrumChart';
 import ChromaticityChart from '../../components/ChromaticityChart';
 import RValuesBarChart from '../../components/RValuesBarChart';
@@ -86,18 +87,26 @@ const CARD_PADDING = 22;
 // short plot rather than filling all the vertical room it's offered.
 const SPECTRUM_ASPECT = 1.65;
 
+// A box with an exact, computed height (no layout feedback): hands that height to the chart. `center`
+// vertically centers the chart in it (spectrum page only).
+function FixedBox({ h, center, children }: { h: number; center?: boolean; children: (height: number) => React.ReactNode }) {
+  return <View style={{ height: h, justifyContent: center ? 'center' : 'flex-start' }}>{h > 0 ? children(h) : null}</View>;
+}
+
 export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 0, regionHeight, sampleLabel }: Props) {
   const source = sampleLabel
     ? `This is a sample from a public hCRI.io report (${sampleLabel}), not a reading from your own meter. It isn't saved to History and can't be uploaded or shared.`
     : 'This comes from the reading your meter just took.';
   const { colors } = useTheme();
-  // Main tab: charts grow to fill the room they're given (up to 320/340) and
-  // shrink if the region is short; elsewhere they keep 200/230. Overheads: pager dots (~26),
-  // card padding/border (22), card bottom margin (12), R-values title (15).
-  const fit = regionHeight && regionHeight > 0 ? Math.max(90, Math.floor(regionHeight - 26 - 22 - 12 - 15)) : undefined;
-  const chartHeight = fit === undefined ? undefined : Math.min(fit, 300);
-  const fill = chartHeight !== undefined;
-  const spectrumHeight = chartHeight === undefined ? 200 : Math.min(chartHeight, 260);
+  // Main tab (regionHeight given): the pager is exactly the region minus its dots row (26 tall + 8 above +
+  // 4 below = 38), every page's card fills it, and each chart is sized from the space its card actually has
+  // (see MeasuredBox) instead of from hand-added overhead constants -- those kept drifting a few px short
+  // and clipped the bottom of the cards. Elsewhere (no regionHeight) charts keep their fixed default sizes.
+  const fill = !!regionHeight && regionHeight > 0;
+  // Exact numbers all the way down (see SwipablePages: pages are the region minus the 38 dots strip). The
+  // card is the page height minus a little breathing room; its inner room is that minus padding+border (22).
+  const cardH = fill ? Math.max(100, Math.floor(regionHeight as number) - 38 - 6) : 0;
+  const innerH = Math.max(40, cardH - 22);
   // Computed once, here, rather than separately (and inconsistently) in
   // SwipablePages and in each of the three chart components -- see this
   // file's own Props comment above for why a hardcoded per-component
@@ -106,7 +115,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
   // stretches to fill it) should be; `chartWidth` is what's left once a
   // chartCard's own padding is subtracted, i.e. what each chart itself
   // should draw its SVG at.
-  const { width: windowWidth } = useWindowDimensions();
+  const windowWidth = useContentWidth();
   const totalChrome = SCREEN_PADDING + extraHorizontalChrome;
   const pageWidth = windowWidth - totalChrome;
   const chartWidth = Math.max(pageWidth - CARD_PADDING, 0);
@@ -156,9 +165,9 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
 
     // Main tab: every page's card is the pager's full height, content centered,
     // so the dots (and the ? beside them) sit directly under the card on every page.
-    fillCard: { flex: 1, marginBottom: 0, justifyContent: 'center' },
+    
 
-    rvaluesTitle: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
+    rvaluesTitle: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', height: 14, marginBottom: 2 },
   });
 
   if (!result || !analysis) {
@@ -173,7 +182,8 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
     <SwipablePages
       resetKey={result}
       horizontalChrome={totalChrome}
-      fixedHeight={chartHeight === undefined ? undefined : chartHeight + 22 + 12 + 15}
+      fill={fill}
+      fixedHeight={fill ? Math.floor(regionHeight as number) : undefined}
       pages={[
         {
           key: 'spectrum',
@@ -183,16 +193,16 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
             message: `${source}\n\nThe spectral power distribution: how much light the source puts out at each wavelength from about 380 to 780 nm (violet to red), scaled so the tallest point is 1. The red line starts at the peak: press and hold it, then drag to read the wavelength and spectral value anywhere on the curve (a quick swipe still changes charts). Everything else here (CCT, CRI, TM-30) is calculated from this curve.`,
           },
           content: (
-            <View style={[styles.chartCard, fill && styles.fillCard]}>
-              <SpectrumChart
+            <View style={[styles.chartCard, fill && { height: cardH, marginBottom: 0 }]}>
+              {fill ? <FixedBox h={innerH} center>{(h) => (<SpectrumChart
                 spectrum={result.spectrum}
                 width={chartWidth}
-                height={Math.max(60, Math.min(spectrumHeight - SPECTRUM_HEADER_H, Math.round(chartWidth / SPECTRUM_ASPECT)))}
+                height={Math.max(60, Math.min(h - SPECTRUM_HEADER_H, Math.round(chartWidth / SPECTRUM_ASPECT)))}
                 // A test reading only shows the wavelength under the red line; a real
                 // reading adds the integration time and peak/dark signal (and the spectral value).
                 details={
                   sampleLabel
-                    ? {}
+                    ? { showRelative: true }
                     : {
                         integrationMs: result.integrationTimeMs,
                         peakSignal: result.peakSignal,
@@ -200,7 +210,23 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
                         showSpectral: true,
                       }
                 }
-              />
+              />)}</FixedBox> : (((h) => (<SpectrumChart
+                spectrum={result.spectrum}
+                width={chartWidth}
+                height={Math.max(60, Math.min(h - SPECTRUM_HEADER_H, Math.round(chartWidth / SPECTRUM_ASPECT)))}
+                // A test reading only shows the wavelength under the red line; a real
+                // reading adds the integration time and peak/dark signal (and the spectral value).
+                details={
+                  sampleLabel
+                    ? { showRelative: true }
+                    : {
+                        integrationMs: result.integrationTimeMs,
+                        peakSignal: result.peakSignal,
+                        darkSignal: result.darkSignal,
+                        showSpectral: true,
+                      }
+                }
+              />))(200))}
             </View>
           ),
         },
@@ -212,7 +238,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
             message: `${source}\n\nThe colored horseshoe is every color the eye can see (CIE 1931 x,y). The black curve is the Planckian locus, the colors of a heated blackbody from 2,000 K to 10,000 K, and the blue dot is where this light falls. The closer the dot is to the curve, the closer to a natural white (Duv is the distance).`,
           },
           content: (
-            <View style={[styles.chromCard, fill && styles.fillCard]}>
+            <View style={[styles.chromCard, fill && { height: cardH, marginBottom: 0 }]}>
               {/* Shorter than the original 280 -- trimmed because this
                   page (plus the measurement grid and docked tab bar above
                   it) was running long on Main. The diagram's X/Y domain
@@ -222,10 +248,20 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
                   fully legible, just slightly flatter-looking. */}
               {/* (0,0) is the "no reading yet" placeholder: leave the card blank
                   rather than drawing the empty CIE diagram. */}
-              {analysis.x > 0 || analysis.y > 0 ? (
-                <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} height={chartHeight ?? 230} width={chartWidth} />
+              {fill ? (
+                <FixedBox h={innerH}>
+                  {(h) =>
+                    analysis.x > 0 || analysis.y > 0 ? (
+                      // -16: the chart's own container adds 6px of top padding, plus a little bottom breathing room
+                      // so the x-axis labels never touch the card border.
+                      <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} height={h - 16} width={chartWidth} />
+                    ) : null
+                  }
+                </FixedBox>
+              ) : analysis.x > 0 || analysis.y > 0 ? (
+                <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} height={230} width={chartWidth} />
               ) : (
-                <View style={{ height: chartHeight ?? 230 }} />
+                <View style={{ height: 230 }} />
               )}
             </View>
           ),
@@ -238,8 +274,8 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
             message: `${source}\n\nHow faithfully this light renders 15 reference colors compared with a natural light of the same color temperature. 100 is perfect. Ra is the average of R1-R8; R9 (saturated red) is the one most often low in LED lights.`,
           },
           content: (
-            <View style={[styles.chartCard, fill && styles.fillCard]}>
-              <Text style={styles.rvaluesTitle}>CRI R1-R15</Text>
+            <View style={[styles.chartCard, fill && { height: cardH, marginBottom: 0 }]}>
+              <Text style={styles.rvaluesTitle} allowFontScaling={false} numberOfLines={1}>CRI R1-R15</Text>
               {/* Explicit height, same as the Chrom page's chart just
                   above -- left to its own default (rowCount*22+28, ~360px
                   for all 15 R-values) this was noticeably taller than the
@@ -247,7 +283,11 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
                   "running long on Main" reason as Chrom's -- still room
                   enough per row (~14px) for all 15 R# labels and bars to
                   stay legible without crowding. */}
-              <RValuesBarChart ri={analysis.ri} height={chartHeight ?? 230} width={chartWidth} />
+              {fill ? (
+                <FixedBox h={innerH - 16}>{(h) => <RValuesBarChart ri={analysis.ri} height={h} width={chartWidth} />}</FixedBox>
+              ) : (
+                <RValuesBarChart ri={analysis.ri} height={230} width={chartWidth} />
+              )}
             </View>
           ),
         },

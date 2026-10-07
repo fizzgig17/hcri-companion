@@ -16,7 +16,7 @@ import { StatusBar, View } from 'react-native';
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import HomeScreen from './screens/HomeScreen';
 import HistoryScreen from './screens/HistoryScreen';
 import SettingsScreen from './screens/SettingsScreen';
@@ -28,7 +28,10 @@ import CrashReporter from './components/CrashReporter';
 import { HomeIcon, HistoryIcon, SettingsIcon } from './components/TabBarIcons';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { LogProvider } from './contexts/LogContext';
-import { IS_DEV_BUILD } from './hcri/buildTarget';
+import { MAX_CONTENT_WIDTH } from './layout';
+import { navigationRef } from './navigationRef';
+import { UpdateProvider } from './contexts/UpdateContext';
+import UpdateBanner from './components/UpdateBanner';
 import { setTapHapticsEnabled, setResultHapticsEnabled } from './utils/haptics';
 import { loadHapticTapsPreference, loadHapticResultsPreference } from './storage/preferences';
 
@@ -44,13 +47,17 @@ const Tab = createBottomTabNavigator();
 // down to just Main/Data/Logs -- see HomeScreen.tsx and SettingsScreen.tsx.
 function Tabs() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   return (
     <Tab.Navigator
       screenOptions={{
         headerStyle: { backgroundColor: colors.card },
         headerTintColor: colors.text,
-        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.cardBorder },
+        // Compact bar: 40dp of content (icon + label) plus the gesture/nav inset below it.
+        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.cardBorder, height: 41 + insets.bottom, paddingTop: 2, paddingBottom: insets.bottom + 3 },
+        tabBarItemStyle: { paddingVertical: 0 },
+        tabBarLabelStyle: { fontSize: 10, marginTop: -2, marginBottom: 2 },
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.muted,
       }}
@@ -61,34 +68,24 @@ function Tabs() {
       <Tab.Screen
         name="Home"
         component={HomeScreen}
-        options={{ headerShown: false, tabBarIcon: ({ color, size }) => <HomeIcon color={color} size={size} /> }}
+        options={{ headerShown: false, tabBarIcon: ({ color }) => <HomeIcon color={color} size={22} /> }}
       />
       <Tab.Screen
         name="History"
         component={HistoryScreen}
         options={{
           headerShown: false,
-          tabBarIcon: ({ color, size }) => <HistoryIcon color={color} size={size} />,
+          tabBarIcon: ({ color }) => <HistoryIcon color={color} size={22} />,
         }}
       />
       <Tab.Screen
         name="Settings"
         component={SettingsScreen}
         options={{
-          title: 'hCRI.io Settings',
-          tabBarIcon: ({ color, size }) => <SettingsIcon color={color} size={size} />,
-          // Same double-inset bug as Home/History's own SafeAreaViews (see
-          // their `edges` comments) -- just arriving via a different path.
-          // Settings is the one tab that still uses React Navigation's own
-          // native header (headerShown isn't overridden to false here),
-          // and that header reserves the status-bar inset for itself
-          // automatically, with no idea DevBuildBanner (see App.tsx's own
-          // render below) already claimed that exact space on a dev-
-          // targeted build -- stacking into real, visible blank space
-          // above the title bar. On a non-dev build DevBuildBanner renders
-          // nothing, so `undefined` here just means "let the header
-          // measure it normally" -- unchanged from before.
-          headerStatusBarHeight: IS_DEV_BUILD ? 0 : undefined,
+          // Same in-page heading as History (see SettingsScreen), so no native header.
+          headerShown: false,
+          tabBarLabel: 'Settings',
+          tabBarIcon: ({ color }) => <SettingsIcon color={color} size={22} />,
         }}
       />
     </Tab.Navigator>
@@ -106,8 +103,10 @@ function Navigation() {
   }, []);
 
   return (
-    <View style={{ flex: 1 }}>
-    <NavigationContainer theme={scheme === 'light' ? DefaultTheme : DarkTheme}>
+    <View style={{ flex: 1, alignItems: 'center', backgroundColor: colors.background }}>
+    <View style={{ flex: 1, width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
+    <UpdateBanner />
+    <NavigationContainer ref={navigationRef} theme={scheme === 'light' ? DefaultTheme : DarkTheme}>
       {/* Status bar text/icons need to flip too -- dark-on-light is
           unreadable against a light background, and vice versa. */}
       <StatusBar barStyle={scheme === 'light' ? 'dark-content' : 'light-content'} />
@@ -123,6 +122,7 @@ function Navigation() {
         <Stack.Screen name="ReadingDetail" component={ReadingDetailScreen} options={{ title: 'Reading' }} />
       </Stack.Navigator>
     </NavigationContainer>
+    </View>
     {/* Title screen over the top for the first moment of every launch --
         the app keeps loading/connecting underneath. See SplashTitle.tsx. */}
     <SplashTitle />
@@ -179,7 +179,9 @@ export default function App() {
                 without seeing it -- a no-op view in a production build, see
                 components/DevBuildBanner.tsx. */}
             <DevBuildBanner />
-            <Navigation />
+            <UpdateProvider>
+              <Navigation />
+            </UpdateProvider>
           </ErrorBoundary>
         </LogProvider>
       </ThemeProvider>

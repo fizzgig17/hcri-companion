@@ -31,14 +31,10 @@ import {
   NativeScrollEvent,
   StyleSheet,
   TouchableOpacity,
-  useWindowDimensions,
-  Platform,
-  NativeModules,
 } from 'react-native';
 
-const GestureExclusion: { setRects: (r: { x: number; y: number; width: number; height: number }[]) => void } | undefined =
-  NativeModules.GestureExclusion;
 import { useTheme } from '../contexts/ThemeContext';
+import { useContentWidth } from '../layout';
 
 // Horizontal chrome this component sits inside on BOTH screens that use
 // it (HomeScreen's and ReadingDetailScreen's own scroll content -- see
@@ -70,11 +66,16 @@ interface Props {
   horizontalChrome?: number;
   /** Force the pager's height (Main tab fits the screen); otherwise it follows the active page. */
   fixedHeight?: number;
+  /** Fill whatever room the parent gives (parent must be bounded): pages take exactly the visible height, so nothing can be clipped. Overrides fixedHeight. */
+  fill?: boolean;
   /** Changing this value sends the pager back to its first page (e.g. a new reading arrived). */
   resetKey?: unknown;
 }
 
-export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZONTAL_PADDING, fixedHeight, resetKey }: Props) {
+// Dots row footprint in fill mode (26 tall + 8 above + 4 below, same as the flow layout).
+const DOTS_H = 38;
+
+export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZONTAL_PADDING, fixedHeight, fill, resetKey }: Props) {
   const { colors } = useTheme();
   // Confirmed 2026-10-03: measuring this via onLayout at all -- even
   // seeded with a close estimate that onLayout then "corrects" -- means
@@ -88,33 +89,16 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
   // width. useWindowDimensions gives that directly (and keeps it correct
   // across rotation/resize), so there's only ever one value, computed up
   // front -- nothing to snap to on a later layout pass.
-  const { width: windowWidth } = useWindowDimensions();
+  const windowWidth = useContentWidth();
   const width = windowWidth - horizontalChrome;
   const [activeIndex, setActiveIndex] = useState(0);
+  // fill mode: fixedHeight is the TOTAL height available (pages + dots row), all laid out with explicit numbers.
+  const clipH = fill ? Math.max(0, Math.floor((fixedHeight ?? 0) - DOTS_H)) : 0;
+  const pageH = fill ? clipH : fixedHeight;
   const [scrollLocked, setScrollLocked] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
-  // With Android 10+ gesture navigation, a swipe that starts at a screen
-  // edge is the system Back gesture, which fought with paging the charts.
-  // Tell Android that the strips at both edges of the pager belong to the
-  // app (it caps this at 200dp tall per edge, hence the clamp).
-  const pagerRef = useRef<any>(null);
-  const EDGE_DP = 40;
-  const MAX_EXCLUDE_H = 200;
-  const updateExclusion = useCallback(() => {
-    if (Platform.OS !== 'android' || !GestureExclusion) return;
-    pagerRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => {
-      if (!w || !h) return;
-      const eh = Math.min(h, MAX_EXCLUDE_H);
-      const ey = y + (h - eh) / 2;
-      GestureExclusion.setRects([
-        { x: 0, y: ey, width: EDGE_DP, height: eh },
-        { x: windowWidth - EDGE_DP, y: ey, width: EDGE_DP, height: eh },
-      ]);
-    });
-  }, [windowWidth]);
-  useEffect(() => () => {
-    if (Platform.OS === 'android') GestureExclusion?.setRects([]);
-  }, []);
+  // Note: no system-gesture exclusion zones here. They used to reserve the pager's left/right
+  // edges for chart paging, which swallowed the Android Back swipe whenever it began over a chart.
   // Back to the first page whenever resetKey changes (not on first mount).
   const firstKey = useRef(true);
   useEffect(() => {
@@ -152,7 +136,7 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
 
   return (
     <PagerLockContext.Provider value={setScrollLocked}>
-    <View ref={pagerRef} collapsable={false} onLayout={updateExclusion}>
+    <View style={fill ? { height: fixedHeight } : undefined}>
       {width > 0 && (
         <>
           {/* Height comes from the active page's own measurement, not the
@@ -160,7 +144,9 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
               file-level comment. Falls back to undefined (auto) for the
               very first render, before any page has reported a height
               yet, so there's no flash of a 0-height pager. */}
-          <View style={{ height: fixedHeight ?? pageHeights[pages[activeIndex]?.key], overflow: 'hidden' }}>
+          <View
+            style={fill ? { height: clipH, overflow: 'hidden' } : { height: fixedHeight ?? pageHeights[pages[activeIndex]?.key], overflow: 'hidden' }}
+          >
             <ScrollView
               ref={scrollRef}
               horizontal
@@ -175,10 +161,10 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
               contentOffset={{ x: activeIndex * width, y: 0 }}
               onContentSizeChange={() => scrollRef.current?.scrollTo({ x: activeIndex * width, animated: false })}
             >
-              {pages.map((p) => (
+              {(fill && clipH <= 0 ? [] : pages).map((p) => (
                 <View
                   key={p.key}
-                  style={{ width, height: fixedHeight }}
+                  style={{ width, height: pageH }}
                   onLayout={(e) => {
                     const h = e.nativeEvent.layout.height;
                     setPageHeights((prev) => (prev[p.key] === h ? prev : { ...prev, [p.key]: h }));
@@ -193,7 +179,7 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
           {/* Dot indicator, doubling as tap-to-jump -- lets you tap over to
               Chrom without swiping too, same as tapping a page dot anywhere
               else in the app's UI conventions. */}
-          <View style={styles.dotsRow}>
+          <View style={[styles.dotsRow, fill && { position: 'absolute', left: 0, right: 0, top: clipH, marginTop: 0, marginBottom: 0, height: DOTS_H }]}>
             {pages[activeIndex]?.info && (
               <View style={styles.infoLeft}>
                 <InfoButton

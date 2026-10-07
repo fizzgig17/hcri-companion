@@ -8,6 +8,8 @@ import React from 'react';
 import { Text, StyleSheet } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { APP_VERSION, BUILD_DATE } from '../buildInfo';
+import { GIT_COMMIT } from '../gitCommit';
+import { IS_DEV_BUILD } from '../hcri/buildTarget';
 
 export default function VersionStamp() {
   const { colors } = useTheme();
@@ -22,6 +24,7 @@ export default function VersionStamp() {
   return (
     <Text style={styles.text}>
       hCRI Companion v{APP_VERSION} · Built {builtOn}
+      {IS_DEV_BUILD ? ` · ${GIT_COMMIT}` : ''}
     </Text>
   );
 }

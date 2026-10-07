@@ -107,8 +107,8 @@ android {
         // Also update src/buildInfo.ts (APP_VERSION/BUILD_DATE) in the same
         // commit -- that's the JS-visible copy of this, shown at the top of
         // Settings. Gradle values here aren't reachable from JS directly.
-        versionCode 14
-        versionName "1.11"
+        versionCode 15
+        versionName "1.12"
     }
     signingConfigs {
         debug {
@@ -162,6 +162,8 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+    // Google Play In-App Updates (update check + "update now" flow).
+    implementation("com.google.android.play:app-update:2.1.0")
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
