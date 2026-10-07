@@ -15,6 +15,8 @@ import { navigationRef } from '../navigationRef';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
 
 const BAR_H = 60;
+// Blue, so it never blends into the green accent (active tab, buttons) or the brown dev strip above it.
+const BANNER_BLUE = '#1d5fd1';
 
 export default function UpdateBanner() {
   const { colors } = useTheme();
@@ -40,11 +42,11 @@ export default function UpdateBanner() {
     // Overlays the app (never pushes it down): a zero-height slot in the flow, with the bar hanging
     // from it. Solid color, no shadow/elevation, so nothing shows through.
     slot: { height: 0, zIndex: 50 },
-    clip: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: colors.accent },
+    clip: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: BANNER_BLUE, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.25)' },
     bar: { height: BAR_H, flexDirection: 'row', alignItems: 'center', paddingLeft: 16, paddingRight: 8 },
     text: { flex: 1, color: '#fff', fontSize: 16, fontWeight: '700' },
     action: { backgroundColor: '#fff', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 16, marginLeft: 8 },
-    actionText: { color: '#1f7a59', fontSize: 15, fontWeight: '800' },
+    actionText: { color: BANNER_BLUE, fontSize: 15, fontWeight: '800' },
     close: { paddingHorizontal: 12, paddingVertical: 6 },
     closeText: { color: '#fff', fontSize: 26, fontWeight: '600', lineHeight: 28 },
   });
