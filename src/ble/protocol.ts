@@ -84,6 +84,35 @@ export const CMD_START_SINGLE_TEST = [0x8c, 0x0e, 0x01];
 export const CMD_STOP_SAMPLING = [0x8c, 0x25];
 export const CMD_READ_RESULT = [0x8c, 0x13, 0x31]; // reads stored result, does NOT start a measurement
 
+// --- Live (continuous) spectrum and flicker --------------------------------
+// Reverse-engineered from the vendor mini-program (2026-10-07). NOT yet
+// verified on real hardware -- see liveSessions.ts.
+export const CMD_START_CONTINUOUS_TEST = [0x8c, 0x0e, 0x02]; // spectrum, repeating until 8C 25
+export const CMD_START_FLICKER_SINGLE = [0x8c, 0x0e, 0x03];
+export const CMD_START_FLICKER_CONTINUOUS = [0x8c, 0x0e, 0x04];
+export const CMD_FLICKER_READY = [0x8c, 0x3b]; // reply 8C 3B 00 (wait) / 8C 3B 01 (ready)
+export const CMD_FLICKER_STATS = [0x8c, 0x3c]; // reply: 8C 3C + 4 x float32 LE (Hz, %, index, cycle ms)
+export const CMD_FLICKER_WAVE = [0x8c, 0x3a]; // reply: 8C 3A + 400 x uint16 LE, fragmented over notifications
+export const FLICKER_WAVE_SAMPLES = 400;
+export const FLICKER_WAVE_REPLY_BYTES = 2 + FLICKER_WAVE_SAMPLES * 2; // 802
+
+/** Whether this model can do a continuous (Live) spectrum read. The vendor app offers it on every model. */
+export function deviceSupportsLive(deviceName: string | null | undefined): boolean {
+  return !!deviceName && deviceName.toUpperCase().includes('HPCS');
+}
+
+/**
+ * Whether this model can measure flicker. Mirrors the vendor app, which shows its Flick tab for the
+ * P / Pro / IR / C variants and hides it on the plain 310/330 and the UV model.
+ */
+export function deviceSupportsFlicker(deviceName: string | null | undefined): boolean {
+  const u = deviceName?.toUpperCase() ?? '';
+  return (
+    u.includes('330P') || u.includes('310P') || u.includes('330 PRO') ||
+    u.includes('330IR') || u.includes('310IR') || u.includes('330C') || u.includes('310C')
+  );
+}
+
 /**
  * Battery status query. Found by reading the vendor app's own protocol
  * handling (2026-10-06): it sends 8C C3 routinely, right after the identify

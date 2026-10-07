@@ -14,9 +14,12 @@ import { useTheme } from '../contexts/ThemeContext';
 import { hapticTap } from '../utils/haptics';
 import type { Status } from '../screens/tabs/MainTab';
 
-type IconName = 'play' | 'bluetooth' | 'upload' | 'power' | 'copy' | 'check' | 'activity';
+type IconName = 'play' | 'stop' | 'bluetooth' | 'upload' | 'power' | 'copy' | 'check' | 'activity' | 'live' | 'flicker' | 'save';
 
-const ICON_PATHS: Record<Exclude<IconName, 'play'>, string> = {
+const ICON_PATHS: Record<Exclude<IconName, 'play' | 'stop'>, string> = {
+  live: 'M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15',
+  flicker: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
+  save: 'M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8',
   bluetooth: 'M6.5 6.5l11 11L12 23V1l5.5 5.5-11 11',
   upload: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12',
   power: 'M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10',
@@ -33,6 +36,13 @@ function Icon({ name, size, color }: { name: IconName; size: number; color: stri
           fill={color}
           d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"
         />
+      </Svg>
+    );
+  }
+  if (name === 'stop') {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Path fill={color} d="M7 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" />
       </Svg>
     );
   }
@@ -60,6 +70,17 @@ interface Props {
   onCopyLink: () => void;
   /** Long-press Connect: clear a stale BLE connection and retry. */
   onResetConnection: () => void;
+  /** Live (continuous spectrum) and Flicker: each button only shows when the connected meter supports it. */
+  liveSupported: boolean;
+  flickerSupported: boolean;
+  /** Which long-running mode is active right now (the other button is disabled while one runs). */
+  activeMode: 'idle' | 'live' | 'flicker';
+  onToggleLive: () => void;
+  onToggleFlicker: () => void;
+  /** A Live reading was stopped and hasn't been saved yet -- shows the Save button. */
+  canSaveLive: boolean;
+  savingLive: boolean;
+  onSaveLive: () => void;
 }
 
 export default function ActionBar(p: Props) {
@@ -68,9 +89,9 @@ export default function ActionBar(p: Props) {
     wrap: { paddingHorizontal: 12, paddingTop: 2, paddingBottom: 2 },
     bar: { flexDirection: 'row', alignItems: 'center' },
     slot: { flex: 1, marginBottom: 14 },
-    slotLeft: { alignItems: 'flex-start' },
-    slotRight: { alignItems: 'flex-end' },
-    center: { alignItems: 'center', width: 150 },
+    slotLeft: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start' },
+    slotRight: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' },
+    center: { alignItems: 'center', width: 112 },
     ring: {
       width: 58,
       height: 58,
@@ -83,8 +104,8 @@ export default function ActionBar(p: Props) {
     },
     inner: { flex: 1, borderRadius: 25, backgroundColor: colors.accent + 'D9', alignItems: 'center', justifyContent: 'center' },
     caption: { marginTop: 2, color: colors.accent, fontSize: 11.5, fontWeight: '700', textAlign: 'center', alignSelf: 'stretch' },
-    side: { minWidth: 64, paddingVertical: 4, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
-    sideLabel: { color: colors.muted, fontSize: 11, marginTop: 3, fontWeight: '600' },
+    side: { minWidth: 0, flexShrink: 1, paddingVertical: 4, paddingHorizontal: 3, alignItems: 'center', justifyContent: 'center' },
+    sideLabel: { color: colors.muted, fontSize: 10.5, marginTop: 3, fontWeight: '600' },
     sideLabelAccent: { color: colors.accent },
     disabled: { opacity: 0.45 },
   });
@@ -93,6 +114,7 @@ export default function ActionBar(p: Props) {
   const busyLabel = status === 'connecting' ? 'Connecting…' : status === 'measuring' ? 'Measuring…' : null;
   const uploadDisabled = p.uploading || !p.hasReading || p.isSample;
   const connected = status === 'connected' || status === 'uploading';
+  const idle = p.activeMode === 'idle';
 
   const SideButton = ({
     icon,
@@ -122,7 +144,7 @@ export default function ActionBar(p: Props) {
       ) : (
         <Icon name={icon} size={22} color={accent ? colors.accent : colors.muted} />
       )}
-      <Text style={[styles.sideLabel, accent && styles.sideLabelAccent]} numberOfLines={1}>{label}</Text>
+      <Text style={[styles.sideLabel, accent && styles.sideLabelAccent]} numberOfLines={1} adjustsFontSizeToFit>{label}</Text>
     </TouchableOpacity>
   );
 
@@ -159,14 +181,10 @@ export default function ActionBar(p: Props) {
               disabled={p.loadingTestReading}
             />
           )}
-        </View>
-
-        {status === 'disconnected' && mainButton('bluetooth', 'Connect to Meter', p.connect, p.onResetConnection)}
-        {busyLabel && mainButton(status === 'connecting' ? 'bluetooth' : 'play', busyLabel)}
-        {connected && mainButton('play', 'Take reading', p.measure)}
-
-        <View style={[styles.slot, styles.slotRight]}>
-          {connected && !p.isSample && !p.uploadSucceeded && (
+          {connected && idle && p.canSaveLive && (
+            <SideButton icon="save" label="Save" onPress={p.onSaveLive} disabled={p.savingLive} busy={p.savingLive} accent />
+          )}
+          {connected && idle && !p.canSaveLive && !p.isSample && !p.uploadSucceeded && (
             <SideButton
               icon="upload"
               label="Upload"
@@ -175,10 +193,35 @@ export default function ActionBar(p: Props) {
               busy={status === 'uploading'}
             />
           )}
-          {p.uploadSucceeded && p.canCopyLink && (
+          {idle && !p.canSaveLive && p.uploadSucceeded && p.canCopyLink && (
             <SideButton icon="copy" label="Copy link" onPress={p.onCopyLink} disabled={p.copyingLink} accent busy={p.copyingLink} />
           )}
-          {p.uploadSucceeded && !p.canCopyLink && <SideButton icon="check" label="Uploaded" accent />}
+          {idle && !p.canSaveLive && p.uploadSucceeded && !p.canCopyLink && <SideButton icon="check" label="Uploaded" accent />}
+        </View>
+
+        {status === 'disconnected' && mainButton('bluetooth', 'Connect to Meter', p.connect, p.onResetConnection)}
+        {busyLabel && mainButton(status === 'connecting' ? 'bluetooth' : 'play', busyLabel)}
+        {connected && mainButton('play', 'Take reading', idle ? p.measure : undefined)}
+
+        <View style={[styles.slot, styles.slotRight]}>
+          {connected && p.liveSupported && (
+            <SideButton
+              icon={p.activeMode === 'live' ? 'stop' : 'live'}
+              label={p.activeMode === 'live' ? 'Stop' : 'Live'}
+              onPress={p.onToggleLive}
+              disabled={p.activeMode === 'flicker' || status === 'uploading'}
+              accent={p.activeMode === 'live'}
+            />
+          )}
+          {connected && p.flickerSupported && (
+            <SideButton
+              icon={p.activeMode === 'flicker' ? 'stop' : 'flicker'}
+              label={p.activeMode === 'flicker' ? 'Stop' : 'Flicker'}
+              onPress={p.onToggleFlicker}
+              disabled={p.activeMode === 'live' || status === 'uploading'}
+              accent={p.activeMode === 'flicker'}
+            />
+          )}
         </View>
       </View>
     </View>
