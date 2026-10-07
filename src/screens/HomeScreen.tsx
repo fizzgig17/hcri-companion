@@ -14,7 +14,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MeterConnection } from '../ble/MeterConnection';
 import type { BatteryStatus } from '../ble/protocol';
 import { deviceSupportsLive, deviceSupportsFlicker } from '../ble/protocol';
-import { startLiveSpectrum, startFlicker, type LiveSession, type FlickerReading } from '../ble/liveSessions';
+import { startLiveSpectrum, startFlicker, readFlickerSettings, writeFlickerSetting, type LiveSession, type FlickerReading } from '../ble/liveSessions';
+import type { FlickerSettingsApi } from '../components/FlickerSettingsModal';
 import { initializeMeter, takeMeasurement, EMPTY_READING_ERROR } from '../ble/takeMeasurement';
 import { MeterResult } from '../ble/parseResult';
 import { analyzeSpectrum } from '../utils/spectralAnalysis';
@@ -783,8 +784,18 @@ export default function HomeScreen({ navigation }: any) {
     }
   }, [liveUnsaved, savingLive, appendLog]);
 
-  // A dropped link (or any disconnect) ends whatever is running.
+  const flickerSettingsApi = useMemo<FlickerSettingsApi>(
+    () => ({
+      load: async () => (connRef.current ? readFlickerSettings(connRef.current, appendLog) : {}),
+      apply: async (key, value) => (connRef.current ? writeFlickerSetting(connRef.current, key, value, appendLog) : false),
+      canEdit: mode === 'idle',
+    }),
+    [mode, appendLog]
+  );
+
+  // A dropped link (or any disconnect) ends whatever is running, and the Flicker page goes away -- so go back to the first chart.
   useEffect(() => {
+    if (status === 'disconnected') setPagerResetKey({});
     if (status === 'disconnected' && sessionRef.current) {
       sessionRef.current.stop().catch(() => {});
     }
@@ -1223,7 +1234,7 @@ export default function HomeScreen({ navigation }: any) {
             pagerResetKey={pagerResetKey}
             flicker={
               (status === 'connected' || status === 'uploading' || status === 'measuring') && deviceSupportsFlicker(deviceName)
-                ? { reading: flickerReading, running: mode === 'flicker', focusNonce: flickerFocus, history: flickerHistory }
+                ? { reading: flickerReading, running: mode === 'flicker', focusNonce: flickerFocus, history: flickerHistory, settings: flickerSettingsApi }
                 : undefined
             }
           />

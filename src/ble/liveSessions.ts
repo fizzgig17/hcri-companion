@@ -183,6 +183,56 @@ async function request(
   return null;
 }
 
+/** The meter stores some settings as BCD: index 10 is the byte 0x10. */
+const fromBcd = (b: number) => ((b >> 4) & 0xf) * 10 + (b & 0xf);
+const toBcd = (n: number) => ((Math.floor(n / 10) & 0xf) << 4) | (n % 10);
+
+export interface FlickerSettings {
+  autoGear?: boolean;
+  /** 0-3 = x1, x10, x100, x1k. */
+  gear?: number;
+  /** 0-10 into FLICKER_SPAN_MS / the sample-rate list. */
+  sampleIdx?: number;
+  autoRate?: boolean;
+}
+
+/** Reads the meter's flicker range/sample-rate settings (stock app: 8C 38, 36, 3D, 3F). Missing replies stay undefined. */
+export async function readFlickerSettings(conn: MeterConnection, log: LogFn): Promise<FlickerSettings> {
+  const never = () => false;
+  const ask = async (cmd: number[]) => {
+    const m = await request(conn, cmd, cmd[1], 1500, 2, () => true, never, log);
+    return m && m.body.length >= 3 ? m.body[2] : undefined;
+  };
+  const out: FlickerSettings = {};
+  const a = await ask([0x8c, 0x38]);
+  if (a !== undefined) out.autoGear = a === 1;
+  const g = await ask([0x8c, 0x36]);
+  if (g !== undefined) out.gear = fromBcd(g);
+  const r = await ask([0x8c, 0x3d]);
+  if (r !== undefined) out.sampleIdx = fromBcd(r);
+  const ar = await ask([0x8c, 0x3f]);
+  if (ar !== undefined) out.autoRate = ar === 1;
+  log(`Flicker settings read: ${JSON.stringify(out)}`);
+  return out;
+}
+
+export type FlickerSettingKey = 'autoGear' | 'gear' | 'sampleIdx' | 'autoRate';
+
+/** Writes one setting (stock app: 8C 37 / 35 / 3E / 41) and waits for the meter's echo. Returns whether it acknowledged. */
+export async function writeFlickerSetting(
+  conn: MeterConnection,
+  key: FlickerSettingKey,
+  value: number | boolean,
+  log: LogFn
+): Promise<boolean> {
+  const n = typeof value === 'boolean' ? (value ? 1 : 0) : value;
+  const [sub, arg] =
+    key === 'autoGear' ? [0x37, n] : key === 'gear' ? [0x35, n] : key === 'sampleIdx' ? [0x3e, toBcd(n)] : [0x41, n];
+  const m = await request(conn, [0x8c, sub, arg], sub, 1500, 2, () => true, () => false, log);
+  log(`Flicker setting ${key}=${n}: ${m ? 'acknowledged' : 'NO REPLY'}`);
+  return !!m;
+}
+
 /** Continuous flicker. onReading fires per refresh; onEnd fires exactly once. */
 export function startFlicker(
   conn: MeterConnection,
@@ -215,9 +265,10 @@ export function startFlicker(
       // Sample-rate setting -> how much time the plotted waveform covers (lets the chart label its time axis).
       let spanMs: number | undefined;
       const rate = await request(conn, CMD_FLICKER_SAMPLE_RATE, 0x3d, 1500, 2, () => true, isStopped, log);
-      if (rate && rate.body.length >= 3 && rate.body[2] < FLICKER_SPAN_MS.length) {
-        spanMs = FLICKER_SPAN_MS[rate.body[2]];
-        log(`Flicker: sample-rate index ${rate.body[2]} -> waveform spans ${spanMs} ms`);
+      const rateIdx = rate && rate.body.length >= 3 ? fromBcd(rate.body[2]) : -1;
+      if (rateIdx >= 0 && rateIdx < FLICKER_SPAN_MS.length) {
+        spanMs = FLICKER_SPAN_MS[rateIdx];
+        log(`Flicker: sample-rate index ${rateIdx} (byte 0x${rate!.body[2].toString(16)}) -> waveform spans ${spanMs} ms`);
       } else {
         log('Flicker: could not read the sample rate; time axis will use sample numbers');
       }

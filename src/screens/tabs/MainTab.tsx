@@ -26,6 +26,7 @@ import { statusLabels } from '../../theme';
 import { useTheme } from '../../contexts/ThemeContext';
 import { MeterResult } from '../../ble/parseResult';
 import type { FlickerReading } from '../../ble/liveSessions';
+import type { FlickerSettingsApi } from '../../components/FlickerSettingsModal';
 import type { BatteryStatus } from '../../ble/protocol';
 import { SpectralAnalysis } from '../../utils/spectralAnalysis';
 import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
@@ -123,7 +124,7 @@ interface Props {
    * itself. */
   scrollInputIntoView: (inputRef: React.RefObject<any>) => void;
   /** Set only while a flicker-capable meter is connected: adds the Flicker chart page. */
-  flicker?: { reading: FlickerReading | null; running: boolean; focusNonce: number; history: { f: number; p: number }[] };
+  flicker?: { reading: FlickerReading | null; running: boolean; focusNonce: number; history: { f: number; p: number }[]; settings?: FlickerSettingsApi };
   /** See SpectrumTab's pagerResetKey. */
   pagerResetKey?: unknown;
 }

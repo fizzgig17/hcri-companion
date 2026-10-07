@@ -12,6 +12,7 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, Share, StyleSheet } from 'react-native';
 import Svg, { Line, Polyline, Polygon, Circle, Text as SvgText } from 'react-native-svg';
 import { flickerRisk, type FlickerReading } from '../ble/liveSessions';
+import FlickerSettingsModal, { type FlickerSettingsApi } from './FlickerSettingsModal';
 
 export interface FlickerHistoryPoint {
   f: number;
@@ -22,6 +23,7 @@ interface Props {
   reading: FlickerReading | null;
   running: boolean;
   history: FlickerHistoryPoint[];
+  settings?: FlickerSettingsApi;
   width: number;
   height: number;
 }
@@ -67,7 +69,8 @@ function fmtMs(ms: number): string {
 const HIGH_LINE: [number, number][] = [[1, 0.2], [8, 0.2], [90, 2.25], [90, 7.2], [2000, 160]];
 const LOW_LINE: [number, number][] = [[1, 0.1], [8, 0.1], [8, 0.08], [90, 0.9], [90, 3], [2000, 66.6]];
 
-export default function FlickerChart({ reading, running, history, width, height }: Props) {
+export default function FlickerChart({ reading, running, history, settings, width, height }: Props) {
+  const [showSettings, setShowSettings] = useState(false);
   const [view, setView] = useState<'wave' | 'risk'>('wave');
   const [held, setHeld] = useState<FlickerReading | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -89,7 +92,7 @@ export default function FlickerChart({ reading, running, history, width, height 
     pillTxtOn: { color: '#fff' },
     statsRow: { flexDirection: 'row', height: STATS_H },
     stat: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-    statVal: { color: '#111', fontSize: 15, fontWeight: '700' },
+    statVal: { color: '#111', fontSize: 14.5, fontWeight: '700' },
     statLabel: { color: '#666', fontSize: 9.5, marginTop: 1 },
     riskRow: { height: RISK_H, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
     badge: { paddingHorizontal: 10, paddingVertical: 2, borderRadius: 10 },
@@ -110,7 +113,11 @@ export default function FlickerChart({ reading, running, history, width, height 
       let bestV = -1;
       for (let i = 0; i < Math.min(period, n); i++) if (norm[i] > bestV) { bestV = norm[i]; first = i; }
     }
-    return { n, max, min, norm, period, first };
+    // Duty cycle estimate: share of samples above the waveform's midpoint (the meter's own duty figure only
+    // arrives with regular spectrum readings, see the notes in the app).
+    const mid = (max + min) / 2;
+    const duty = max === min ? 100 : (wf.filter((v) => v > mid).length / n) * 100;
+    return { n, max, min, norm, period, first, duty };
   }, [wf]);
 
   if (!shown || !analysis) {
@@ -119,11 +126,17 @@ export default function FlickerChart({ reading, running, history, width, height 
         <Text style={styles.hint}>
           {running ? 'Waiting for the meter…' : 'Tap Flicker below to measure this light’s flicker.'}
         </Text>
+        {settings && !running && (
+          <TouchableOpacity style={[styles.pill, { marginTop: 14, marginLeft: 0 }]} onPress={() => setShowSettings(true)}>
+            <Text style={styles.pillTxt} allowFontScaling={false}>Flicker settings</Text>
+          </TouchableOpacity>
+        )}
+        {settings && <FlickerSettingsModal visible={showSettings} onClose={() => setShowSettings(false)} api={settings} />}
       </View>
     );
   }
 
-  const { n, max, min, norm, period, first } = analysis;
+  const { n, max, min, norm, period, first, duty } = analysis;
   const fmt = (v: number) => (Number.isFinite(v) ? v : 0);
   const risk = flickerRisk(shown.frequencyHz, shown.percentFlicker);
 
@@ -284,6 +297,11 @@ export default function FlickerChart({ reading, running, history, width, height 
         <TouchableOpacity style={styles.pill} onPress={share}>
           <Text style={styles.pillTxt} allowFontScaling={false}>Share</Text>
         </TouchableOpacity>
+        {settings && (
+          <TouchableOpacity style={styles.pill} onPress={() => setShowSettings(true)}>
+            <Text style={styles.pillTxt} allowFontScaling={false}>Set</Text>
+          </TouchableOpacity>
+        )}
       </View>
       <View style={styles.statsRow}>
         <View style={styles.stat}>
@@ -302,6 +320,10 @@ export default function FlickerChart({ reading, running, history, width, height 
           <Text style={styles.statVal} allowFontScaling={false}>{fmt(shown.cycleMs).toFixed(1)}</Text>
           <Text style={styles.statLabel} allowFontScaling={false}>Cycle (ms)</Text>
         </View>
+        <View style={styles.stat}>
+          <Text style={styles.statVal} allowFontScaling={false}>{duty.toFixed(0)}</Text>
+          <Text style={styles.statLabel} allowFontScaling={false}>Duty ≈ %</Text>
+        </View>
       </View>
       <View style={styles.riskRow}>
         <View style={[styles.badge, { backgroundColor: RISK_TINT[risk] }]}>
@@ -311,6 +333,7 @@ export default function FlickerChart({ reading, running, history, width, height 
         </View>
       </View>
       {view === 'wave' ? renderWave() : renderRisk()}
+      {settings && <FlickerSettingsModal visible={showSettings} onClose={() => setShowSettings(false)} api={settings} />}
     </View>
   );
 }
