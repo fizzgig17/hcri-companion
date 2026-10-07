@@ -7,6 +7,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScrollView, View, Text, TextInput, Switch, TouchableOpacity, StyleSheet, Alert, Modal, Linking } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { IS_DEV_BUILD } from '../hcri/buildTarget';
 import PrimaryButton from '../components/PrimaryButton';
 import DraggableStatList from '../components/DraggableStatList';
 import {
@@ -329,6 +331,8 @@ export default function SettingsScreen({ navigation, route }: any) {
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
     scrollArea: { flex: 1 },
+    // Same heading style as History's page title.
+    screenTitle: { fontSize: 20, fontWeight: '700', color: colors.text, paddingHorizontal: 16, paddingTop: 16 },
     tabBarWrap: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4 },
     // Padding lives here (the scrollable content) rather than on the
     // ScrollView's own `style` -- padding on the outer style can clip the
@@ -472,7 +476,8 @@ export default function SettingsScreen({ navigation, route }: any) {
   });
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={IS_DEV_BUILD ? ['left', 'right'] : ['top', 'left', 'right']}>
+      <Text style={styles.screenTitle}>Settings</Text>
       <View style={styles.tabBarWrap}>
         <TabBar
           tabs={[
@@ -730,6 +735,6 @@ export default function SettingsScreen({ navigation, route }: any) {
       </View>
     </ScrollView>
       )}
-    </View>
+    </SafeAreaView>
   );
 }
