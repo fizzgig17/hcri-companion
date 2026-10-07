@@ -66,11 +66,13 @@ interface Props {
   horizontalChrome?: number;
   /** Force the pager's height (Main tab fits the screen); otherwise it follows the active page. */
   fixedHeight?: number;
+  /** Fill whatever room the parent gives (parent must be bounded): pages take exactly the visible height, so nothing can be clipped. Overrides fixedHeight. */
+  fill?: boolean;
   /** Changing this value sends the pager back to its first page (e.g. a new reading arrived). */
   resetKey?: unknown;
 }
 
-export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZONTAL_PADDING, fixedHeight, resetKey }: Props) {
+export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZONTAL_PADDING, fixedHeight, fill, resetKey }: Props) {
   const { colors } = useTheme();
   // Confirmed 2026-10-03: measuring this via onLayout at all -- even
   // seeded with a close estimate that onLayout then "corrects" -- means
@@ -87,6 +89,8 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
   const windowWidth = useContentWidth();
   const width = windowWidth - horizontalChrome;
   const [activeIndex, setActiveIndex] = useState(0);
+  const [clipH, setClipH] = useState(0);
+  const pageH = fill ? clipH : fixedHeight;
   const [scrollLocked, setScrollLocked] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   // Note: no system-gesture exclusion zones here. They used to reserve the pager's left/right
@@ -128,7 +132,7 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
 
   return (
     <PagerLockContext.Provider value={setScrollLocked}>
-    <View>
+    <View style={fill ? { flex: 1, minHeight: 0 } : undefined}>
       {width > 0 && (
         <>
           {/* Height comes from the active page's own measurement, not the
@@ -136,7 +140,10 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
               file-level comment. Falls back to undefined (auto) for the
               very first render, before any page has reported a height
               yet, so there's no flash of a 0-height pager. */}
-          <View style={{ height: fixedHeight ?? pageHeights[pages[activeIndex]?.key], overflow: 'hidden' }}>
+          <View
+            style={fill ? { flex: 1, minHeight: 0, overflow: 'hidden' } : { height: fixedHeight ?? pageHeights[pages[activeIndex]?.key], overflow: 'hidden' }}
+            onLayout={fill ? (e) => setClipH(Math.floor(e.nativeEvent.layout.height)) : undefined}
+          >
             <ScrollView
               ref={scrollRef}
               horizontal
@@ -151,10 +158,10 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
               contentOffset={{ x: activeIndex * width, y: 0 }}
               onContentSizeChange={() => scrollRef.current?.scrollTo({ x: activeIndex * width, animated: false })}
             >
-              {pages.map((p) => (
+              {(fill && !clipH ? [] : pages).map((p) => (
                 <View
                   key={p.key}
-                  style={{ width, height: fixedHeight }}
+                  style={{ width, height: pageH }}
                   onLayout={(e) => {
                     const h = e.nativeEvent.layout.height;
                     setPageHeights((prev) => (prev[p.key] === h ? prev : { ...prev, [p.key]: h }));

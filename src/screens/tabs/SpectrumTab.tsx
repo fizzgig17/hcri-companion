@@ -191,6 +191,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
     <SwipablePages
       resetKey={result}
       horizontalChrome={totalChrome}
+      fill={fill}
       fixedHeight={pagerHeight}
       pages={[
         {
