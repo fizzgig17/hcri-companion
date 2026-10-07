@@ -194,6 +194,16 @@ export function startFlicker(
   const done = (async () => {
     try {
       conn.resetReassemblyState();
+      const t0 = Date.now();
+      const since = () => `+${((Date.now() - t0) / 1000).toFixed(1)}s`;
+      const hex = (b: Uint8Array, n = 24) =>
+        Array.from(b.slice(0, n)).map((x) => x.toString(16).padStart(2, '0')).join(' ') + (b.length > n ? ` ...(${b.length}B)` : '');
+      try {
+        const bat = await conn.readBattery(1200);
+        log(`Flicker: battery before start: ${bat ? JSON.stringify(bat) : 'no reply'}`);
+      } catch {
+        // diagnostic only
+      }
       log('Flicker: starting (8C 0E 04)');
       await conn.sendCommand(CMD_START_FLICKER_CONTINUOUS);
       await sleep(200);
@@ -206,15 +216,18 @@ export function startFlicker(
         const m = await request(conn, CMD_FLICKER_READY, 0x3b, 600, 1, () => true, isStopped, log);
         if (m && m.body[2] === 0x01) {
           ready = true;
-          log('Flicker: capture ready');
+          log(`Flicker: capture ready ${since()}`);
         }
         else await sleep(150);
       }
 
       // 2. Loop: stats then waveform, as fast as the meter answers.
       let failures = 0;
+      let cycle = 0;
       while (!stopped) {
+        const tCycle = Date.now();
         const stats = await request(conn, CMD_FLICKER_STATS, 0x3c, 2500, 2, (m) => m.body.length >= 18, isStopped, log);
+        const tStats = Date.now();
         if (stopped) break;
         const wave = stats
           ? await request(conn, CMD_FLICKER_WAVE, 0x3a, 4000, 2, (m) => m.body.length >= FLICKER_WAVE_SAMPLES * 2, isStopped, log)
@@ -222,12 +235,22 @@ export function startFlicker(
         if (stopped) break;
         if (!stats || !wave) {
           failures += 1;
-          log(`Flicker: incomplete cycle (stats ${stats ? 'ok' : 'missing'}, waveform ${wave ? 'ok' : 'missing'})`);
+          log(
+            `Flicker: incomplete cycle after ${cycle} good cycles ${since()} (stats ${stats ? 'ok' : 'missing'} in ${tStats - tCycle}ms, waveform ${wave ? 'ok' : 'missing'}; link ${conn.isConnected() ? 'still up' : 'DOWN'})`
+          );
           conn.resetReassemblyState();
           if (failures >= 3) throw new Error('The meter stopped answering flicker requests.');
           continue;
         }
         failures = 0;
+        cycle += 1;
+        const tWave = Date.now();
+        // Verbose: every cycle, with latencies. Standard log: one line per 10 cycles so a stall shows when the last good one was.
+        log(
+          `Flicker cycle ${cycle} ${since()}: stats ${tStats - tCycle}ms, waveform ${tWave - tStats}ms, stats bytes [${hex(stats.body, 18)}], wave ${wave.body.length}B [${hex(wave.body, 8)}]`,
+          true
+        );
+        if (cycle % 10 === 0) log(`Flicker: ${cycle} cycles OK ${since()}`);
         const waveform: number[] = [];
         for (let i = 0; i < FLICKER_WAVE_SAMPLES; i++) waveform.push(wave.body[2 * i] | (wave.body[2 * i + 1] << 8));
         const reading: FlickerReading = {
@@ -241,9 +264,11 @@ export function startFlicker(
         // Brief gap so the meter isn't hit with the next request the instant a 800-byte reply finishes.
         await sleep(80);
       }
+      log(`Flicker: loop ended (stopped by user) after ${cycle} cycles ${since()}`);
       end();
     } catch (e: any) {
       stopped = true;
+      log(`Flicker: ended with error: ${e?.message ?? e}`);
       sendStopReliably(conn, log);
       end(e instanceof Error ? e : new Error(String(e)));
     }
@@ -254,6 +279,7 @@ export function startFlicker(
     stop: async () => {
       if (stopped) return;
       stopped = true;
+      log('Flicker: Stop tapped');
       end();
       await sendStopReliably(conn, log);
     },
