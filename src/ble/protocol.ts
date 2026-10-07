@@ -93,6 +93,9 @@ export const CMD_START_FLICKER_CONTINUOUS = [0x8c, 0x0e, 0x04];
 export const CMD_FLICKER_READY = [0x8c, 0x3b]; // reply 8C 3B 00 (wait) / 8C 3B 01 (ready)
 export const CMD_FLICKER_STATS = [0x8c, 0x3c]; // reply: 8C 3C + 4 x float32 LE (Hz, %, index, cycle ms)
 export const CMD_FLICKER_WAVE = [0x8c, 0x3a]; // reply: 8C 3A + 400 x uint16 LE, fragmented over notifications
+export const CMD_FLICKER_SAMPLE_RATE = [0x8c, 0x3d]; // reply 8C 3D <index 0-10> into FLICKER_SPAN_MS
+// Total time the 400 plotted samples span, per sample-rate index (from the vendor app's own "sampling time" table).
+export const FLICKER_SPAN_MS = [100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50];
 export const FLICKER_WAVE_SAMPLES = 400;
 export const FLICKER_WAVE_REPLY_BYTES = 2 + FLICKER_WAVE_SAMPLES * 2; // 802
 

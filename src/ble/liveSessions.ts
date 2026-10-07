@@ -19,6 +19,8 @@ import {
   CMD_FLICKER_READY,
   CMD_FLICKER_STATS,
   CMD_FLICKER_WAVE,
+  CMD_FLICKER_SAMPLE_RATE,
+  FLICKER_SPAN_MS,
   CMD_STOP_SAMPLING,
   FLICKER_WAVE_SAMPLES,
 } from './protocol';
@@ -124,6 +126,8 @@ export interface FlickerReading {
   percentFlicker: number;
   flickerIndex: number;
   cycleMs: number;
+  /** Total time the 400 samples span, in ms, if the meter's sample-rate setting could be read. */
+  spanMs?: number;
   /** 400 raw waveform samples. */
   waveform: number[];
 }
@@ -208,6 +212,19 @@ export function startFlicker(
       } catch {
         // diagnostic only
       }
+      // Sample-rate setting -> how much time the plotted waveform covers (lets the chart label its time axis).
+      let spanMs: number | undefined;
+      const rate = await request(conn, CMD_FLICKER_SAMPLE_RATE, 0x3d, 1500, 2, () => true, isStopped, log);
+      if (rate && rate.body.length >= 3 && rate.body[2] < FLICKER_SPAN_MS.length) {
+        spanMs = FLICKER_SPAN_MS[rate.body[2]];
+        log(`Flicker: sample-rate index ${rate.body[2]} -> waveform spans ${spanMs} ms`);
+      } else {
+        log('Flicker: could not read the sample rate; time axis will use sample numbers');
+      }
+      if (stopped) {
+        end();
+        return;
+      }
       log('Flicker: starting (8C 0E 04)');
       await conn.sendCommand(CMD_START_FLICKER_CONTINUOUS);
       await sleep(200);
@@ -262,6 +279,7 @@ export function startFlicker(
           percentFlicker: readFloat32LE(stats.body, 6),
           flickerIndex: readFloat32LE(stats.body, 10),
           cycleMs: readFloat32LE(stats.body, 14),
+          spanMs,
           waveform,
         };
         if (!stopped) onReading(reading);

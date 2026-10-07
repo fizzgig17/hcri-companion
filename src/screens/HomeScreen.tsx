@@ -693,6 +693,7 @@ export default function HomeScreen({ navigation }: any) {
   const [savingLive, setSavingLive] = useState(false);
   const [flickerReading, setFlickerReading] = useState<FlickerReading | null>(null);
   const [flickerFocus, setFlickerFocus] = useState(0);
+  const [flickerHistory, setFlickerHistory] = useState<{ f: number; p: number }[]>([]);
   // The pager only returns to the Spectrum page for a genuinely new reading, not for every Live refresh.
   const [pagerResetKey, setPagerResetKey] = useState<unknown>(null);
   useEffect(() => {
@@ -743,11 +744,15 @@ export default function HomeScreen({ navigation }: any) {
     if (mode !== 'idle' || !connRef.current) return;
     setMode('flicker');
     setFlickerReading(null);
+    setFlickerHistory([]);
     setFlickerFocus((n) => n + 1);
     sessionRef.current = startFlicker(
       connRef.current,
       appendLog,
-      (r) => setFlickerReading(r),
+      (r) => {
+        setFlickerReading(r);
+        setFlickerHistory((h) => [...h.slice(-39), { f: r.frequencyHz, p: r.percentFlicker }]);
+      },
       (err) => {
         sessionRef.current = null;
         setMode('idle');
@@ -1218,7 +1223,7 @@ export default function HomeScreen({ navigation }: any) {
             pagerResetKey={pagerResetKey}
             flicker={
               (status === 'connected' || status === 'uploading' || status === 'measuring') && deviceSupportsFlicker(deviceName)
-                ? { reading: flickerReading, running: mode === 'flicker', focusNonce: flickerFocus }
+                ? { reading: flickerReading, running: mode === 'flicker', focusNonce: flickerFocus, history: flickerHistory }
                 : undefined
             }
           />

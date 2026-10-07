@@ -123,7 +123,7 @@ interface Props {
    * itself. */
   scrollInputIntoView: (inputRef: React.RefObject<any>) => void;
   /** Set only while a flicker-capable meter is connected: adds the Flicker chart page. */
-  flicker?: { reading: FlickerReading | null; running: boolean; focusNonce: number };
+  flicker?: { reading: FlickerReading | null; running: boolean; focusNonce: number; history: { f: number; p: number }[] };
   /** See SpectrumTab's pagerResetKey. */
   pagerResetKey?: unknown;
 }
