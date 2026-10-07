@@ -26,7 +26,7 @@ import { Alert } from 'react-native';
 import RNFS from 'react-native-fs';
 import RNShare from 'react-native-share';
 import { MeterResult } from '../ble/parseResult';
-import { buildCsv, buildCombinedCsv } from '../hcri/buildCsv';
+import { buildShareCsv, buildCombinedCsv } from '../hcri/buildCsv';
 
 function sanitizeFilename(label: string): string {
   return label.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 80) || 'reading';
@@ -76,7 +76,7 @@ async function shareCsvFile(csv: string, filename: string): Promise<void> {
 }
 
 export async function shareSingleReadingCsv(result: MeterResult, label: string): Promise<void> {
-  await shareCsvFile(buildCsv(result), `${sanitizeFilename(label)}.csv`);
+  await shareCsvFile(buildShareCsv(result), `${sanitizeFilename(label)}.csv`);
 }
 
 export async function shareAllReadingsCsv(
