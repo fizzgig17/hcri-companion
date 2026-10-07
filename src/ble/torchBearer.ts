@@ -184,5 +184,6 @@ export function tbToMeterResult(scan: TbScan, deviceName: string): MeterResult {
     tm30Rg: a.rg,
     timestampOnDevice: new Date().toISOString(),
     spectrum,
+    source: 'torchbearer',
   };
 }

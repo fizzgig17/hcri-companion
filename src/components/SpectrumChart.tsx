@@ -24,7 +24,7 @@ interface Props {
   /** The chart's actual available content width (inside SpectrumTab's chartCard padding), computed once by SpectrumTab -- see its own comment for why this moved there instead of staying a hardcoded chrome constant in each chart file. */
   width: number;
   /** Reading details shown above the plot, like the vendor app: peak wavelength and its spectral value, plus the meter's integration time and peak/dark signal. Any piece that's missing is left out. */
-  details?: { integrationMs?: number; peakSignal?: number; darkSignal?: number; showSpectral?: boolean; showRelative?: boolean };
+  details?: { integrationMs?: number; peakSignal?: number; darkSignal?: number; showSpectral?: boolean; showRelative?: boolean; integrationDecimals?: number };
 }
 
 const PADDING = { top: 8, right: 8, bottom: 24, left: 24 };
@@ -184,7 +184,10 @@ export default function SpectrumChart({ spectrum, height = 200, width, details }
       ? `Wavelength:${lineNm}nm` + (details?.showSpectral ? ` Spectral:${(lineValue * 0.1).toFixed(3)}uw/cm²/nm` : '') +
         (details?.showRelative && maxValue > 0 ? ` Relative:${(lineValue / maxValue).toFixed(2)}` : '')
       : '';
-  const integ = num(details?.integrationMs);
+  const integ =
+    details?.integrationMs !== undefined && Number.isFinite(details.integrationMs) && hasData
+      ? details.integrationMs.toFixed(details.integrationDecimals ?? 0)
+      : null;
   const peakS = num(details?.peakSignal);
   const darkS = num(details?.darkSignal);
 

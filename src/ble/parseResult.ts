@@ -30,6 +30,8 @@ export interface MeterResult {
   spectrum: { nm: number; value: number }[];
   /** Set only on a "test reading" pulled from a public hCRI.io report (see hcri/fetchSampleReading.ts) -- never on a real measurement. Marks it as not-from-a-meter so it isn't saved to History or uploaded. */
   sampleLabel?: string;
+  /** Set to 'torchbearer' on a reading from the Torch Bearer bridge (spectrum-only device): the HPCS-specific peak/dark ADC signal doesn't exist there, so the UI leaves those out. */
+  source?: 'torchbearer';
 }
 
 /** Reads a little-endian float32 at the given byte offset. */

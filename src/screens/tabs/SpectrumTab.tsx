@@ -211,6 +211,8 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
                 details={
                   sampleLabel
                     ? { showRelative: true }
+                    : result.source === 'torchbearer'
+                    ? { integrationMs: result.integrationTimeMs, integrationDecimals: 1, showSpectral: true, showRelative: true }
                     : {
                         integrationMs: result.integrationTimeMs,
                         peakSignal: result.peakSignal,
@@ -227,6 +229,8 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
                 details={
                   sampleLabel
                     ? { showRelative: true }
+                    : result.source === 'torchbearer'
+                    ? { integrationMs: result.integrationTimeMs, integrationDecimals: 1, showSpectral: true, showRelative: true }
                     : {
                         integrationMs: result.integrationTimeMs,
                         peakSignal: result.peakSignal,

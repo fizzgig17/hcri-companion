@@ -342,10 +342,12 @@ export default function DataTab({
           <Text style={styles.rowLabel}>Device</Text>
           <Text style={styles.rowValue}>{result.deviceName}</Text>
         </View>
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>Firmware</Text>
-          <Text style={styles.rowValue}>{result.firmwareVersion}</Text>
-        </View>
+        {result.source !== 'torchbearer' && (
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Firmware</Text>
+            <Text style={styles.rowValue}>{result.firmwareVersion}</Text>
+          </View>
+        )}
         <View style={styles.row}>
           <Text style={styles.rowLabel}>Integration Time</Text>
           <Text style={styles.rowValue}>{result.integrationTimeMs.toFixed(1)} ms</Text>
