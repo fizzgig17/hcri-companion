@@ -46,6 +46,13 @@ export function startLiveSpectrum(
   onEnd: (err?: Error) => void
 ): LiveSession {
   let stopped = false;
+  let ended = false;
+  // onEnd exactly once -- and immediately on Stop, so the UI never waits on the BLE round trips.
+  const end = (err?: Error) => {
+    if (ended) return;
+    ended = true;
+    onEnd(err);
+  };
   const shouldAbort = () => stopped;
 
   const done = (async () => {
@@ -73,11 +80,11 @@ export function startLiveSpectrum(
           await sleep(300);
         }
       }
-      onEnd();
+      end();
     } catch (e: any) {
       stopped = true;
-      conn.sendCommand(CMD_STOP_SAMPLING).catch(() => {});
-      onEnd(e instanceof Error ? e : new Error(String(e)));
+      sendStopReliably(conn, log);
+      end(e instanceof Error ? e : new Error(String(e)));
     }
   })();
 
@@ -86,14 +93,24 @@ export function startLiveSpectrum(
     stop: async () => {
       if (stopped) return;
       stopped = true;
-      try {
-        await conn.sendCommand(CMD_STOP_SAMPLING);
-      } catch (e: any) {
-        log(`Stop failed: ${e?.message ?? e}`);
-      }
-      await done.catch(() => {});
+      end();
+      await sendStopReliably(conn, log);
     },
   };
+}
+
+/** Sends 8C 25 now and once more shortly after (a single write can be lost or land mid-reply), and clears any half-reassembled reply. */
+async function sendStopReliably(conn: MeterConnection, log: LogFn): Promise<void> {
+  try {
+    await conn.sendCommand(CMD_STOP_SAMPLING);
+  } catch (e: any) {
+    log(`Stop failed: ${e?.message ?? e}`);
+    return;
+  }
+  setTimeout(() => {
+    conn.resetReassemblyState();
+    conn.sendCommand(CMD_STOP_SAMPLING).catch(() => {});
+  }, 250);
 }
 
 // ---------------------------------------------------------------------------
@@ -166,12 +183,20 @@ export function startFlicker(
   onEnd: (err?: Error) => void
 ): LiveSession {
   let stopped = false;
+  let ended = false;
+  const end = (err?: Error) => {
+    if (ended) return;
+    ended = true;
+    onEnd(err);
+  };
   const isStopped = () => stopped;
 
   const done = (async () => {
     try {
       conn.resetReassemblyState();
+      log('Flicker: starting (8C 0E 04)');
       await conn.sendCommand(CMD_START_FLICKER_CONTINUOUS);
+      await sleep(200);
 
       // 1. Wait until the meter says a capture is ready (8C 3B 01).
       const readyDeadline = Date.now() + 20000;
@@ -179,7 +204,10 @@ export function startFlicker(
       while (!stopped && !ready) {
         if (Date.now() > readyDeadline) throw new Error('The meter never reported a flicker capture ready.');
         const m = await request(conn, CMD_FLICKER_READY, 0x3b, 600, 1, () => true, isStopped, log);
-        if (m && m.body[2] === 0x01) ready = true;
+        if (m && m.body[2] === 0x01) {
+          ready = true;
+          log('Flicker: capture ready');
+        }
         else await sleep(150);
       }
 
@@ -194,6 +222,7 @@ export function startFlicker(
         if (stopped) break;
         if (!stats || !wave) {
           failures += 1;
+          log(`Flicker: incomplete cycle (stats ${stats ? 'ok' : 'missing'}, waveform ${wave ? 'ok' : 'missing'})`);
           conn.resetReassemblyState();
           if (failures >= 3) throw new Error('The meter stopped answering flicker requests.');
           continue;
@@ -209,12 +238,14 @@ export function startFlicker(
           waveform,
         };
         if (!stopped) onReading(reading);
+        // Brief gap so the meter isn't hit with the next request the instant a 800-byte reply finishes.
+        await sleep(80);
       }
-      onEnd();
+      end();
     } catch (e: any) {
       stopped = true;
-      conn.sendCommand(CMD_STOP_SAMPLING).catch(() => {});
-      onEnd(e instanceof Error ? e : new Error(String(e)));
+      sendStopReliably(conn, log);
+      end(e instanceof Error ? e : new Error(String(e)));
     }
   })();
 
@@ -223,12 +254,8 @@ export function startFlicker(
     stop: async () => {
       if (stopped) return;
       stopped = true;
-      try {
-        await conn.sendCommand(CMD_STOP_SAMPLING);
-      } catch (e: any) {
-        log(`Stop failed: ${e?.message ?? e}`);
-      }
-      await done.catch(() => {});
+      end();
+      await sendStopReliably(conn, log);
     },
   };
 }

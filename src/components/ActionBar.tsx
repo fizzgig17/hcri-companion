@@ -86,11 +86,11 @@ interface Props {
 export default function ActionBar(p: Props) {
   const { colors } = useTheme();
   const styles = StyleSheet.create({
-    wrap: { paddingHorizontal: 12, paddingTop: 2, paddingBottom: 2 },
+    wrap: { paddingHorizontal: 6, paddingTop: 2, paddingBottom: 2 },
     bar: { flexDirection: 'row', alignItems: 'center' },
     slot: { flex: 1, marginBottom: 14 },
-    slotLeft: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start' },
-    slotRight: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' },
+    slotLeft: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-evenly' },
+    slotRight: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-evenly' },
     center: { alignItems: 'center', width: 112 },
     ring: {
       width: 58,
