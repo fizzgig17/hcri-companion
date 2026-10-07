@@ -1,7 +1,7 @@
 // src/screens/tabs/UpdateTab.tsx -- Settings > Update: current version, check, update now.
 
 import React from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Linking } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useUpdate } from '../../contexts/UpdateContext';
 import { APP_VERSION } from '../../buildInfo';
@@ -86,7 +86,20 @@ export default function UpdateTab() {
       {/* One button: "Update now" once Play has a newer version, else "Check for updates".
           A check made here only updates this text; the top banner is for the launch check. */}
       {status === 'available' ? (
-        <PrimaryButton title="Update now" onPress={startUpdate} />
+        <>
+          <PrimaryButton title="Update now" onPress={startUpdate} />
+          {/* Fallback for when Play's own update screen stalls at "Installing": open the Play Store listing instead. */}
+          <PrimaryButton
+            title="Open in Play Store"
+            variant="outline"
+            style={{ marginTop: 10 }}
+            onPress={() =>
+              Linking.openURL('market://details?id=com.hcricompanion').catch(() =>
+                Linking.openURL('https://play.google.com/store/apps/details?id=com.hcricompanion').catch(() => {})
+              )
+            }
+          />
+        </>
       ) : (
         <PrimaryButton title={status === 'checking' ? 'Checking…' : 'Check for updates'} onPress={() => check(false)} disabled={status === 'checking'} variant="outline" />
       )}
