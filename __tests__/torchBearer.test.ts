@@ -3,7 +3,7 @@ import { TbReassembler, tbToMeterResult, isTorchBearerName } from '../src/ble/to
 // Builds the exact packets the ESP32 bridge firmware sends (see README in tobes-esp32).
 function packets(vals: number[], startNm: number, chunk: number, exposureMs = 38.4, status = 0): Uint8Array[] {
   const out: Uint8Array[] = [];
-  const s = new DataView(new ArrayBuffer(21));
+  const s = new DataView(new ArrayBuffer(20)); // exactly what the firmware sends: 1+1+2+4+4+4+2+2
   s.setUint8(0, 1);
   s.setUint8(1, status);
   s.setUint16(2, 534, true);
@@ -84,5 +84,17 @@ describe('Torch Bearer packets', () => {
     expect(isTorchBearerName('Torch Bearer')).toBe(true);
     expect(isTorchBearerName('HPCS-330P-0635249')).toBe(false);
     expect(isTorchBearerName(null)).toBe(false);
+  });
+});
+
+describe('real captured packets', () => {
+  it('parses the summary and header seen on a real Torch Bearer (from a debug log)', () => {
+    const r = new TbReassembler();
+    // 01 00 c0 01 33 33 33 3f a7 e8 cc 40 ... (20 bytes total, tail zero-filled here)
+    const summary = new Uint8Array(20);
+    summary.set([0x01, 0x00, 0xc0, 0x01, 0x33, 0x33, 0x33, 0x3f, 0xa7, 0xe8, 0xcc, 0x40]);
+    expect(() => r.push(summary)).not.toThrow();
+    // 02 95 02 54 01 01 54 0a  -> 661 points, start 340 nm, step 1, 2644 bytes
+    expect(() => r.push(new Uint8Array([0x02, 0x95, 0x02, 0x54, 0x01, 0x01, 0x54, 0x0a]))).not.toThrow();
   });
 });

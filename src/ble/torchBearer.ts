@@ -85,7 +85,7 @@ export class TbReassembler {
     const dv = new DataView(p.buffer, p.byteOffset, p.byteLength);
     switch (p[0]) {
       case 0x01: {
-        if (p.length < 21) throw new Error('Torch Bearer summary packet too short');
+        if (p.length < 20) throw new Error('Torch Bearer summary packet too short');
         this.reset();
         this.summary = {
           status: p[1],
