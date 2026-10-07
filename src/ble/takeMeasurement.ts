@@ -86,6 +86,8 @@ export interface TakeMeasurementOptions {
   sendStop?: boolean;
   /** Polled every poll interval; return true to abandon this wait (rejects with an 'AbortedError'). */
   shouldAbort?: () => boolean;
+  /** Gap between 8C 05 polls (default POLL_INTERVAL_MS). */
+  pollIntervalMs?: number;
 }
 
 export const ABORTED_ERROR = 'AbortedError';
@@ -464,7 +466,7 @@ export async function takeMeasurement(
             return;
           }
           await conn.sendCommand(CMD_READ_INTEG_TIME);
-          await sleep(POLL_INTERVAL_MS);
+          await sleep(opts.pollIntervalMs ?? POLL_INTERVAL_MS);
         }
       } catch (e) {
         if (!settled) {

@@ -64,19 +64,25 @@ export function startLiveSpectrum(
   const done = (async () => {
     let failures = 0;
     let first = true;
+    let cycles = 0;
+    const t0 = Date.now();
     try {
       while (!stopped) {
         try {
+          const tCycle = Date.now();
           const r = await takeMeasurement(conn, log, {
             startCommand: first ? CMD_START_CONTINUOUS_TEST : null,
             sendStop: false,
             shouldAbort,
+            pollIntervalMs: 100,
           });
           first = false;
           failures = 0;
+          cycles += 1;
+          const took = Date.now() - tCycle;
+          log(`Live cycle ${cycles}: ${took}ms (integration ${r.integrationTimeMs ?? '?'}ms)`, true);
+          if (cycles % 10 === 0) log(`Live: ${cycles} refreshes, ${((Date.now() - t0) / cycles).toFixed(0)}ms average`);
           if (!stopped) onResult(r);
-          // Small breather so a still-"test end" state from the previous cycle isn't re-read instantly.
-          await sleep(120);
         } catch (e: any) {
           if (stopped || e?.name === ABORTED_ERROR) break;
           failures += 1;
