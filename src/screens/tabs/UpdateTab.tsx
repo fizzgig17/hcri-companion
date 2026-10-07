@@ -53,11 +53,11 @@ export default function UpdateTab() {
       {status === 'available' ? (
         <PrimaryButton title="Update now" onPress={startUpdate} />
       ) : (
-        <PrimaryButton title="Check for updates" onPress={() => check(false)} disabled={status === 'checking'} variant="muted" />
+        <PrimaryButton title={status === 'checking' ? 'Checking…' : 'Check for updates'} onPress={() => check(false)} disabled={status === 'checking'} variant="outline" />
       )}
       {/* Testing aid (kept during testing): fakes an available update so the banner and
           Update now flow can be tried on a sideloaded build. Check for updates clears it. */}
-      <PrimaryButton title="Show test update banner" onPress={simulate} variant="muted" />
+      <PrimaryButton title="Show test update banner" onPress={simulate} variant="link" />
       {simulated && <Text style={styles.note}>Simulated update. Tap Update now to try the flow; restart the app to clear it.</Text>}
     </View>
   );

@@ -3,7 +3,9 @@
 // hCRI.io username + API token entry, backed by secureStorage (Keystore/
 // Keychain), not plaintext -- unlike the ESP32 firmware's NVS storage.
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { BackHandler } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { ScrollView, View, Text, TextInput, Switch, TouchableOpacity, StyleSheet, Alert, Modal, Linking } from 'react-native';
 import PrimaryButton from '../components/PrimaryButton';
 import DraggableStatList from '../components/DraggableStatList';
@@ -72,6 +74,19 @@ export default function SettingsScreen({ navigation, route }: any) {
   const update = useUpdate();
   const autoUpdate = route?.params?.autoUpdate;
   const [settingsTab, setSettingsTab] = useState<'settings' | 'update' | 'about'>('settings');
+  // Android Back: from Update/About return to the main Settings page first.
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (settingsTab !== 'settings') {
+          setSettingsTab('settings');
+          return true;
+        }
+        return false;
+      });
+      return () => sub.remove();
+    }, [settingsTab]),
+  );
   // "Update now" on the banner lands here and starts the update.
   React.useEffect(() => {
     if (autoUpdate) {

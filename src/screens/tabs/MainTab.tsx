@@ -32,7 +32,6 @@ import { EMPTY_METER_RESULT, EMPTY_SPECTRAL_ANALYSIS } from '../../utils/placeho
 
 // Title field (56) + its top margin (8), always subtracted so the charts are
 // the same size whether or not a reading (and so the title) is showing.
-const TITLE_BLOCK_H = 64;
 
 export type Status = 'disconnected' | 'connecting' | 'connected' | 'measuring' | 'uploading';
 
@@ -184,10 +183,7 @@ export default function MainTab({
   // and the card's own padding -- none of which depend on the chart size, so
   // there's no feedback loop and the charts never shift when something below
   // (the docked title) appears.
-  const [rootH, setRootH] = useState(0);
-  const [statusH, setStatusH] = useState(0);
-  const [gridH, setGridH] = useState(0);
-  const chartRegionH = rootH && statusH && gridH ? Math.max(0, rootH - statusH - 6 - 6 - 30 - gridH - 2 - TITLE_BLOCK_H) : 0;
+  const [chartRegionH, setChartRegionH] = useState(0);
 
   const styles = StyleSheet.create({
     statusRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', rowGap: 4, marginBottom: 6 },
@@ -208,7 +204,7 @@ export default function MainTab({
     switchMeterText: { color: colors.info, fontSize: 12, fontWeight: '600' },
 
     root: { flex: 1 },
-    chartRegion: { overflow: 'hidden' },
+    chartRegion: { flex: 1, minHeight: 0, overflow: 'hidden' },
     resultCard: {
       flex: 1,
       backgroundColor: colors.card,
@@ -324,8 +320,8 @@ export default function MainTab({
   });
 
   return (
-    <View style={styles.root} onLayout={(e) => setRootH(e.nativeEvent.layout.height)}>
-      <View style={styles.statusRow} onLayout={(e) => setStatusH(e.nativeEvent.layout.height)}>
+    <View style={styles.root}>
+      <View style={styles.statusRow}>
         <View style={[styles.statusDot, { backgroundColor: statusColors[status] }]} />
         {connectedDeviceName ? (
           <Text style={styles.statusText}>
@@ -386,7 +382,7 @@ export default function MainTab({
           Reading/Disconnect ABOVE this card and then move them below it
           (in a second copy) the moment a result came in. */}
       <View style={styles.resultCard}>
-        <View style={styles.statGrid} onLayout={(e) => setGridH(e.nativeEvent.layout.height)}>
+        <View style={styles.statGrid}>
           {/* Which measurements show here, and in what order, is the
               person's own choice from Settings (statIds, already
               resolved to just the enabled ids in display order -- see
@@ -420,7 +416,7 @@ export default function MainTab({
             and the reason charts still looked clipped on the right after
             CARD_PADDING alone was fixed. See SpectrumTab.tsx's
             extraHorizontalChrome comment. */}
-        <View style={styles.chartRegion}>
+        <View style={styles.chartRegion} onLayout={(e) => setChartRegionH(Math.floor(e.nativeEvent.layout.height))}>
           <SpectrumTab result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} sampleLabel={result?.sampleLabel} />
         </View>
         {!hasReading && <View style={[styles.titleInputWrap, { opacity: 0 }]} />}

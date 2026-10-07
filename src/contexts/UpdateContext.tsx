@@ -108,6 +108,12 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
+/** True while the "new version" banner is showing (it takes the top inset on production builds). */
+export function useBannerVisible(): boolean {
+  const u = useUpdate();
+  return u.status === 'available' && u.bannerEligible && !u.bannerDismissed;
+}
+
 export function useUpdate(): UpdateState {
   const v = useContext(Ctx);
   if (!v) throw new Error('useUpdate must be used inside UpdateProvider');

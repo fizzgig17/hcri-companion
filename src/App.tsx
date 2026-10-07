@@ -112,6 +112,7 @@ function Navigation() {
   return (
     <View style={{ flex: 1, alignItems: 'center', backgroundColor: colors.background }}>
     <View style={{ flex: 1, width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
+    <UpdateBanner />
     <NavigationContainer ref={navigationRef} theme={scheme === 'light' ? DefaultTheme : DarkTheme}>
       {/* Status bar text/icons need to flip too -- dark-on-light is
           unreadable against a light background, and vice versa. */}
@@ -128,7 +129,6 @@ function Navigation() {
         <Stack.Screen name="ReadingDetail" component={ReadingDetailScreen} options={{ title: 'Reading' }} />
       </Stack.Navigator>
     </NavigationContainer>
-    <UpdateBanner />
     </View>
     {/* Title screen over the top for the first moment of every launch --
         the app keeps loading/connecting underneath. See SplashTitle.tsx. */}
