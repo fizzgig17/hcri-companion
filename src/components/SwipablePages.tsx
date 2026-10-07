@@ -72,6 +72,9 @@ interface Props {
   resetKey?: unknown;
 }
 
+// Dots row footprint in fill mode (26 tall + 8 above + 4 below, same as the flow layout).
+const DOTS_H = 38;
+
 export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZONTAL_PADDING, fixedHeight, fill, resetKey }: Props) {
   const { colors } = useTheme();
   // Confirmed 2026-10-03: measuring this via onLayout at all -- even
@@ -141,7 +144,7 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
               very first render, before any page has reported a height
               yet, so there's no flash of a 0-height pager. */}
           <View
-            style={fill ? { flex: 1, minHeight: 0, overflow: 'hidden' } : { height: fixedHeight ?? pageHeights[pages[activeIndex]?.key], overflow: 'hidden' }}
+            style={fill ? { position: 'absolute', top: 0, left: 0, right: 0, bottom: DOTS_H, overflow: 'hidden' } : { height: fixedHeight ?? pageHeights[pages[activeIndex]?.key], overflow: 'hidden' }}
             onLayout={fill ? (e) => setClipH(Math.floor(e.nativeEvent.layout.height)) : undefined}
           >
             <ScrollView
@@ -176,7 +179,7 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
           {/* Dot indicator, doubling as tap-to-jump -- lets you tap over to
               Chrom without swiping too, same as tapping a page dot anywhere
               else in the app's UI conventions. */}
-          <View style={styles.dotsRow}>
+          <View style={[styles.dotsRow, fill && { position: 'absolute', left: 0, right: 0, bottom: 0, marginTop: 0, marginBottom: 0, height: DOTS_H }]}>
             {pages[activeIndex]?.info && (
               <View style={styles.infoLeft}>
                 <InfoButton
