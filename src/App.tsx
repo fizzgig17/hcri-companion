@@ -16,7 +16,7 @@ import { StatusBar, View } from 'react-native';
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import HomeScreen from './screens/HomeScreen';
 import HistoryScreen from './screens/HistoryScreen';
 import SettingsScreen from './screens/SettingsScreen';
@@ -48,13 +48,17 @@ const Tab = createBottomTabNavigator();
 // down to just Main/Data/Logs -- see HomeScreen.tsx and SettingsScreen.tsx.
 function Tabs() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   return (
     <Tab.Navigator
       screenOptions={{
         headerStyle: { backgroundColor: colors.card },
         headerTintColor: colors.text,
-        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.cardBorder },
+        // Compact bar: 40dp of content (icon + label) plus the gesture/nav inset below it.
+        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.cardBorder, height: 40 + insets.bottom, paddingTop: 2, paddingBottom: insets.bottom },
+        tabBarItemStyle: { paddingVertical: 0 },
+        tabBarLabelStyle: { fontSize: 10, marginTop: -2, marginBottom: 2 },
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.muted,
       }}
@@ -65,14 +69,14 @@ function Tabs() {
       <Tab.Screen
         name="Home"
         component={HomeScreen}
-        options={{ headerShown: false, tabBarIcon: ({ color, size }) => <HomeIcon color={color} size={size} /> }}
+        options={{ headerShown: false, tabBarIcon: ({ color }) => <HomeIcon color={color} size={22} /> }}
       />
       <Tab.Screen
         name="History"
         component={HistoryScreen}
         options={{
           headerShown: false,
-          tabBarIcon: ({ color, size }) => <HistoryIcon color={color} size={size} />,
+          tabBarIcon: ({ color }) => <HistoryIcon color={color} size={22} />,
         }}
       />
       <Tab.Screen
@@ -80,7 +84,7 @@ function Tabs() {
         component={SettingsScreen}
         options={{
           title: 'hCRI.io Settings',
-          tabBarIcon: ({ color, size }) => <SettingsIcon color={color} size={size} />,
+          tabBarIcon: ({ color }) => <SettingsIcon color={color} size={22} />,
           // Same double-inset bug as Home/History's own SafeAreaViews (see
           // their `edges` comments) -- just arriving via a different path.
           // Settings is the one tab that still uses React Navigation's own
