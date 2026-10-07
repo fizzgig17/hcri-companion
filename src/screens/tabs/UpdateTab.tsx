@@ -6,6 +6,40 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useUpdate } from '../../contexts/UpdateContext';
 import { APP_VERSION } from '../../buildInfo';
 import PrimaryButton from '../../components/PrimaryButton';
+import { IS_DEV_BUILD } from '../../hcri/buildTarget';
+import { GIT_COMMIT } from '../../gitCommit';
+import { useDevBuild } from '../../contexts/DevBuildContext';
+
+// Dev builds only: compares this install's commit with the newest published dev APK.
+function DevBuildCard() {
+  const { colors } = useTheme();
+  const { status, latest, error, check, update } = useDevBuild();
+  const s = StyleSheet.create({
+    card: { backgroundColor: colors.card, borderRadius: 12, borderWidth: 1, borderColor: colors.cardBorder, padding: 16, marginTop: 12 },
+    title: { color: colors.text, fontSize: 16, fontWeight: '700' },
+    line: { color: colors.muted, fontSize: 13, marginTop: 4, fontFamily: 'monospace' },
+    msg: { color: colors.text, fontSize: 14, marginTop: 12 },
+  });
+  const msg =
+    status === 'checking' ? 'Checking for a newer dev build…'
+    : status === 'newer' ? 'A different dev build is available.'
+    : status === 'current' ? 'This is the latest dev build.'
+    : status === 'error' ? `Couldn't check: ${error ?? ''}`
+    : '';
+  return (
+    <View style={s.card}>
+      <Text style={s.title}>Dev build</Text>
+      <Text style={s.line}>Installed: {GIT_COMMIT}</Text>
+      <Text style={s.line}>Latest:    {latest ?? '—'}</Text>
+      {!!msg && <Text style={s.msg}>{msg}</Text>}
+      {status === 'newer' ? (
+        <PrimaryButton title="Update Dev Build" onPress={update} />
+      ) : (
+        <PrimaryButton title={status === 'checking' ? 'Checking…' : 'Check Dev Build'} onPress={check} disabled={status === 'checking'} variant="outline" />
+      )}
+    </View>
+  );
+}
 
 export default function UpdateTab() {
   const { colors } = useTheme();
@@ -34,6 +68,7 @@ export default function UpdateTab() {
             : '';
 
   return (
+    <>
     <View style={styles.card}>
       <Text style={styles.title}>App updates</Text>
       <Text style={styles.version}>Installed version: v{APP_VERSION}</Text>
@@ -56,5 +91,7 @@ export default function UpdateTab() {
         <PrimaryButton title={status === 'checking' ? 'Checking…' : 'Check for updates'} onPress={() => check(false)} disabled={status === 'checking'} variant="outline" />
       )}
     </View>
+    {IS_DEV_BUILD && <DevBuildCard />}
+    </>
   );
 }
