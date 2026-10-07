@@ -9,7 +9,7 @@
 //
 // Requires: react-native-ble-plx (already installed in this project).
 
-import { BleManager, Device, Characteristic, Subscription } from 'react-native-ble-plx';
+import { BleManager, Device, Characteristic, Subscription, ScanMode } from 'react-native-ble-plx';
 import { Buffer } from 'buffer';
 import { PermissionsAndroid, Platform } from 'react-native';
 import {
@@ -241,6 +241,7 @@ export class MeterConnection {
    */
   // Torch Bearer (ESP32 bridge) mode -- see torchBearer.ts. Set only when the
   // connected device's name says so; every HPCS code path ignores these.
+  private cancelActiveScan: (() => void) | null = null;
   private tbMode = false;
   private tbSubs: Subscription[] = [];
   private tbReassembler = new TbReassembler();
@@ -286,8 +287,9 @@ export class MeterConnection {
    */
   async scanForKnownMeters(
     windowMs = 3000,
-    opts?: { preferDeviceId?: string | null; minListenMs?: number }
+    opts?: { preferDeviceId?: string | null; minListenMs?: number; quiet?: boolean }
   ): Promise<Device[]> {
+    const quiet = !!opts?.quiet;
     const authorized = await requestBlePermissions();
     if (!authorized) {
       throw new Error(
@@ -299,7 +301,10 @@ export class MeterConnection {
     // "meter not found on cold start, works after tapping Connect again".
     await waitForPoweredOn(this.manager);
 
-    this.log(`Scanning for known meter models (${METER_NAME_PREFIXES.join(', ')})...`);
+    if (!quiet) this.log(`Scanning for known meter models (${METER_NAME_PREFIXES.join(', ')})...`);
+    // Only one scan at a time: end any scan still running (e.g. the background
+    // poll) so its timer can't stop THIS scan later.
+    this.stopScan();
 
     // Fast path: if the caller knows which meter it's after (the one used
     // last time) and that exact meter shows up, don't sit out the rest of
@@ -321,10 +326,15 @@ export class MeterConnection {
         done = true;
         if (earlyTimer) clearTimeout(earlyTimer);
         clearTimeout(windowTimer);
+        if (this.cancelActiveScan === finish) this.cancelActiveScan = null;
         this.manager.stopDeviceScan();
         resolve();
       };
-      this.manager.startDeviceScan(null, { allowDuplicates: false }, (error, device) => {
+      this.cancelActiveScan = finish;
+      // LowLatency = listen continuously. Android's default scan modes only
+      // listen for part of each cycle, which is how a meter (especially one
+      // advertising every 100+ ms) could be missed inside a short window.
+      this.manager.startDeviceScan(null, { allowDuplicates: false, scanMode: ScanMode.LowLatency }, (error, device) => {
         if (error) {
           this.log(`Scan error: ${error.message}`);
           return;
@@ -333,7 +343,7 @@ export class MeterConnection {
         // advertised service UUIDs, and whether it matched) -- so when a meter
         // "isn't found" the Logs tab shows what WAS in the air and why each
         // device was or wasn't taken.
-        if (device) {
+        if (device && !quiet) {
           const isMatch = matchesKnownMeter(device.name) || matchesKnownMeter(device.localName) || advertisesTorchBearer(device);
           this.log(
             `scan: ${isMatch ? 'MATCH ' : 'skip  '}name=${JSON.stringify(device.name)} local=${JSON.stringify(device.localName)} id=${device.id} rssi=${device.rssi}` +
@@ -352,8 +362,9 @@ export class MeterConnection {
       const windowTimer = setTimeout(finish, windowMs);
     });
 
-    this.log(`scan: finished after ${Date.now() - startedAt} ms, ${found.size} matching device(s)`, true);
     const devices = Array.from(found.values()).sort((a, b) => (b.rssi ?? -999) - (a.rssi ?? -999));
+    if (quiet) return devices;
+    this.log(`scan: finished after ${Date.now() - startedAt} ms, ${found.size} matching device(s)`, true);
     this.log(
       devices.length === 0
         ? 'No known meter models found.'
@@ -362,6 +373,11 @@ export class MeterConnection {
             .join(', ')}`
     );
     return devices;
+  }
+
+  /** Ends a scan started by scanForKnownMeters() early (it then resolves with whatever it had heard so far). No-op when none is running. */
+  stopScan(): void {
+    this.cancelActiveScan?.();
   }
 
   /**
@@ -388,11 +404,31 @@ export class MeterConnection {
     // with more than one candidate, and the person is now picking from the
     // overlay) -- stop it before connecting, since some Android BLE stacks
     // get flaky about connecting while a scan is still active.
+    this.stopScan();
     this.manager.stopDeviceScan();
 
-    this.log(`Connecting to ${deviceId}...`);
-    const device = await this.manager.connectToDevice(deviceId);
-    return this.finishConnecting(device);
+    // Android's first GATT connect attempt sometimes fails outright (status
+    // 133 and friends) even though the device is right there -- one clean
+    // retry after dropping whatever half-open link that left behind fixes
+    // most of those.
+    let lastErr: any = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        this.log(attempt === 1 ? `Connecting to ${deviceId}...` : `Connecting to ${deviceId} (retry)...`);
+        const device = await this.manager.connectToDevice(deviceId, { timeout: 10000 });
+        return await this.finishConnecting(device);
+      } catch (e: any) {
+        lastErr = e;
+        this.log(`Connect attempt ${attempt} failed: ${e?.message ?? e}`);
+        try {
+          await this.manager.cancelDeviceConnection(deviceId);
+        } catch {
+          // nothing to cancel
+        }
+        if (attempt < 2) await new Promise<void>((r) => setTimeout(() => r(), 700));
+      }
+    }
+    throw lastErr;
   }
 
   /** Shared post-connect setup: service/characteristic discovery, MTU request, subscribing, and wiring the disconnect listener. Called from connectToDevice() -- the only way to connect now, whether it's the single match scanForKnownMeters() found or a pick from the device-picker overlay. */

@@ -78,6 +78,14 @@ const MAIN_BOTTOM_PAD = 8;
 // pause built in before the person taps it) gives the meter that moment
 // instead of racing it.
 const FOREGROUND_RECONNECT_DELAY_MS = 1500;
+// While connected, look for other meters in range this often (a short background scan), so the
+// Switch meter button appears when a second one is switched on, and goes away when it's gone.
+// Android allows only about 5 scan starts per 30 s, so this stays well under that.
+const DEVICE_POLL_INTERVAL_MS = 20000;
+const DEVICE_POLL_SCAN_MS = 3000;
+// A meter counts as still around if it was heard in the last few polls -- one missed
+// advertisement shouldn't make the Switch meter button flicker off.
+const DEVICE_POLL_FORGET_MS = 65000;
 
 export default function HomeScreen({ navigation }: any) {
   const { colors } = useTheme();
@@ -402,7 +410,10 @@ export default function HomeScreen({ navigation }: any) {
         // reloading the app with the meter still connected). Cheap/harmless
         // when there's nothing stale to clear.
         await conn.resetStaleConnection();
-        const lastIdForScan = await loadLastDeviceId().catch(() => null);
+        // The "stop early once the last-used meter is heard" shortcut is only for the
+        // silent foreground reconnect. A launch or a Connect tap listens for the full
+        // window so a second meter in range is always seen and offered in the list.
+        const lastIdForScan = opts?.preferLastDeviceOnMultiple ? await loadLastDeviceId().catch(() => null) : null;
         const candidates = await conn.scanForKnownMeters(CONNECT_SCAN_WINDOW_MS, { preferDeviceId: lastIdForScan });
 
         if (candidates.length === 0) {
@@ -456,6 +467,10 @@ export default function HomeScreen({ navigation }: any) {
       setStatus('connecting');
       try {
         const conn = getConnection();
+        if (conn.isConnected() && conn.getDeviceId() === deviceId) {
+          setStatus('connected'); // already on this one -- nothing to do
+          return;
+        }
         // Only relevant for the switch-meter case: a previous meter may
         // still be connected, and connectToDevice() doesn't drop an
         // existing connection on its own before opening a new one.
@@ -475,8 +490,12 @@ export default function HomeScreen({ navigation }: any) {
   );
 
   /** The "switch meter" icon next to the status row -- reopens the overlay with the already-known candidate list, no rescan. Only ever enabled (see MainTab) when multiMeterCandidates actually has 2+ entries. */
+  // Set by the polling effect below: runs one background scan right now (used when the
+  // switch-meter list is opened, so it shows who is in range at this moment).
+  const pollNowRef = useRef<(() => void) | null>(null);
   const openDevicePicker = useCallback(() => {
     setDevicePickerVisible(true);
+    pollNowRef.current?.();
   }, []);
 
   const dismissDevicePicker = useCallback(() => {
@@ -636,6 +655,15 @@ export default function HomeScreen({ navigation }: any) {
           appendLog('Meter returned an empty reading -- retrying once...');
           r = await takeMeasurement(connRef.current, appendLog);
         }
+      }
+      if (!r.source) {
+        // Meter's own numbers next to the spectrum-derived ones the app shows -- lets a
+        // difference from the vendor app be traced to the meter or to the math.
+        const a = analyzeSpectrum(r.spectrum);
+        appendLog(
+          `Reading: meter reported CCT ${r.cct.toFixed(0)} K, Ra ${r.ra.toFixed(1)}, Duv ${r.duv.toFixed(5)}, x/y ${r.x.toFixed(4)}/${r.y.toFixed(4)}; ` +
+            `from spectrum CCT ${a.cct.toFixed(0)} K, Ra ${a.ra}, Duv ${a.duv.toFixed(5)}, x/y ${a.x.toFixed(4)}/${a.y.toFixed(4)}`
+        );
       }
       setResult(r);
       // A fresh reading hasn't been uploaded yet -- clears any checkmark
@@ -858,6 +886,56 @@ export default function HomeScreen({ navigation }: any) {
   const statusRef = useRef(status);
   useEffect(() => {
     statusRef.current = status;
+  }, [status]);
+
+  // Background poll while connected: other meters that are switched on and in range are
+  // advertising (the connected one isn't), so a short scan finds them. The connected meter is
+  // always kept in the list, so the picker shows everything you could switch between.
+  const seenMetersRef = useRef<Map<string, { dev: FoundDevice; ts: number }>>(new Map());
+  const pollBusyRef = useRef(false);
+  useEffect(() => {
+    if (status !== 'connected') return;
+    let cancelled = false;
+    const pollOnce = async () => {
+      const conn = connRef.current;
+      if (cancelled || pollBusyRef.current || !conn || !conn.isConnected()) return;
+      pollBusyRef.current = true;
+      try {
+        const found = await conn.scanForKnownMeters(DEVICE_POLL_SCAN_MS, { quiet: true });
+        if (cancelled || statusRef.current !== 'connected' || !conn.isConnected()) return;
+        const now = Date.now();
+        const currentId = conn.getDeviceId();
+        const seen = seenMetersRef.current;
+        for (const d of found) {
+          if (d.id !== currentId) seen.set(d.id, { dev: { id: d.id, name: d.name, rssi: d.rssi }, ts: now });
+        }
+        for (const [id, v] of Array.from(seen.entries())) {
+          if (now - v.ts > DEVICE_POLL_FORGET_MS || id === currentId) seen.delete(id);
+        }
+        if (seen.size === 0) {
+          setMultiMeterCandidates(null);
+        } else if (currentId) {
+          const others = Array.from(seen.values()).map((v) => v.dev);
+          setMultiMeterCandidates([{ id: currentId, name: conn.getDeviceName(), rssi: null }, ...others]);
+        }
+      } catch {
+        // a failed background scan is not worth bothering anyone about
+      } finally {
+        pollBusyRef.current = false;
+      }
+    };
+    pollNowRef.current = () => {
+      pollOnce();
+    };
+    const first = setTimeout(pollOnce, 4000);
+    const timer = setInterval(pollOnce, DEVICE_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(first);
+      clearInterval(timer);
+      pollNowRef.current = null;
+      connRef.current?.stopScan();
+    };
   }, [status]);
 
   // Meter battery: read once shortly after each (re)entry into 'connected'
@@ -1231,6 +1309,7 @@ export default function HomeScreen({ navigation }: any) {
             onCopyLink={copyReportLink}
             statIds={statIds}
             connectedDeviceName={deviceName}
+            connectedDeviceId={status === 'connected' || status === 'measuring' ? connRef.current?.getDeviceId() ?? null : null}
             battery={battery}
             uploadTitle={uploadTitle}
             onUploadTitleChange={setUploadTitle}

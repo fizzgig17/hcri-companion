@@ -288,6 +288,19 @@ export default function HistoryScreen({ navigation }: any) {
     withBackgroundDisconnectSuppressed(() => shareSingleReadingCsv(reading.result, reading.label));
   }, []);
 
+  const shareManyFromHistory = useCallback(
+    (ids: string[]) => {
+      const picked = history.filter((r) => ids.includes(r.id));
+      if (picked.length === 0) return;
+      if (picked.length === 1) {
+        withBackgroundDisconnectSuppressed(() => shareSingleReadingCsv(picked[0].result, picked[0].label));
+      } else {
+        withBackgroundDisconnectSuppressed(() => shareAllReadingsCsv(picked));
+      }
+    },
+    [history]
+  );
+
   const shareAllFromHistory = useCallback(() => {
     withBackgroundDisconnectSuppressed(() => shareAllReadingsCsv(history));
   }, [history]);
@@ -316,6 +329,7 @@ export default function HistoryScreen({ navigation }: any) {
           onDeleteMany={deleteManyFromHistory}
           onShareOne={shareOneFromHistory}
           onShareAll={shareAllFromHistory}
+          onShareMany={shareManyFromHistory}
           onOpen={(reading) => navigation.navigate('ReadingDetail', { reading })}
           uploadingId={historyUploadingId}
           bulkUploading={historyBulkUploading}

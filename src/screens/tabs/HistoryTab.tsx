@@ -42,6 +42,8 @@ interface Props {
   onDeleteMany: (ids: string[]) => void | Promise<void>;
   onShareOne: (reading: SavedReading) => void;
   onShareAll: () => void;
+  /** Shares just the checked readings (Select mode) as one CSV -- or as a single reading's own CSV when only one is checked. */
+  onShareMany: (ids: string[]) => void;
   /** Opens ReadingDetailScreen for one saved reading -- the same measurement grid and Spectrum/Chrom/R-Values pages the Main/Spectrum tabs show for the current reading, just fed this past one instead (see ReadingDetailScreen.tsx). */
   onOpen: (reading: SavedReading) => void;
   /** Which reading (if any) is currently mid-upload, so only ITS button shows a spinner/disables -- the others stay usable. Also used to show progress during a bulk upload, since that walks this same id through the list one at a time. */
@@ -432,6 +434,7 @@ export default function HistoryTab({
   onDeleteMany,
   onShareOne,
   onShareAll,
+  onShareMany,
   onOpen,
   uploadingId,
   bulkUploading,
@@ -516,6 +519,12 @@ export default function HistoryTab({
     onUploadMany(ids);
   };
 
+  const handleShareSelected = () => {
+    if (selected.size === 0) return;
+    const ids = history.filter((r) => selected.has(r.id)).map((r) => r.id);
+    onShareMany(ids);
+  };
+
   const handleDeleteSelected = () => {
     if (selected.size === 0) return;
     const ids = history.filter((r) => selected.has(r.id)).map((r) => r.id);
@@ -553,9 +562,8 @@ export default function HistoryTab({
     cancelText: { color: colors.muted, fontSize: 13, fontWeight: '600', marginBottom: 4 },
 
     selectBar: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
+      flexDirection: 'column',
+      alignItems: 'stretch',
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: colors.cardBorder,
@@ -564,13 +572,13 @@ export default function HistoryTab({
       paddingVertical: 10,
       marginBottom: 10,
     },
-    selectAllText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
-    selectBarButtons: { flexDirection: 'row' },
+    selectAllText: { color: colors.accent, fontSize: 13, fontWeight: '600', alignSelf: 'flex-start' },
+    selectBarButtons: { flexDirection: 'row', marginTop: 6, marginLeft: -8 },
     // Overrides PrimaryButton's default marginTop:8 (meant for a full-width
     // button stacked below other content) -- here it sits inline next to
     // "Select All" text, so that top margin would push it visibly lower than
     // its sibling instead of centering with it.
-    selectBarButton: { marginTop: 0, marginLeft: 8 },
+    selectBarButton: { marginTop: 0, marginLeft: 8, flex: 1, paddingHorizontal: 8 },
 
     dateGroup: { marginBottom: 2 },
     todayLabel: {
@@ -631,6 +639,13 @@ export default function HistoryTab({
             <Text style={styles.selectAllText}>Select All</Text>
           </TouchableOpacity>
           <View style={styles.selectBarButtons}>
+            <PrimaryButton
+              title="Share"
+              onPress={handleShareSelected}
+              disabled={selected.size === 0 || bulkUploading || bulkDeleting}
+              variant="muted"
+              style={styles.selectBarButton}
+            />
             <PrimaryButton
               title={bulkDeleting ? 'Deleting…' : 'Delete'}
               onPress={handleDeleteSelected}

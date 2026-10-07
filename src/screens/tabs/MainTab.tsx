@@ -64,6 +64,8 @@ interface Props {
   /** Reopens the overlay using the already-known devicePickerDevices list (the "switch meter" icon) -- never triggers a fresh scan. */
   onOpenDevicePicker: () => void;
   onSelectDevice: (id: string) => void;
+  /** Id of the meter currently connected (null when none) -- marked in the picker list. */
+  connectedDeviceId?: string | null;
   onDismissDevicePicker: () => void;
   /** Same upload action/state DataTab's "Upload to hCRI.io" button uses --
    * duplicated here so you don't have to switch tabs after taking a
@@ -153,6 +155,7 @@ export default function MainTab({
   onCopyLink,
   statIds,
   connectedDeviceName,
+  connectedDeviceId,
   battery,
   uploadTitle,
   onUploadTitleChange,
@@ -528,8 +531,8 @@ export default function MainTab({
               doesn't also dismiss it -- a plain nested View would still let
               the touch bubble up to the TouchableOpacity behind it. */}
           <TouchableOpacity style={styles.modalSheet} activeOpacity={1} onPress={() => {}}>
-            <Text style={styles.modalTitle}>More than one meter found</Text>
-            <Text style={styles.modalSubtitle}>Pick which one to connect to.</Text>
+            <Text style={styles.modalTitle}>{connectedDeviceId ? 'Switch meter' : 'More than one meter found'}</Text>
+            <Text style={styles.modalSubtitle}>{connectedDeviceId ? 'Pick which one to use.' : 'Pick which one to connect to.'}</Text>
             {(devicePickerDevices ?? []).map((d) => (
               <TouchableOpacity
                 key={d.id}
@@ -537,9 +540,13 @@ export default function MainTab({
                 onPress={() => onSelectDevice(d.id)}
                 activeOpacity={0.6}
               >
-                <Text style={styles.deviceName}>{d.name ?? '(unnamed)'}</Text>
+                <Text style={styles.deviceName}>
+                  {d.name ?? '(unnamed)'}
+                  {d.id === connectedDeviceId ? '  ✓ connected' : ''}
+                </Text>
                 <Text style={styles.deviceMeta}>
-                  {d.id} · {d.rssi ?? '?'} dBm
+                  {d.id}
+                  {d.rssi != null ? ` · ${d.rssi} dBm` : ''}
                 </Text>
               </TouchableOpacity>
             ))}
