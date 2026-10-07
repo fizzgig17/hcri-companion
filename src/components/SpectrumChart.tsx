@@ -121,7 +121,23 @@ export default function SpectrumChart({ spectrum, height = 200, width, details }
   const peakIndex = values.indexOf(Math.max(...values));
   const peakNm = spectrum[Math.max(0, peakIndex)].nm;
   const lineNm = selectedNm !== null && selectedNm >= minNm && selectedNm <= maxNm ? selectedNm : peakNm;
-  const lineValue = spectrum.find((p) => p.nm === lineNm)?.value ?? maxValue;
+  // The cursor can sit between two samples while dragging, so interpolate instead of requiring an exact
+  // match (an exact-match lookup failed mid-drag and fell back to the peak, which made Relative read 1.00).
+  const lineValue = (() => {
+    const exact = spectrum.find((p) => p.nm === lineNm);
+    if (exact) return exact.value;
+    let lo = spectrum[0];
+    let hi = spectrum[spectrum.length - 1];
+    for (let i = 0; i < spectrum.length - 1; i++) {
+      if (spectrum[i].nm <= lineNm && spectrum[i + 1].nm >= lineNm) {
+        lo = spectrum[i];
+        hi = spectrum[i + 1];
+        break;
+      }
+    }
+    const span = hi.nm - lo.nm || 1;
+    return lo.value + ((lineNm - lo.nm) / span) * (hi.value - lo.value);
+  })();
   const hasData = Math.max(...values) > 0;
 
   const chartWidth = Math.max(width - PADDING.left - PADDING.right, 0);

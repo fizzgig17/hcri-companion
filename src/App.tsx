@@ -56,7 +56,7 @@ function Tabs() {
         headerStyle: { backgroundColor: colors.card },
         headerTintColor: colors.text,
         // Compact bar: 40dp of content (icon + label) plus the gesture/nav inset below it.
-        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.cardBorder, height: 40 + insets.bottom, paddingTop: 2, paddingBottom: insets.bottom },
+        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.cardBorder, height: 41 + insets.bottom, paddingTop: 2, paddingBottom: insets.bottom + 3 },
         tabBarItemStyle: { paddingVertical: 0 },
         tabBarLabelStyle: { fontSize: 10, marginTop: -2, marginBottom: 2 },
         tabBarActiveTintColor: colors.accent,

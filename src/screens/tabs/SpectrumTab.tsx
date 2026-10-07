@@ -173,7 +173,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
 
     // Main tab: every page's card is the pager's full height, content centered,
     // so the dots (and the ? beside them) sit directly under the card on every page.
-    fillCard: { flex: 1, marginBottom: 0, minHeight: 0 },
+    fillCard: { flex: 1, marginBottom: 6, minHeight: 0 },
 
     rvaluesTitle: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
   });
