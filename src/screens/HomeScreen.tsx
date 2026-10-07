@@ -7,7 +7,6 @@
 // (connect/disconnect/scan); Spectrum, Data, and Logs are read-only views
 // of whatever the last reading and log happen to be.
 
-import { useBannerVisible } from '../contexts/UpdateContext';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BackHandler, View, ScrollView, StyleSheet, Alert, AppState, Keyboard, Linking } from 'react-native';
@@ -79,7 +78,6 @@ const FOREGROUND_RECONNECT_DELAY_MS = 1500;
 
 export default function HomeScreen({ navigation }: any) {
   const { colors } = useTheme();
-  const bannerShowing = useBannerVisible();
   const { log, appendLog, clearLog, refreshVerboseLogging } = useLog();
   const [activeTab, setActiveTab] = useState<TabKey>('main');
   const [status, setStatus] = useState<Status>('disconnected');
@@ -1041,7 +1039,7 @@ export default function HomeScreen({ navigation }: any) {
     // into a large dead gap above the tab bar that's only there in dev
     // builds. Production builds have no banner, so 'top' is still needed
     // there to clear the status bar/notch directly.
-    <SafeAreaView style={styles.container} edges={IS_DEV_BUILD || bannerShowing ? ['left', 'right'] : ['top', 'left', 'right']}>
+    <SafeAreaView style={styles.container} edges={IS_DEV_BUILD ? ['left', 'right'] : ['top', 'left', 'right']}>
       {/* Docked -- a sibling of the ScrollView below, not inside it, so it
           stays on screen no matter how far down a long Data tab you've
           scrolled. No title/gear header any more -- "hCRI Companion" was

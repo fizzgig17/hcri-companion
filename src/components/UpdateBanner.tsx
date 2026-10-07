@@ -1,8 +1,7 @@
 // src/components/UpdateBanner.tsx
 //
-// One banner, docked in the layout flow right under the DEV BUILD strip (or the
-// status bar on production builds), pushing the app down instead of floating over
-// it. Shown only when the launch check (or the test button) found a newer version
+// One banner, docked right under the DEV BUILD strip (or the status bar on
+// production builds), overlaying the app without moving it. Shown only when the launch check (or the test button) found a newer version
 // in Google Play; it slides open. "Update now" jumps to Settings > Update and
 // starts the update; the x hides it until the next launch.
 
@@ -29,16 +28,19 @@ export default function UpdateBanner() {
       toValue: visible ? 1 : 0,
       duration: 260,
       easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
+      useNativeDriver: true,
     }).start();
   }, [visible, open]);
 
   // Production builds have no dev strip above, so the banner clears the status bar itself.
   const topPad = IS_DEV_BUILD ? 0 : insets.top;
-  const height = open.interpolate({ inputRange: [0, 1], outputRange: [0, BAR_H + topPad] });
+  const translateY = open.interpolate({ inputRange: [0, 1], outputRange: [-(BAR_H + topPad), 0] });
 
   const styles = StyleSheet.create({
-    clip: { overflow: 'hidden', backgroundColor: colors.accent },
+    // Overlays the app (never pushes it down): a zero-height slot in the flow, with the bar hanging
+    // from it. Solid color, no shadow/elevation, so nothing shows through.
+    slot: { height: 0, zIndex: 50 },
+    clip: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: colors.accent },
     bar: { height: BAR_H, flexDirection: 'row', alignItems: 'center', paddingLeft: 16, paddingRight: 8 },
     text: { flex: 1, color: '#fff', fontSize: 16, fontWeight: '700' },
     action: { backgroundColor: '#fff', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 16, marginLeft: 8 },
@@ -54,7 +56,8 @@ export default function UpdateBanner() {
   };
 
   return (
-    <Animated.View style={[styles.clip, { height }]} pointerEvents={visible ? 'auto' : 'none'}>
+    <View style={styles.slot} pointerEvents="box-none">
+    <Animated.View style={[styles.clip, { transform: [{ translateY }], opacity: visible ? 1 : 0 }]} pointerEvents={visible ? 'auto' : 'none'}>
       <View style={{ paddingTop: topPad }}>
         <View style={styles.bar} accessibilityRole="alert">
           <Text style={styles.text} numberOfLines={1}>A new version is available</Text>
@@ -67,5 +70,6 @@ export default function UpdateBanner() {
         </View>
       </View>
     </Animated.View>
+    </View>
   );
 }

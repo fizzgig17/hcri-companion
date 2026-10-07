@@ -16,7 +16,6 @@
 // away" and disconnect the meter out from under them -- even though the
 // meter connection itself lives entirely in HomeScreen/MainTab, not here.
 
-import { useBannerVisible } from '../contexts/UpdateContext';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Text, ScrollView, StyleSheet, Alert, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -42,7 +41,6 @@ import { IS_DEV_BUILD } from '../hcri/buildTarget';
 
 export default function HistoryScreen({ navigation }: any) {
   const { colors } = useTheme();
-  const bannerShowing = useBannerVisible();
   const { appendLog } = useLog();
 
   const [history, setHistory] = useState<SavedReading[]>([]);
@@ -305,7 +303,7 @@ export default function HistoryScreen({ navigation }: any) {
     // in HomeScreen.tsx for why: DevBuildBanner already reserves the
     // status-bar/notch inset for itself right above this screen, and
     // requesting it again here double-stacks it into a dead gap.
-    <SafeAreaView style={styles.container} edges={IS_DEV_BUILD || bannerShowing ? ['left', 'right'] : ['top', 'left', 'right']}>
+    <SafeAreaView style={styles.container} edges={IS_DEV_BUILD ? ['left', 'right'] : ['top', 'left', 'right']}>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>History</Text>
         <HistoryTab

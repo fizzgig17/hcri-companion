@@ -115,7 +115,6 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
   // (see MeasuredBox) instead of from hand-added overhead constants -- those kept drifting a few px short
   // and clipped the bottom of the cards. Elsewhere (no regionHeight) charts keep their fixed default sizes.
   const fill = !!regionHeight && regionHeight > 0;
-  const pagerHeight = fill ? Math.max(120, Math.floor((regionHeight as number) - 38)) : undefined;
   // Computed once, here, rather than separately (and inconsistently) in
   // SwipablePages and in each of the three chart components -- see this
   // file's own Props comment above for why a hardcoded per-component
@@ -192,7 +191,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
       resetKey={result}
       horizontalChrome={totalChrome}
       fill={fill}
-      fixedHeight={pagerHeight}
+      fixedHeight={fill ? Math.floor(regionHeight as number) : undefined}
       pages={[
         {
           key: 'spectrum',

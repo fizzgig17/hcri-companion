@@ -92,7 +92,8 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
   const windowWidth = useContentWidth();
   const width = windowWidth - horizontalChrome;
   const [activeIndex, setActiveIndex] = useState(0);
-  const [clipH, setClipH] = useState(0);
+  // fill mode: fixedHeight is the TOTAL height available (pages + dots row), all laid out with explicit numbers.
+  const clipH = fill ? Math.max(0, Math.floor((fixedHeight ?? 0) - DOTS_H)) : 0;
   const pageH = fill ? clipH : fixedHeight;
   const [scrollLocked, setScrollLocked] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
@@ -135,7 +136,7 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
 
   return (
     <PagerLockContext.Provider value={setScrollLocked}>
-    <View style={fill ? { flex: 1, minHeight: 0 } : undefined}>
+    <View style={fill ? { height: fixedHeight } : undefined}>
       {width > 0 && (
         <>
           {/* Height comes from the active page's own measurement, not the
@@ -144,8 +145,7 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
               very first render, before any page has reported a height
               yet, so there's no flash of a 0-height pager. */}
           <View
-            style={fill ? { position: 'absolute', top: 0, left: 0, right: 0, bottom: DOTS_H, overflow: 'hidden' } : { height: fixedHeight ?? pageHeights[pages[activeIndex]?.key], overflow: 'hidden' }}
-            onLayout={fill ? (e) => setClipH(Math.floor(e.nativeEvent.layout.height)) : undefined}
+            style={fill ? { height: clipH, overflow: 'hidden' } : { height: fixedHeight ?? pageHeights[pages[activeIndex]?.key], overflow: 'hidden' }}
           >
             <ScrollView
               ref={scrollRef}
@@ -161,7 +161,7 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
               contentOffset={{ x: activeIndex * width, y: 0 }}
               onContentSizeChange={() => scrollRef.current?.scrollTo({ x: activeIndex * width, animated: false })}
             >
-              {(fill && !clipH ? [] : pages).map((p) => (
+              {(fill && clipH <= 0 ? [] : pages).map((p) => (
                 <View
                   key={p.key}
                   style={{ width, height: pageH }}
@@ -179,7 +179,7 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
           {/* Dot indicator, doubling as tap-to-jump -- lets you tap over to
               Chrom without swiping too, same as tapping a page dot anywhere
               else in the app's UI conventions. */}
-          <View style={[styles.dotsRow, fill && { position: 'absolute', left: 0, right: 0, bottom: 0, marginTop: 0, marginBottom: 0, height: DOTS_H }]}>
+          <View style={[styles.dotsRow, fill && { position: 'absolute', left: 0, right: 0, top: clipH, marginTop: 0, marginBottom: 0, height: DOTS_H }]}>
             {pages[activeIndex]?.info && (
               <View style={styles.infoLeft}>
                 <InfoButton
