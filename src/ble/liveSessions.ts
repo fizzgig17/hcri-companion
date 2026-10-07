@@ -37,6 +37,10 @@ function sleep(ms: number): Promise<void> {
 }
 
 const MAX_CONSECUTIVE_FAILURES = 3;
+// Pause between flicker refreshes, and how long to wait for a reply before resending a request.
+const FLICKER_CYCLE_GAP_MS = 1000;
+const FLICKER_STATS_TIMEOUT_MS = 6000;
+const FLICKER_WAVE_TIMEOUT_MS = 8000;
 
 /** Continuous spectrum. onResult fires once per refresh; onEnd fires exactly once, with an Error if it stopped by itself. */
 export function startLiveSpectrum(
@@ -226,11 +230,11 @@ export function startFlicker(
       let cycle = 0;
       while (!stopped) {
         const tCycle = Date.now();
-        const stats = await request(conn, CMD_FLICKER_STATS, 0x3c, 2500, 2, (m) => m.body.length >= 18, isStopped, log);
+        const stats = await request(conn, CMD_FLICKER_STATS, 0x3c, FLICKER_STATS_TIMEOUT_MS, 2, (m) => m.body.length >= 18, isStopped, log);
         const tStats = Date.now();
         if (stopped) break;
         const wave = stats
-          ? await request(conn, CMD_FLICKER_WAVE, 0x3a, 4000, 2, (m) => m.body.length >= FLICKER_WAVE_SAMPLES * 2, isStopped, log)
+          ? await request(conn, CMD_FLICKER_WAVE, 0x3a, FLICKER_WAVE_TIMEOUT_MS, 2, (m) => m.body.length >= FLICKER_WAVE_SAMPLES * 2, isStopped, log)
           : null;
         if (stopped) break;
         if (!stats || !wave) {
@@ -261,8 +265,8 @@ export function startFlicker(
           waveform,
         };
         if (!stopped) onReading(reading);
-        // Brief gap so the meter isn't hit with the next request the instant a 800-byte reply finishes.
-        await sleep(80);
+        // Slow, steady pace: the meter locked up (and powered off) when hammered with back-to-back requests.
+        await sleep(FLICKER_CYCLE_GAP_MS);
       }
       log(`Flicker: loop ended (stopped by user) after ${cycle} cycles ${since()}`);
       end();
