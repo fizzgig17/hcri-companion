@@ -207,7 +207,7 @@ export default function FlickerChart({ reading, running, history, settings, widt
             <Line x1={x(first)} x2={x(first + period)} y1={8} y2={8} stroke="#c47f00" strokeWidth={1.5} />
             <Line x1={x(first)} x2={x(first)} y1={4} y2={12} stroke="#c47f00" strokeWidth={1.5} />
             <Line x1={x(first + period)} x2={x(first + period)} y1={4} y2={12} stroke="#c47f00" strokeWidth={1.5} />
-            <SvgText x={(x(first) + x(first + period)) / 2} y={padT + 11} fontSize={9.5} fill="#c47f00" textAnchor="middle" fontWeight="bold">
+            <SvgText x={Math.min(padL + plotW - 4, Math.max(padL + 4, (x(first) + x(first + period)) / 2))} y={padT + 11} fontSize={9.5} fill="#c47f00" textAnchor={(x(first) + x(first + period)) / 2 < padL + 50 ? 'start' : (x(first) + x(first + period)) / 2 > padL + plotW - 50 ? 'end' : 'middle'} fontWeight="bold">
               {msPerSample ? `1 cycle = ${fmtMs(period * msPerSample)}` : `1 cycle ≈ ${period} samples`}
             </SvgText>
           </>

@@ -194,20 +194,21 @@ export default function MainTab({
   const [chartRegionH, setChartRegionH] = useState(0);
 
   const styles = StyleSheet.create({
-    statusRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', rowGap: 4, marginBottom: 6 },
+    // Fixed height, never wraps: a spinner/battery/longer status text used to push this onto a second line while connecting or measuring, shifting the charts down and back.
+    statusRow: { flexDirection: 'row', alignItems: 'center', height: 24, marginBottom: 6 },
     resetLink: { alignItems: 'center', paddingVertical: 8 },
     resetLinkText: { color: colors.muted, fontSize: 12 },
     sampleNote: { color: colors.muted, fontSize: 12, fontStyle: 'italic', textAlign: 'center', marginTop: 8 },
     statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
-    batteryWrap: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', paddingLeft: 10 },
+    batteryWrap: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', paddingLeft: 10, flexShrink: 0 },
     batteryBody: { width: 20, height: 10, borderWidth: 1.5, borderRadius: 2.5, padding: 1 },
     batteryNub: { width: 2, height: 4, borderTopRightRadius: 1, borderBottomRightRadius: 1, marginLeft: 1 },
     batteryText: { fontSize: 13, fontWeight: '600', marginLeft: 5 },
-    statusText: { color: colors.muted, fontSize: 14 },
-    versionTiny: { marginLeft: 'auto', color: colors.mutedFaint, fontSize: 10 },
+    statusText: { color: colors.muted, fontSize: 14, flexShrink: 1 },
+    versionTiny: { marginLeft: 'auto', color: colors.mutedFaint, fontSize: 10, flexShrink: 0, paddingLeft: 6 },
     deviceNameText: { color: colors.text, fontSize: 14, fontWeight: '600' },
 
-    switchMeterButton: { flexDirection: 'row', alignItems: 'center', marginLeft: 12 },
+    switchMeterButton: { flexDirection: 'row', alignItems: 'center', marginLeft: 12, flexShrink: 0 },
     switchMeterIcon: { color: colors.info, fontSize: 14, marginRight: 4 },
     switchMeterText: { color: colors.info, fontSize: 12, fontWeight: '600' },
 
@@ -332,11 +333,12 @@ export default function MainTab({
       <View style={styles.statusRow}>
         <View style={[styles.statusDot, { backgroundColor: statusColors[status] }]} />
         {connectedDeviceName ? (
-          <Text style={styles.statusText}>
-            <Text style={styles.deviceNameText}>{connectedDeviceName}</Text> · {statusLabels[status]}
-          </Text>
+          <>
+            <Text style={[styles.deviceNameText, { flexShrink: 1 }]} numberOfLines={1}>{connectedDeviceName}</Text>
+            <Text style={[styles.statusText, { flexShrink: 0 }]} numberOfLines={1}> · {statusLabels[status]}</Text>
+          </>
         ) : (
-          <Text style={styles.statusText}>{statusLabels[status]}</Text>
+          <Text style={styles.statusText} numberOfLines={1}>{statusLabels[status]}</Text>
         )}
         {isBusy && <ActivityIndicator size="small" color={colors.muted} style={{ marginLeft: 8 }} />}
         {/* Meter battery (8C C3). Only while a meter is connected and has

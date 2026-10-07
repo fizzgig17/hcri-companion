@@ -118,17 +118,21 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
       (scrollRef.current as any)?.scrollTo({ x: (pages.length - 1) * width, animated: false });
     }
   }, [pages.length, activeIndex, width]);
-  const firstGoTo = useRef(true);
+  // Jump only when `n` actually changes after it was first seen (the Flicker page appearing on connect
+  // must not count as a request to go there).
+  const lastGoN = useRef<number | undefined>(goToTarget?.n);
   useEffect(() => {
-    if (firstGoTo.current) {
-      firstGoTo.current = false;
+    if (!goToTarget) return;
+    if (lastGoN.current === undefined) {
+      lastGoN.current = goToTarget.n;
       return;
     }
-    if (!goToTarget) return;
+    if (goToTarget.n === lastGoN.current) return;
+    lastGoN.current = goToTarget.n;
     const i = pages.findIndex((p) => p.key === goToTarget.key);
     if (i >= 0) {
       setActiveIndex(i);
-      scrollRef.current?.scrollTo({ x: i * width, animated: true });
+      (scrollRef.current as any)?.scrollTo({ x: i * width, animated: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goToTarget?.n]);
