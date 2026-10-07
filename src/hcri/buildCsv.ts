@@ -50,6 +50,12 @@ export function buildShareCsv(result: MeterResult): string {
     `Rg,${a.rg.toFixed(1)}`,
     `IntegrationTimeMs,${result.integrationTimeMs}`,
   ];
+  lines.push(`PeakSignal,${result.peakSignal}`);
+  if (result.source === 'torchbearer') {
+    lines.push(`TorchBearerStatus,${['normal', 'over-exposed', 'under-exposed'][result.tbStatus ?? 0] ?? result.tbStatus}`);
+  } else {
+    lines.push(`DarkSignal,${result.darkSignal}`);
+  }
   if (!result.source) {
     lines.push(
       `MeterReportedCCT,${result.cct.toFixed(0)}`,

@@ -32,6 +32,8 @@ export interface MeterResult {
   sampleLabel?: string;
   /** Set to 'torchbearer' on a reading from the Torch Bearer bridge (spectrum-only device): the HPCS-specific peak/dark ADC signal doesn't exist there, so the UI leaves those out. */
   source?: 'torchbearer';
+  /** Torch Bearer only: the spectrometer's own exposure status on the final frame -- 0 normal, 1 over-exposed, 2 under-exposed. */
+  tbStatus?: number;
 }
 
 /** Reads a little-endian float32 at the given byte offset. */
