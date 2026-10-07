@@ -7,7 +7,7 @@
 // secondary actions (Disconnect, Test reading, Upload, Copy link) are
 // quiet icon + label buttons on either side.
 
-import React from 'react';
+import React, { useRef } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
@@ -116,7 +116,7 @@ export default function ActionBar(p: Props) {
   const connected = status === 'connected' || status === 'uploading';
   const idle = p.activeMode === 'idle';
 
-  const SideButton = ({
+  const renderSide = ({
     icon,
     label,
     onPress,
@@ -146,7 +146,12 @@ export default function ActionBar(p: Props) {
       )}
       <Text style={[styles.sideLabel, accent && styles.sideLabelAccent]} numberOfLines={1} adjustsFontSizeToFit>{label}</Text>
     </TouchableOpacity>
-  );
+  );  // SideButton must keep one identity across renders. When it was a fresh component each render, every
+  // parent re-render (a Live update every ~150ms) remounted the buttons and swallowed taps mid-press.
+  const renderSideRef = useRef(renderSide);
+  renderSideRef.current = renderSide;
+  const SideButton = useRef((props: Parameters<typeof renderSide>[0]) => renderSideRef.current(props)).current;
+
 
   // The big round centre button: icon, or a spinner while busy.
   const mainButton = (icon: IconName, caption: string, onPress?: () => void, onLongPress?: () => void) => (
