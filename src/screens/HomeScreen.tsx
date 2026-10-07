@@ -617,6 +617,7 @@ export default function HomeScreen({ navigation }: any) {
   const measure = useCallback(async () => {
     if (!connRef.current) return;
     setLiveUnsaved(null);
+    setPagerResetKey({}); // back to the Spectrum page right away (e.g. from Flicker)
     setStatus('measuring');
     try {
       // An all-zero result (the meter handing back an empty buffer, seen on
@@ -710,6 +711,7 @@ export default function HomeScreen({ navigation }: any) {
     }
     if (mode !== 'idle' || !connRef.current) return;
     setMode('live');
+    setPagerResetKey({});
     setLiveUnsaved(null);
     liveLastRef.current = null;
     sessionRef.current = startLiveSpectrum(
