@@ -151,6 +151,11 @@ function matchesKnownMeter(name: string | null | undefined): boolean {
   return METER_NAME_PREFIXES.some((prefix) => name.startsWith(prefix)) || isTorchBearerName(name);
 }
 
+/** True if a scanned device advertises the Torch Bearer bridge's service UUID (Android can leave device.name empty for BLE-only devices, so the name alone isn't always enough). */
+function advertisesTorchBearer(device: Device | null | undefined): boolean {
+  return !!device?.serviceUUIDs?.some((u) => u.toLowerCase() === TB_SERVICE_UUID);
+}
+
 /** Space-separated hex, e.g. "8c 05 a0 0f 00 00 01" -- for wire-level traffic logging only, doesn't affect any parsing/control-flow decision. */
 function toHex(bytes: number[] | Uint8Array): string {
   return Array.from(bytes)
@@ -324,7 +329,19 @@ export class MeterConnection {
           this.log(`Scan error: ${error.message}`);
           return;
         }
-        if (matchesKnownMeter(device?.name)) {
+        // Verbose-log every device the scan hears (name, localName, id, RSSI, any
+        // advertised service UUIDs, and whether it matched) -- so when a meter
+        // "isn't found" the Logs tab shows what WAS in the air and why each
+        // device was or wasn't taken.
+        if (device) {
+          const isMatch = matchesKnownMeter(device.name) || matchesKnownMeter(device.localName) || advertisesTorchBearer(device);
+          this.log(
+            `scan: ${isMatch ? 'MATCH ' : 'skip  '}name=${JSON.stringify(device.name)} local=${JSON.stringify(device.localName)} id=${device.id} rssi=${device.rssi}` +
+              `${device.serviceUUIDs?.length ? ` svc=${device.serviceUUIDs.join(',')}` : ''}`,
+            true
+          );
+        }
+        if (matchesKnownMeter(device?.name) || matchesKnownMeter(device?.localName) || advertisesTorchBearer(device)) {
           found.set(device!.id, device!);
           if (preferId && device!.id === preferId && !earlyTimer) {
             const wait = Math.max(0, minListenMs - (Date.now() - startedAt));
@@ -335,6 +352,7 @@ export class MeterConnection {
       const windowTimer = setTimeout(finish, windowMs);
     });
 
+    this.log(`scan: finished after ${Date.now() - startedAt} ms, ${found.size} matching device(s)`, true);
     const devices = Array.from(found.values()).sort((a, b) => (b.rssi ?? -999) - (a.rssi ?? -999));
     this.log(
       devices.length === 0
@@ -391,7 +409,15 @@ export class MeterConnection {
       this.log(`requestMTU failed (continuing anyway): ${e}`);
     }
 
-    if (isTorchBearerName(connected.name)) {
+    let isTb = isTorchBearerName(connected.name) || isTorchBearerName(connected.localName);
+    if (!isTb) {
+      try {
+        isTb = (await connected.services()).some((sv) => sv.uuid.toLowerCase() === TB_SERVICE_UUID);
+      } catch {
+        // fall through -- treated as a regular meter
+      }
+    }
+    if (isTb) {
       return this.finishConnectingTorchBearer(connected);
     }
     this.tbMode = false;
@@ -470,7 +496,7 @@ export class MeterConnection {
             const w = this.tbWaiter;
             this.tbWaiter = null;
             this.log(`Torch Bearer scan complete: ${scan.spectrum.length} points, exposure ${scan.summary.exposureMs.toFixed(1)} ms, status ${scan.summary.status}`);
-            w.resolve(tbToMeterResult(scan, connected.name ?? 'Torch Bearer'));
+            w.resolve(tbToMeterResult(scan, connected.name ?? connected.localName ?? 'Torch Bearer'));
           }
         } catch (e: any) {
           this.tbReassembler.reset();
@@ -803,7 +829,7 @@ export class MeterConnection {
 
   /** The connected device's advertised name (e.g. "HPCS-310-0326030"), or null if not connected. Used to pick the right field-offset map for parseResult, since different models lay their result body out differently. */
   getDeviceName(): string | null {
-    return this.device?.name ?? null;
+    return this.device?.name ?? (this.tbMode ? 'Torch Bearer' : null);
   }
 
   /** The connected device's BLE identifier, or null if not connected. Used by takeMeasurement()'s reconnect-per-reading experiment to reconnect to the SAME physical meter via connectToDevice() rather than re-running the name-prefix scan. */

@@ -70,6 +70,7 @@ export const EMPTY_READING_ERROR = 'EmptyReadingError';
 
 /** Call once, right after connecting, before the first measurement. */
 export async function initializeMeter(conn: MeterConnection): Promise<void> {
+  if (conn.isTorchBearer()) return; // the Torch Bearer bridge has no HPCS setup commands
   await conn.sendCommand(CMD_IDENTIFY);
   await sleep(100);
   await conn.sendCommand(CMD_SET_INTEGRAL_MODE_AUTO);
