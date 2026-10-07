@@ -1217,7 +1217,7 @@ export default function HomeScreen({ navigation }: any) {
             scrollInputIntoView={scrollInputIntoView}
             pagerResetKey={pagerResetKey}
             flicker={
-              (status === 'connected' || status === 'uploading') && deviceSupportsFlicker(deviceName)
+              (status === 'connected' || status === 'uploading' || status === 'measuring') && deviceSupportsFlicker(deviceName)
                 ? { reading: flickerReading, running: mode === 'flicker', focusNonce: flickerFocus }
                 : undefined
             }
