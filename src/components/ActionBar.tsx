@@ -17,7 +17,7 @@ import type { Status } from '../screens/tabs/MainTab';
 type IconName = 'play' | 'stop' | 'bluetooth' | 'upload' | 'power' | 'copy' | 'check' | 'activity' | 'live' | 'flicker' | 'save';
 
 const ICON_PATHS: Record<Exclude<IconName, 'play' | 'stop'>, string> = {
-  live: 'M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15',
+  live: 'M21 12a9 9 0 0 0-15.5-6.2M3 12a9 9 0 0 0 15.5 6.2M21 4v5h-5M3 20v-5h5',
   flicker: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
   save: 'M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8',
   bluetooth: 'M6.5 6.5l11 11L12 23V1l5.5 5.5-11 11',
@@ -48,7 +48,7 @@ function Icon({ name, size, color }: { name: IconName; size: number; color: stri
   }
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Path d={ICON_PATHS[name]} />
+      <Path d={ICON_PATHS[name]} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
     </Svg>
   );
 }
