@@ -26,6 +26,9 @@ import { useContentWidth } from '../../layout';
 import SpectrumChart, { SPECTRUM_HEADER_H } from '../../components/SpectrumChart';
 import ChromaticityChart from '../../components/ChromaticityChart';
 import RValuesBarChart from '../../components/RValuesBarChart';
+import FlickerChart from '../../components/FlickerChart';
+import type { FlickerReading } from '../../ble/liveSessions';
+import type { FlickerSettingsApi } from '../../components/FlickerSettingsModal';
 import SwipablePages from '../../components/SwipablePages';
 import { useTheme } from '../../contexts/ThemeContext';
 import { MeterResult } from '../../ble/parseResult';
@@ -63,6 +66,10 @@ interface Props {
   regionHeight?: number;
   /** Set when `result` is a sample from a public hCRI.io report (not a reading from the person's own meter) -- only changes the "What's this?" text. */
   sampleLabel?: string;
+  /** Present only when the connected meter can measure flicker: adds the fourth (Flicker) page. `focusNonce` changing jumps to it. */
+  flicker?: { reading: FlickerReading | null; running: boolean; focusNonce: number; history: { f: number; p: number }[]; settings?: FlickerSettingsApi };
+  /** Changing this sends the pager back to the Spectrum page; defaults to `result`. Live updates replace `result` constantly without changing this. */
+  pagerResetKey?: unknown;
 }
 
 // The screen's own scroll-content padding (HomeScreen's and
@@ -93,7 +100,7 @@ function FixedBox({ h, center, children }: { h: number; center?: boolean; childr
   return <View style={{ height: h, justifyContent: center ? 'center' : 'flex-start' }}>{h > 0 ? children(h) : null}</View>;
 }
 
-export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 0, regionHeight, sampleLabel }: Props) {
+export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 0, regionHeight, sampleLabel, flicker, pagerResetKey }: Props) {
   const source = sampleLabel
     ? `This is a sample from a public hCRI.io report (${sampleLabel}), not a reading from your own meter. It isn't saved to History and can't be uploaded or shared.`
     : 'This comes from the reading your meter just took.';
@@ -180,7 +187,8 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
 
   return (
     <SwipablePages
-      resetKey={result}
+      resetKey={pagerResetKey ?? result}
+      goTo={flicker ? { key: 'flicker', n: flicker.focusNonce } : undefined}
       horizontalChrome={totalChrome}
       fill={fill}
       fixedHeight={fill ? Math.floor(regionHeight as number) : undefined}
@@ -291,6 +299,29 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
             </View>
           ),
         },
+        ...(flicker
+          ? [
+              {
+                key: 'flicker',
+                label: 'Flicker',
+                info: {
+                  title: 'Flicker',
+                  message: `Tap Flicker below to start measuring, and Stop to freeze the reading. Shows how fast (Hz) and how deeply (%) this light pulses, the flicker index, and the captured waveform. The waveform is scaled to its highest sample, so a steady light is a flat line near the top and a flickering one rises and falls. The risk tip uses the same bands as the vendor app.`,
+                },
+                content: (
+                  <View style={[styles.chromCard, fill && { height: cardH, marginBottom: 0 }]}>
+                    {fill ? (
+                      <FixedBox h={innerH}>
+                        {(h) => <FlickerChart reading={flicker.reading} running={flicker.running} history={flicker.history} settings={flicker.settings} width={chartWidth} height={h} />}
+                      </FixedBox>
+                    ) : (
+                      <FlickerChart reading={flicker.reading} running={flicker.running} history={flicker.history} settings={flicker.settings} width={chartWidth} height={230} />
+                    )}
+                  </View>
+                ),
+              },
+            ]
+          : []),
       ]}
     />
   );

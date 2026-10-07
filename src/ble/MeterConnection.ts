@@ -19,6 +19,7 @@ import {
   parseBatteryReply,
   METER_CHARACTERISTIC_UUID_PLACEHOLDER,
   RESULT_HEADER_LENGTH,
+  FLICKER_WAVE_REPLY_BYTES,
 } from './protocol';
 import type { BatteryStatus } from './protocol';
 import {
@@ -216,6 +217,9 @@ export class MeterConnection {
   private collecting = false;
   private declaredBodyLength = 0;
   private buffer: number[] = [];
+  // Reassembly for the fixed-size flicker waveform reply (8C 3A + 800 bytes), which has no length header.
+  private collectingWave = false;
+  private waveBuffer: number[] = [];
 
   private messageListeners: ((msg: MeterMessage) => void)[] = [];
 
@@ -550,6 +554,17 @@ export class MeterConnection {
    * the body.
    */
   private handleNotification(chunk: Uint8Array): void {
+    if (this.collectingWave) {
+      this.waveBuffer.push(...Array.from(chunk));
+      this.maybeEmitWave();
+      return;
+    }
+    if (!this.collecting && chunk.length >= 2 && chunk[0] === 0x8c && chunk[1] === 0x3a) {
+      this.waveBuffer = Array.from(chunk);
+      this.collectingWave = true;
+      this.maybeEmitWave();
+      return;
+    }
     if (!this.collecting) {
       // Is this the start of a new 8C 13 (length-prefixed) response?
       if (chunk.length >= 4 && chunk[0] === 0x8c && chunk[1] === 0x13) {
@@ -572,6 +587,14 @@ export class MeterConnection {
     this.maybeEmitCollected();
   }
 
+  private maybeEmitWave(): void {
+    if (this.waveBuffer.length < FLICKER_WAVE_REPLY_BYTES) return;
+    const body = Uint8Array.from(this.waveBuffer.slice(2, FLICKER_WAVE_REPLY_BYTES));
+    this.collectingWave = false;
+    this.waveBuffer = [];
+    this.messageListeners.forEach((l) => l({ subCommand: 0x3a, body }));
+  }
+
   private maybeEmitCollected(): void {
     const totalExpected = RESULT_HEADER_LENGTH + this.declaredBodyLength;
     if (this.buffer.length < totalExpected) return;
@@ -587,6 +610,8 @@ export class MeterConnection {
 
   /** Resets reassembly state. Call this at the start of every measurement, defensively -- a stray in-flight response from previous churn should never bleed into the next measurement's parsing. */
   resetReassemblyState(): void {
+    this.collectingWave = false;
+    this.waveBuffer = [];
     this.collecting = false;
     this.buffer = [];
     this.declaredBodyLength = 0;

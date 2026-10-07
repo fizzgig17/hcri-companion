@@ -31,6 +31,7 @@ import { LogProvider } from './contexts/LogContext';
 import { MAX_CONTENT_WIDTH } from './layout';
 import { navigationRef } from './navigationRef';
 import { UpdateProvider } from './contexts/UpdateContext';
+import { DevBuildProvider } from './contexts/DevBuildContext';
 import UpdateBanner from './components/UpdateBanner';
 import { setTapHapticsEnabled, setResultHapticsEnabled } from './utils/haptics';
 import { loadHapticTapsPreference, loadHapticResultsPreference } from './storage/preferences';
@@ -180,7 +181,9 @@ export default function App() {
                 components/DevBuildBanner.tsx. */}
             <DevBuildBanner />
             <UpdateProvider>
-              <Navigation />
+              <DevBuildProvider>
+                <Navigation />
+              </DevBuildProvider>
             </UpdateProvider>
           </ErrorBoundary>
         </LogProvider>

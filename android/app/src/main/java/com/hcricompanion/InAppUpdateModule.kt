@@ -2,6 +2,7 @@ package com.hcricompanion
 
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.LifecycleEventListener
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -20,9 +21,38 @@ import com.google.android.play.core.install.model.UpdateAvailability
 // For a sideloaded/debug install Play reports an error, which JS shows as
 // "updates are managed by Google Play".
 class InAppUpdateModule(private val ctx: ReactApplicationContext) :
-    ReactContextBaseJavaModule(ctx) {
+    ReactContextBaseJavaModule(ctx), LifecycleEventListener {
 
   private var lastInfo: AppUpdateInfo? = null
+
+  init {
+    ctx.addLifecycleEventListener(this)
+  }
+
+  // Google's recommendation for IMMEDIATE updates: if the person leaves Play's update screen and comes
+  // back to the app while the update is still in progress, show the update screen again (otherwise the
+  // app sits there while the update is stalled in the background).
+  override fun onHostResume() {
+    val activity = ctx.currentActivity ?: return
+    try {
+      val manager = AppUpdateManagerFactory.create(ctx)
+      manager.appUpdateInfo.addOnSuccessListener { info ->
+        if (info.updateAvailability() == UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS) {
+          lastInfo = info
+          activity.runOnUiThread {
+            try {
+              manager.startUpdateFlow(
+                  info, activity, AppUpdateOptions.newBuilder(AppUpdateType.IMMEDIATE).build())
+            } catch (_: Exception) {}
+          }
+        }
+      }
+    } catch (_: Exception) {}
+  }
+
+  override fun onHostPause() {}
+
+  override fun onHostDestroy() {}
 
   override fun getName() = "InAppUpdate"
 

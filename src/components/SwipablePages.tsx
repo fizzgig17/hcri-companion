@@ -70,12 +70,14 @@ interface Props {
   fill?: boolean;
   /** Changing this value sends the pager back to its first page (e.g. a new reading arrived). */
   resetKey?: unknown;
+  /** Jump to the page with this key whenever `n` changes (e.g. start of a Flicker run). */
+  goTo?: { key: string; n: number };
 }
 
 // Dots row footprint in fill mode (26 tall + 8 above + 4 below, same as the flow layout).
 const DOTS_H = 38;
 
-export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZONTAL_PADDING, fixedHeight, fill, resetKey }: Props) {
+export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZONTAL_PADDING, fixedHeight, fill, resetKey, goTo: goToTarget }: Props) {
   const { colors } = useTheme();
   // Confirmed 2026-10-03: measuring this via onLayout at all -- even
   // seeded with a close estimate that onLayout then "corrects" -- means
@@ -107,8 +109,33 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
       return;
     }
     setActiveIndex(0);
-    scrollRef.current?.scrollTo({ x: 0, animated: false });
+    (scrollRef.current as any)?.scrollTo({ x: 0, animated: false });
   }, [resetKey]);
+  // Pages can come and go (Flicker only exists while a capable meter is connected): never point past the end.
+  useEffect(() => {
+    if (pages.length > 0 && activeIndex > pages.length - 1) {
+      setActiveIndex(pages.length - 1);
+      (scrollRef.current as any)?.scrollTo({ x: (pages.length - 1) * width, animated: false });
+    }
+  }, [pages.length, activeIndex, width]);
+  // Jump only when `n` actually changes after it was first seen (the Flicker page appearing on connect
+  // must not count as a request to go there).
+  const lastGoN = useRef<number | undefined>(goToTarget?.n);
+  useEffect(() => {
+    if (!goToTarget) return;
+    if (lastGoN.current === undefined) {
+      lastGoN.current = goToTarget.n;
+      return;
+    }
+    if (goToTarget.n === lastGoN.current) return;
+    lastGoN.current = goToTarget.n;
+    const i = pages.findIndex((p) => p.key === goToTarget.key);
+    if (i >= 0) {
+      setActiveIndex(i);
+      (scrollRef.current as any)?.scrollTo({ x: i * width, animated: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [goToTarget?.n]);
   // One measured height per page, filled in as each page's onLayout fires
   // (all three mount at once, so in practice all three arrive almost
   // immediately). Undefined entries (nothing measured yet) just mean the

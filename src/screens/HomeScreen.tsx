@@ -13,6 +13,9 @@ import { BackHandler, View, ScrollView, StyleSheet, Alert, AppState, Keyboard, L
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MeterConnection } from '../ble/MeterConnection';
 import type { BatteryStatus } from '../ble/protocol';
+import { deviceSupportsLive, deviceSupportsFlicker } from '../ble/protocol';
+import { startLiveSpectrum, startFlicker, readFlickerSettings, writeFlickerSetting, type LiveSession, type FlickerReading } from '../ble/liveSessions';
+import type { FlickerSettingsApi } from '../components/FlickerSettingsModal';
 import { initializeMeter, takeMeasurement, EMPTY_READING_ERROR } from '../ble/takeMeasurement';
 import { MeterResult } from '../ble/parseResult';
 import { analyzeSpectrum } from '../utils/spectralAnalysis';
@@ -614,6 +617,8 @@ export default function HomeScreen({ navigation }: any) {
 
   const measure = useCallback(async () => {
     if (!connRef.current) return;
+    setLiveUnsaved(null);
+    setPagerResetKey({}); // back to the Spectrum page right away (e.g. from Flicker)
     setStatus('measuring');
     try {
       // An all-zero result (the meter handing back an empty buffer, seen on
@@ -679,8 +684,130 @@ export default function HomeScreen({ navigation }: any) {
     }
   }, [appendLog]);
 
+  // ---- Live (continuous spectrum) and Flicker --------------------------------------------------
+  // One long-running mode at a time. Live keeps replacing `result` with each refresh (never auto-saved);
+  // once stopped, a Save button offers to put the last one in History. Flicker feeds the fourth chart page.
+  const [mode, setMode] = useState<'idle' | 'live' | 'flicker'>('idle');
+  const sessionRef = useRef<LiveSession | null>(null);
+  const liveLastRef = useRef<MeterResult | null>(null);
+  const [liveUnsaved, setLiveUnsaved] = useState<MeterResult | null>(null);
+  const [savingLive, setSavingLive] = useState(false);
+  const [flickerReading, setFlickerReading] = useState<FlickerReading | null>(null);
+  const [flickerFocus, setFlickerFocus] = useState(0);
+  const [flickerHistory, setFlickerHistory] = useState<{ f: number; p: number }[]>([]);
+  // The pager only returns to the Spectrum page for a genuinely new reading, not for every Live refresh.
+  const [pagerResetKey, setPagerResetKey] = useState<unknown>(null);
+  useEffect(() => {
+    if (result !== liveLastRef.current) setPagerResetKey(result);
+  }, [result]);
+
+  const stopActiveMode = useCallback(async () => {
+    const sess = sessionRef.current;
+    if (sess) await sess.stop();
+  }, []);
+
+  const toggleLive = useCallback(async () => {
+    if (mode === 'live') {
+      await stopActiveMode();
+      return;
+    }
+    if (mode !== 'idle' || !connRef.current) return;
+    setMode('live');
+    setPagerResetKey({});
+    setLiveUnsaved(null);
+    liveLastRef.current = null;
+    sessionRef.current = startLiveSpectrum(
+      connRef.current,
+      appendLog,
+      (r) => {
+        liveLastRef.current = r;
+        setResult(r);
+        setUploadSucceeded(false);
+        setCurrentReadingId(null);
+      },
+      (err) => {
+        sessionRef.current = null;
+        setMode('idle');
+        if (liveLastRef.current) setLiveUnsaved(liveLastRef.current);
+        if (err) {
+          hapticFailure();
+          Alert.alert('Live reading stopped', err.message ?? 'The meter stopped responding.');
+        }
+      }
+    );
+  }, [mode, stopActiveMode, appendLog]);
+
+  const toggleFlicker = useCallback(async () => {
+    if (mode === 'flicker') {
+      await stopActiveMode();
+      return;
+    }
+    if (mode !== 'idle' || !connRef.current) return;
+    setMode('flicker');
+    setFlickerReading(null);
+    setFlickerHistory([]);
+    setFlickerFocus((n) => n + 1);
+    sessionRef.current = startFlicker(
+      connRef.current,
+      appendLog,
+      (r) => {
+        setFlickerReading(r);
+        setFlickerHistory((h) => [...h.slice(-39), { f: r.frequencyHz, p: r.percentFlicker }]);
+      },
+      (err) => {
+        sessionRef.current = null;
+        setMode('idle');
+        if (err) {
+          hapticFailure();
+          Alert.alert('Flicker reading stopped', err.message ?? 'The meter stopped responding.');
+        }
+      }
+    );
+  }, [mode, stopActiveMode, appendLog]);
+
+  const saveLive = useCallback(async () => {
+    const r = liveUnsaved;
+    if (!r || savingLive) return;
+    setSavingLive(true);
+    try {
+      const creds = await loadHcriCredentials();
+      const label = defaultLabel(creds?.username ?? null, r.deviceName);
+      const saved = await addReading(r, label);
+      setCurrentReadingId(saved.id);
+      setLiveUnsaved(null);
+      hapticSuccess();
+    } catch (e: any) {
+      appendLog(`Failed to save live reading to history: ${e.message}`);
+      Alert.alert('Could not save', e.message ?? 'The reading could not be saved to History.');
+    } finally {
+      setSavingLive(false);
+    }
+  }, [liveUnsaved, savingLive, appendLog]);
+
+  const flickerSettingsApi = useMemo<FlickerSettingsApi>(
+    () => ({
+      load: async () => (connRef.current ? readFlickerSettings(connRef.current, appendLog) : {}),
+      apply: async (key, value) => (connRef.current ? writeFlickerSetting(connRef.current, key, value, appendLog) : false),
+      canEdit: mode === 'idle',
+    }),
+    [mode, appendLog]
+  );
+
+  // A dropped link (or any disconnect) ends whatever is running, and the Flicker page goes away -- so go back to the first chart.
+  useEffect(() => {
+    if (status === 'disconnected') setPagerResetKey({});
+    if (status === 'disconnected' && sessionRef.current) {
+      sessionRef.current.stop().catch(() => {});
+    }
+  }, [status]);
+
   const disconnect = useCallback(async () => {
     if (!connRef.current) return;
+    try {
+      await stopActiveMode();
+    } catch {
+      // ignore: we're disconnecting anyway
+    }
     try {
       await connRef.current.disconnect();
     } catch (e: any) {
@@ -708,7 +835,7 @@ export default function HomeScreen({ navigation }: any) {
     // time this component mounts from scratch.
     setStatus('disconnected');
     setDeviceName(null);
-  }, [appendLog]);
+  }, [appendLog, stopActiveMode]);
 
   // Disconnects the meter the moment the app leaves the foreground
   // (minimized, switched away from, screen locked) -- matches the stock
@@ -1104,6 +1231,12 @@ export default function HomeScreen({ navigation }: any) {
             onUploadTitleChange={setUploadTitle}
             cachedUsername={cachedUsername}
             scrollInputIntoView={scrollInputIntoView}
+            pagerResetKey={pagerResetKey}
+            flicker={
+              (status === 'connected' || status === 'uploading' || status === 'measuring') && deviceSupportsFlicker(deviceName)
+                ? { reading: flickerReading, running: mode === 'flicker', focusNonce: flickerFocus, history: flickerHistory, settings: flickerSettingsApi }
+                : undefined
+            }
           />
       </View>
       ) : (
@@ -1144,6 +1277,14 @@ export default function HomeScreen({ navigation }: any) {
           copyingLink={copyingLink}
           onCopyLink={copyReportLink}
           onResetConnection={resetConnection}
+          liveSupported={deviceSupportsLive(deviceName)}
+          flickerSupported={deviceSupportsFlicker(deviceName)}
+          activeMode={mode}
+          onToggleLive={toggleLive}
+          onToggleFlicker={toggleFlicker}
+          canSaveLive={!!liveUnsaved}
+          savingLive={savingLive}
+          onSaveLive={saveLive}
         />
       )}
     </SafeAreaView>

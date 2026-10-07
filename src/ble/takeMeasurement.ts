@@ -79,10 +79,26 @@ export async function initializeMeter(conn: MeterConnection): Promise<void> {
  * Triggers a single measurement and resolves with the parsed result once the
  * meter has genuinely finished (not just looked stable for one poll).
  */
+export interface TakeMeasurementOptions {
+  /** Command that starts the test. Default: single test (8C 0E 01). `null` = don't send one (a continuous run that is already going). */
+  startCommand?: number[] | null;
+  /** Send 8C 25 after the result arrives (default true). Live mode leaves sampling running between cycles. */
+  sendStop?: boolean;
+  /** Polled every poll interval; return true to abandon this wait (rejects with an 'AbortedError'). */
+  shouldAbort?: () => boolean;
+  /** Gap between 8C 05 polls (default POLL_INTERVAL_MS). */
+  pollIntervalMs?: number;
+}
+
+export const ABORTED_ERROR = 'AbortedError';
+
 export async function takeMeasurement(
   conn: MeterConnection,
-  log: LogFn = () => {}
+  log: LogFn = () => {},
+  opts: TakeMeasurementOptions = {}
 ): Promise<MeterResult> {
+  const startCommand = opts.startCommand === undefined ? CMD_START_SINGLE_TEST : opts.startCommand;
+  const sendStop = opts.sendStop !== false;
   // Defensive: clear any stray in-flight reassembly state from previous
   // churn before starting. A late-arriving response from earlier polling
   // should never bleed into this measurement.
@@ -350,7 +366,7 @@ export async function takeMeasurement(
 
       if (msg.subCommand === 0x13) {
         if (pollingDone && msg.body.length > 0) {
-          conn.sendCommand(CMD_STOP_SAMPLING).catch(() => {});
+          if (sendStop) conn.sendCommand(CMD_STOP_SAMPLING).catch(() => {});
           settled = true;
           cleanup();
 
@@ -439,10 +455,18 @@ export async function takeMeasurement(
         // reconnects between readings, or a genuinely different next
         // theory, are the paths left; touching this per-test sequence
         // further is not.
-        await conn.sendCommand(CMD_START_SINGLE_TEST);
+        if (startCommand) await conn.sendCommand(startCommand);
         while (!pollingDone && !settled) {
+          if (opts.shouldAbort?.()) {
+            settled = true;
+            cleanup();
+            const err = new Error('Measurement cancelled');
+            err.name = ABORTED_ERROR;
+            reject(err);
+            return;
+          }
           await conn.sendCommand(CMD_READ_INTEG_TIME);
-          await sleep(POLL_INTERVAL_MS);
+          await sleep(opts.pollIntervalMs ?? POLL_INTERVAL_MS);
         }
       } catch (e) {
         if (!settled) {
