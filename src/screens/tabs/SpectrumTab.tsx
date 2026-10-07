@@ -260,8 +260,9 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
                 <MeasuredBox>
                   {(h) =>
                     analysis.x > 0 || analysis.y > 0 ? (
-                      // -6: the chart's own container adds 6px of top padding.
-                      <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} height={h - 6} width={chartWidth} />
+                      // -16: the chart's own container adds 6px of top padding, plus a little bottom breathing room
+                      // so the x-axis labels never touch the card border.
+                      <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} height={h - 16} width={chartWidth} />
                     ) : null
                   }
                 </MeasuredBox>
