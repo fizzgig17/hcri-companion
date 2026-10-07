@@ -120,7 +120,8 @@ export function startLiveSpectrum(
       if (stopped) return;
       stopped = true;
       end();
-      await sendStopReliably(conn, log);
+      // Fire and forget: the UI must never wait on a Bluetooth write (a stuck write used to hold up Disconnect).
+      sendStopReliably(conn, log).catch(() => {});
     },
   };
 }
@@ -374,7 +375,8 @@ export function startFlicker(
       stopped = true;
       log('Flicker: Stop tapped');
       end();
-      await sendStopReliably(conn, log);
+      // Fire and forget: the UI must never wait on a Bluetooth write (a stuck write used to hold up Disconnect).
+      sendStopReliably(conn, log).catch(() => {});
     },
   };
 }

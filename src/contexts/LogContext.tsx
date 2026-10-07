@@ -51,6 +51,8 @@ export function LogProvider({ children }: { children: React.ReactNode }) {
   // recreated; reading a ref lets this setting apply live without
   // appendLog needing to depend on it.
   const verboseLoggingRef = useRef(false);
+  const pendingRef = useRef<string[]>([]);
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refreshVerboseLogging = useCallback(() => {
     loadVerboseLoggingPreference()
@@ -71,6 +73,9 @@ export function LogProvider({ children }: { children: React.ReactNode }) {
     // screen-mirror or copy text off the phone itself. Deliberately
     // unfiltered: Metro is a developer-only audience that already sees
     // everything regardless of this app's own Verbose Logging setting.
+    // Verbose lines are skipped entirely (console too) while Verbose Logging is off: during Live
+    // mode there are dozens per second and formatting/forwarding them starves the JS thread.
+    if (verbose && !verboseLoggingRef.current) return;
     console.log(`[meter] ${msg}`);
     // The Logs tab / Share Debug Log, on the other hand, is what the
     // Verbose Logging setting actually controls -- a verbose-flagged line
@@ -82,10 +87,24 @@ export function LogProvider({ children }: { children: React.ReactNode }) {
     // the AppState foreground/background transitions, CrashReporter's own
     // folded-in record, everything), so nothing can land untimestamped by
     // a caller forgetting to.
-    setLog((prev) => [...prev.slice(-99), `${timestampPrefix()}  ${msg}`]);
+    // Lines are buffered and flushed at most ~3x/second: every setLog re-renders everything that
+    // reads the log, and at BLE wire frequency (Live polling) that made taps on Stop/Disconnect
+    // get lost behind a wall of re-renders.
+    pendingRef.current.push(`${timestampPrefix()}  ${msg}`);
+    if (!flushTimerRef.current) {
+      flushTimerRef.current = setTimeout(() => {
+        flushTimerRef.current = null;
+        const batch = pendingRef.current;
+        pendingRef.current = [];
+        setLog((prev) => [...prev, ...batch].slice(-100));
+      }, 300);
+    }
   }, []);
 
-  const clearLog = useCallback(() => setLog([]), []);
+  const clearLog = useCallback(() => {
+    pendingRef.current = [];
+    setLog([]);
+  }, []);
 
   const value = useMemo<LogContextValue>(
     () => ({ log, appendLog, clearLog, refreshVerboseLogging }),
