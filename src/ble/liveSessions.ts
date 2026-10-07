@@ -65,6 +65,8 @@ export function startLiveSpectrum(
     let failures = 0;
     let first = true;
     let cycles = 0;
+    let lastSig = '';
+    let dupes = 0;
     const t0 = Date.now();
     try {
       while (!stopped) {
@@ -82,7 +84,19 @@ export function startLiveSpectrum(
           const took = Date.now() - tCycle;
           log(`Live cycle ${cycles}: ${took}ms (integration ${r.integrationTimeMs ?? '?'}ms)`, true);
           if (cycles % 10 === 0) log(`Live: ${cycles} refreshes, ${((Date.now() - t0) / cycles).toFixed(0)}ms average`);
-          if (!stopped) onResult(r);
+          // The meter can hand back the previous exposure again (stale "test end" state);
+          // only show genuinely new spectra, and pace to one integration time per refresh.
+          const sig = r.spectrum.map((p) => p.value).join(',');
+          const duplicate = sig === lastSig;
+          lastSig = sig;
+          if (duplicate) {
+            dupes += 1;
+            log(`Live: duplicate result skipped (${dupes} so far)`, true);
+          } else if (!stopped) {
+            onResult(r);
+          }
+          const wait = Math.max(150, Math.min(1500, r.integrationTimeMs ?? 0)) - took;
+          if (wait > 0 && !stopped) await sleep(wait);
         } catch (e: any) {
           if (stopped || e?.name === ABORTED_ERROR) break;
           failures += 1;
