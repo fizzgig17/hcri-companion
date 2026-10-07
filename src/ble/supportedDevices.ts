@@ -80,6 +80,16 @@ export const SUPPORTED_DEVICES: SupportedDevice[] = [
     ],
   },
   {
+    model: 'Torch Bearer (via ESP32 bridge)',
+    matchedBy: 'Advertised name starts with "Torch Bearer" (the T-Display S3 bridge firmware, not the spectrometer itself)',
+    verified: false,
+    notes: [
+      'Spectrum-only device: CCT, Duv, CRI/R1-R15 and TM-30 Rf/Rg are computed by the app from the spectrum, the same way as for the HPCS meters.',
+      'Lux and PAR are calculated from the raw spectrum using the Torch Bearer\'s own units (W/m\u00b2/nm) and have NOT been calibrated against a reference meter yet -- treat them as approximate.',
+      'Single reading only for now: Live, Flicker and battery are not available on this device.',
+    ],
+  },
+  {
     model: 'Any other "HPCS*" device',
     matchedBy: 'Fallback default when nothing above matches',
     verified: false,

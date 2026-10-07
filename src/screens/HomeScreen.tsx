@@ -625,12 +625,17 @@ export default function HomeScreen({ navigation }: any) {
       // the first reading after connecting) is retried once automatically
       // rather than shown as a blank chart with nonsense stats.
       let r: MeterResult;
-      try {
-        r = await takeMeasurement(connRef.current, appendLog);
-      } catch (e: any) {
-        if (e?.name !== EMPTY_READING_ERROR) throw e;
-        appendLog('Meter returned an empty reading -- retrying once...');
-        r = await takeMeasurement(connRef.current, appendLog);
+      if (connRef.current.isTorchBearer()) {
+        // Torch Bearer (ESP32 bridge): one write starts a scan, the whole spectrum comes back.
+        r = await connRef.current.takeTorchBearerReading();
+      } else {
+        try {
+          r = await takeMeasurement(connRef.current, appendLog);
+        } catch (e: any) {
+          if (e?.name !== EMPTY_READING_ERROR) throw e;
+          appendLog('Meter returned an empty reading -- retrying once...');
+          r = await takeMeasurement(connRef.current, appendLog);
+        }
       }
       setResult(r);
       // A fresh reading hasn't been uploaded yet -- clears any checkmark
