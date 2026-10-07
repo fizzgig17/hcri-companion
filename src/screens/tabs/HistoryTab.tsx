@@ -2,7 +2,7 @@
 //
 // Every completed measurement, most-recent first (see
 // ../../storage/readingHistory.ts -- persisted locally, survives app
-// restarts). Each row's label is editable in place -- committed on blur --
+// restarts). Each row's label is editable by tapping it (popup editor, same as Main's upload title)
 // and can be uploaded to hCRI.io or shared as CSV independently of
 // whatever the "current"/latest reading on Main/Data happens to be right
 // now. Uploading uses whatever label is currently in the field (even if
@@ -20,8 +20,8 @@
 // selected reading's already-committed label, not whatever's sitting
 // unsaved in a field you haven't blurred yet.
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import React, { useMemo, useRef, useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal } from 'react-native';
 import PrimaryButton from '../../components/PrimaryButton';
 import CollapsibleSection from '../../components/CollapsibleSection';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -110,7 +110,11 @@ function HistoryRow({
   onOpenReport: (reading: SavedReading, tm30: boolean) => void;
 }) {
   const { colors } = useTheme();
-  const [text, setText] = useState(reading.label);
+  // Title editing works like the Main tab's: tap the title, edit it in a
+  // popup (so the keyboard never covers it), Save commits the rename.
+  const [modalVisible, setModalVisible] = useState(false);
+  const [draft, setDraft] = useState(reading.label);
+  const inputRef = useRef<any>(null);
 
   // Spectrum-derived CCT/Ra for the row summary below, same values
   // Main/Spectrum/Data show -- NOT the device-reported result.cct/result.ra
@@ -126,20 +130,15 @@ function HistoryRow({
     [reading.analysis, reading.result.spectrum]
   );
 
-  // Keep the field in sync if this reading's label changes from elsewhere
-  // (e.g. a rename that came from the upload flow itself) -- without this,
-  // an upload-triggered rename would silently desync the field from what's
-  // actually saved until the next full history reload.
-  useEffect(() => {
-    setText(reading.label);
-  }, [reading.label]);
+  const openEditor = () => {
+    setDraft(reading.label);
+    setModalVisible(true);
+  };
 
   const commitRename = () => {
-    const trimmed = text.trim();
-    if (!trimmed) {
-      setText(reading.label); // don't allow blanking a saved reading's name out
-      return;
-    }
+    const trimmed = draft.trim();
+    setModalVisible(false);
+    if (!trimmed) return; // don't allow blanking a saved reading's name out
     if (trimmed !== reading.label) {
       onRename(reading.id, trimmed);
     }
@@ -190,6 +189,35 @@ function HistoryRow({
       minHeight: 32,
       marginBottom: 6,
     },
+    modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'flex-start', paddingTop: 70, paddingHorizontal: 24 },
+    modalSheet: {
+      width: '100%',
+      maxWidth: 400,
+      backgroundColor: colors.card,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      padding: 18,
+    },
+    modalTitle: { color: colors.text, fontSize: 16, fontWeight: '700', marginBottom: 14 },
+    modalInput: {
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 8,
+      color: colors.text,
+      fontSize: 14,
+      minHeight: 70,
+      maxHeight: 120,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      textAlignVertical: 'top',
+    },
+    modalButtons: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 8 },
+    modalCancel: { alignItems: 'center', paddingVertical: 12, marginTop: 6 },
+    modalCancelText: { color: colors.muted, fontSize: 13, fontWeight: '600' },
+    modalSave: { backgroundColor: colors.accent, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 22, marginLeft: 8, marginTop: 6 },
+    modalSaveText: { color: colors.text, fontSize: 14, fontWeight: '700' },
 
     rowActions: { flexDirection: 'row', marginHorizontal: -4 },
     actionButton: {
@@ -257,27 +285,59 @@ function HistoryRow({
         )}
       </View>
 
-      {/* multiline so a long label (now username + date + time + timezone +
-          device by default, not just a bare timestamp) actually wraps into
-          view instead of being clipped off the edge of a single-line
-          field -- same reasoning as the Upload Title field on Data tab. */}
-      <TextInput
+      {/* Tap to edit in a popup, same as the Main tab's upload title. */}
+      <TouchableOpacity
         style={styles.labelInput}
-        value={text}
-        onChangeText={setText}
-        onBlur={commitRename}
-        editable={!selectMode}
-        autoCapitalize="none"
-        autoCorrect={false}
-        multiline
-        textAlignVertical="top"
-      />
+        onPress={openEditor}
+        disabled={selectMode}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel="Reading title. Tap to edit."
+      >
+        <Text style={{ color: colors.text, fontSize: 13 }}>{reading.label}</Text>
+      </TouchableOpacity>
+
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+        onShow={() => {
+          setTimeout(() => inputRef.current?.focus(), 150);
+        }}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>Reading title</Text>
+            <TextInput
+              ref={inputRef}
+              style={styles.modalInput}
+              value={draft}
+              onChangeText={setDraft}
+              multiline
+              autoCapitalize="none"
+              autoCorrect={false}
+              submitBehavior="blurAndSubmit"
+              returnKeyType="done"
+              onSubmitEditing={commitRename}
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setModalVisible(false)}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalSave} onPress={commitRename}>
+                <Text style={styles.modalSaveText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {!selectMode && (
         <View style={styles.rowActions}>
           <TouchableOpacity
             style={[styles.actionButton, uploading && styles.actionButtonDisabled]}
-            onPress={() => onUploadWithLabel(reading.id, text.trim() || reading.label)}
+            onPress={() => onUploadWithLabel(reading.id, reading.label)}
             disabled={uploading}
           >
             {uploading ? (
