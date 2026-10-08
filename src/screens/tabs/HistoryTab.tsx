@@ -22,6 +22,7 @@
 
 import React, { useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal } from 'react-native';
+import Svg, { Polyline } from 'react-native-svg';
 import PrimaryButton from '../../components/PrimaryButton';
 import CollapsibleSection from '../../components/CollapsibleSection';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -281,6 +282,13 @@ function HistoryRow({
           <Text style={styles.rowSummaryInline}>
             {analysis.cct.toFixed(0)}K · Ra {analysis.ra.toFixed(1)}
           </Text>
+          {!!reading.result.flicker && (
+            <View style={{ marginLeft: 6 }} accessibilityLabel="Includes a flicker reading">
+              <Svg width={16} height={12} viewBox="0 0 16 12">
+                <Polyline points="0,9 3,9 3,2 7,2 7,9 11,9 11,2 15,2" fill="none" stroke={colors.accent} strokeWidth={1.6} strokeLinejoin="round" />
+              </Svg>
+            </View>
+          )}
         </View>
         {!selectMode && (
           <View style={styles.rowHeaderButtons}>

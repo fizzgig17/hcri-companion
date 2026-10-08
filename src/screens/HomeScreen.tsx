@@ -659,6 +659,9 @@ export default function HomeScreen({ navigation }: any) {
       }
       // Optional extra (Settings -> "Capture flicker with each reading", off by default): one flicker snapshot
       // after the spectrum, saved with the reading. Failure never affects the reading itself.
+      // A new reading starts with a clean Flicker page (no leftover flicker from the previous light).
+      setFlickerReading(null);
+      setFlickerHistory([]);
       if (!r.source && deviceSupportsFlicker(r.deviceName) && (await loadFlickerWithReadingPreference().catch(() => false))) {
         const f = await captureFlickerOnce(connRef.current, appendLog);
         if (f) {

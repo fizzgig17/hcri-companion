@@ -125,6 +125,10 @@ export default function FlickerChart({ reading, running, history, settings, uplo
   const runStart = useRef(0);
   useEffect(() => {
     if (!running) return;
+    // A fresh run always starts live: drop any pause and zoom left over from the previous one.
+    setHeld(null);
+    setZoom(1);
+    setStart(0);
     runStart.current = Date.now();
     setRefreshes(0);
     setRunMs(0);
