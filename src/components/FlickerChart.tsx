@@ -176,9 +176,9 @@ export default function FlickerChart({ reading, running, history, settings, uplo
     stat: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     statVal: { color: '#111', fontSize: 12.5, fontWeight: '700' },
     statLabel: { color: '#666', fontSize: 9, marginTop: 0 },
-    actRow: { height: ACT_H, flexDirection: 'row', alignItems: 'center' },
-    actBlock: { borderTopWidth: 1, borderTopColor: '#e3e5ea', justifyContent: 'center', paddingVertical: 6 },
-    note: { height: NOTE_H, textAlign: 'center', fontSize: 10, color: '#777', textAlignVertical: 'center' },
+    actRow: { height: ACT_H - 4, flexDirection: 'row', alignItems: 'center' },
+    actBlock: { borderTopWidth: 1, borderTopColor: '#e3e5ea', justifyContent: 'center' },
+    note: { height: NOTE_H - 4, textAlign: 'center', fontSize: 10, color: '#777', textAlignVertical: 'center' },
     actBtn: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     actTxt: { fontSize: 10, fontWeight: '600', marginTop: 0 },
     riskRow: { height: RISK_H, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
@@ -260,7 +260,7 @@ export default function FlickerChart({ reading, running, history, settings, uplo
   const noteTxt = canControl && !running && readingNote ? readingNote === 'unsaved' ? 'New sample clears the current reading (it isn’t saved to History).' : 'New sample clears the current reading (it stays in History).' : '';
   const renderActions = (extras?: React.ReactNode) =>
     canControl ? (
-      <View style={[styles.actBlock, { height: ACT_H + (noteTxt ? NOTE_H : 0) + 12 }]}>
+      <View style={[styles.actBlock, { height: ACT_H + (noteTxt ? NOTE_H : 0) }]}>
       <View style={styles.actRow}>
         {canSampleReading && sampleBtn('reading', ICON_REDO, redoLabel ?? 'Add to reading', 'Take a flicker sample for the current reading')}
         {running && (
@@ -351,7 +351,7 @@ export default function FlickerChart({ reading, running, history, settings, uplo
     }
   };
 
-  const bodyH = Math.max(40, height - HEAD_H - STATS_H - RISK_H - (canControl ? ACT_H + (noteTxt ? NOTE_H : 0) + 12 : 0) - 2);
+  const bodyH = Math.max(40, height - HEAD_H - STATS_H - RISK_H - (canControl ? ACT_H + (noteTxt ? NOTE_H : 0) : 0) - 2);
 
   // ---------------- waveform view ----------------
   const renderWave = () => {
