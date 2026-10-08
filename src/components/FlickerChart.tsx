@@ -38,6 +38,8 @@ interface Props {
   /** Re-measure flicker for the reading just taken (only offered while that reading hasn't been uploaded). */
   onRedo?: () => void;
   redoLabel?: string;
+  /** Small tag shown when the displayed flicker belongs to the current reading (e.g. 'For this reading'). */
+  readingNote?: string;
   /** The reading on screen was captured with a spectrum reading (it goes up/out with that reading). */
   fromReading?: boolean;
   reading: FlickerReading | null;
@@ -115,7 +117,7 @@ function fmtMs(ms: number): string {
 const HIGH_LINE: [number, number][] = [[1, 0.2], [8, 0.2], [90, 2.25], [90, 7.2], [2000, 160]];
 const LOW_LINE: [number, number][] = [[1, 0.1], [8, 0.1], [8, 0.08], [90, 0.9], [90, 3], [2000, 66.6]];
 
-export default function FlickerChart({ reading, running, history, settings, upload, onToggle, onRedo, redoLabel, fromReading, width, height }: Props) {
+export default function FlickerChart({ reading, running, history, settings, upload, onToggle, onRedo, redoLabel, readingNote, fromReading, width, height }: Props) {
   const [snap, setSnap] = useState<FlickerReading | null>(null);
   const [showUpload, setShowUpload] = useState(false);
   const [upTitle, setUpTitle] = useState('');
@@ -471,6 +473,7 @@ export default function FlickerChart({ reading, running, history, settings, uplo
         </View>
       </View>
       <View style={styles.riskRow}>
+        {fromReading && !!readingNote && <Text style={styles.settingTag} allowFontScaling={false} numberOfLines={1}>{readingNote}</Text>}
         {(running || refreshes > 0) && (
           <Text style={[styles.counter, { color: running ? RISK_COLOR.none : HOLD_COLOR }]} allowFontScaling={false} numberOfLines={1}>
             {running ? '● ' : 'Stopped '}{refreshes} · {fmtElapsed(runMs)}
