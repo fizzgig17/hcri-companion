@@ -180,6 +180,11 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
               pagingEnabled
               decelerationRate="fast"
               nestedScrollEnabled
+              // Same reason as HistoryScreen's ScrollView: the default
+              // ("never") eats the first tap while the keyboard is up, which
+              // broke Save/Cancel in popups opened from a page (the rename
+              // popup needed two taps).
+              keyboardShouldPersistTaps="handled"
               scrollEnabled={!scrollLocked}
               overScrollMode="never"
               bounces={false}

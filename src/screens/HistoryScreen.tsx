@@ -317,7 +317,13 @@ export default function HistoryScreen({ navigation }: any) {
     // status-bar/notch inset for itself right above this screen, and
     // requesting it again here double-stacks it into a dead gap.
     <SafeAreaView style={styles.container} edges={IS_DEV_BUILD ? ['left', 'right'] : ['top', 'left', 'right']}>
-      <ScrollView contentContainerStyle={styles.content}>
+      {/* keyboardShouldPersistTaps="handled": this ScrollView is a parent (in
+          React terms) of the rename popup in HistoryTab, and its default
+          ("never") eats the first tap while the keyboard is up -- it just
+          dismissed the keyboard and never passed the tap to the popup's Save
+          button, so Save took two taps. "handled" lets a tap on a button go
+          straight through. */}
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>History</Text>
         <HistoryTab
           history={history}
