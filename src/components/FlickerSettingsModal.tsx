@@ -3,6 +3,11 @@
 // The meter's flicker range ("gear") and sample-rate settings, as in the stock
 // app's settings sheet. Values are read from the meter when opened and written
 // back one at a time. These settings live on the meter itself.
+//
+// What the meter actually does (seen in debug logs): the range and sample RATE you pick stay put across
+// reconnects, but its "auto sample rate" flag turns itself back on. So the chips are always shown (the current
+// value highlighted), picking one turns Auto off and sets it in one step, and after every write the values are
+// read back from the meter so the popup shows what the meter really has, not what we hoped we set.
 
 import React, { useEffect, useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, Switch, ActivityIndicator, StyleSheet } from 'react-native';
@@ -43,8 +48,53 @@ export default function FlickerSettingsModal({ visible, onClose, api }: { visibl
     setBusy(true);
     setNote('');
     const ok = await api.apply(key, value);
-    if (ok) setS((prev) => ({ ...(prev ?? {}), [key]: value }));
-    else setNote('The meter did not confirm that change.');
+    if (!ok) {
+      setNote('The meter did not confirm that change.');
+    } else {
+      const fresh = await refresh();
+      if (fresh && fresh[key] !== undefined && fresh[key] !== value) {
+        setNote('The meter did not keep that change, so it is showing what the meter reports.');
+      }
+    }
+    setBusy(false);
+  };
+
+  /** Reads the settings back from the meter and shows them (only values the meter actually answered). */
+  const refresh = async (): Promise<FlickerSettings | null> => {
+    try {
+      const fresh = await api.load();
+      setS((prev) => {
+        const next: FlickerSettings = { ...(prev ?? {}) };
+        (Object.keys(fresh) as (keyof FlickerSettings)[]).forEach((k) => {
+          if (fresh[k] !== undefined) (next as any)[k] = fresh[k];
+        });
+        return next;
+      });
+      return fresh;
+    } catch {
+      return null;
+    }
+  };
+
+  /** Tapping a range / rate chip: turns Auto off if needed, sets the value, then reads it back. */
+  const pick = async (key: 'gear' | 'sampleIdx', idx: number) => {
+    if (!api.canEdit || busy) return;
+    setBusy(true);
+    setNote('');
+    const autoKey: FlickerSettingKey = key === 'gear' ? 'autoGear' : 'autoRate';
+    let ok = true;
+    if (s?.[autoKey]) ok = await api.apply(autoKey, false);
+    if (ok) ok = await api.apply(key, idx);
+    if (!ok) {
+      setNote('The meter did not confirm that change.');
+    } else {
+      const fresh = await refresh();
+      if (fresh && fresh[key] !== undefined && fresh[key] !== idx) {
+        setNote('The meter did not keep that change, so it is showing what the meter reports.');
+      } else if (key === 'sampleIdx' && fresh?.autoRate) {
+        setNote('The meter shows Auto again by itself, but it keeps the rate you picked.');
+      }
+    }
     setBusy(false);
   };
 
@@ -54,7 +104,9 @@ export default function FlickerSettingsModal({ visible, onClose, api }: { visibl
     title: { color: colors.text, fontSize: 16, fontWeight: '700', marginBottom: 2 },
     sub: { color: colors.muted, fontSize: 12, marginBottom: 12 },
     row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 },
-    label: { color: colors.text, fontSize: 14, fontWeight: '600' },
+    label: { color: colors.text, fontSize: 14, fontWeight: '600', flexShrink: 1 },
+    autoWrap: { flexDirection: 'row', alignItems: 'center' },
+    autoTxt: { color: colors.muted, fontSize: 12, marginRight: 4 },
     chips: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8 },
     chip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: colors.cardBorder, marginRight: 6, marginBottom: 6 },
     chipOn: { backgroundColor: colors.accent, borderColor: colors.accent },
@@ -76,29 +128,33 @@ export default function FlickerSettingsModal({ visible, onClose, api }: { visibl
       <View style={styles.backdrop}>
         <View style={styles.sheet}>
           <Text style={styles.title}>Flicker settings</Text>
-          <Text style={styles.sub}>Stored on the meter itself. Leave both on Auto unless a reading looks clipped or too coarse.</Text>
+          <Text style={styles.sub}>Stored on the meter itself. Tap a value to fix it, or turn Auto on to let the meter choose.</Text>
           {!s ? (
             <ActivityIndicator color={colors.accent} style={{ marginVertical: 24 }} />
           ) : (
             <>
               <View style={styles.row}>
-                <Text style={styles.label}>Gear (range): Auto</Text>
-                <Switch value={!!s.autoGear} onValueChange={(v) => change('autoGear', v)} disabled={!api.canEdit || busy} />
-              </View>
-              {!s.autoGear && (
-                <View style={styles.chips}>
-                  {GEARS.map((g, i) => chip(g, s.gear === i, () => change('gear', i), g))}
+                <Text style={styles.label}>Gear (range){s.gear !== undefined && GEARS[s.gear] ? `: ${GEARS[s.gear]}` : ''}</Text>
+                <View style={styles.autoWrap}>
+                  <Text style={styles.autoTxt}>Auto</Text>
+                  <Switch value={!!s.autoGear} onValueChange={(v) => change('autoGear', v)} disabled={!api.canEdit || busy} />
                 </View>
-              )}
+              </View>
+              <View style={styles.chips}>
+                {GEARS.map((g, i) => chip(g, s.gear === i, () => pick('gear', i), g))}
+              </View>
               <View style={styles.row}>
-                <Text style={styles.label}>Sample rate: Auto</Text>
-                <Switch value={!!s.autoRate} onValueChange={(v) => change('autoRate', v)} disabled={!api.canEdit || busy} />
-              </View>
-              {!s.autoRate && (
-                <View style={styles.chips}>
-                  {RATES.map((r, i) => chip(r, s.sampleIdx === i, () => change('sampleIdx', i), r, SPANS[i]))}
+                <Text style={styles.label}>
+                  Sample rate{s.sampleIdx !== undefined && RATES[s.sampleIdx] ? `: ${RATES[s.sampleIdx]} · ${SPANS[s.sampleIdx]}` : ''}
+                </Text>
+                <View style={styles.autoWrap}>
+                  <Text style={styles.autoTxt}>Auto</Text>
+                  <Switch value={!!s.autoRate} onValueChange={(v) => change('autoRate', v)} disabled={!api.canEdit || busy} />
                 </View>
-              )}
+              </View>
+              <View style={styles.chips}>
+                {RATES.map((r, i) => chip(r, s.sampleIdx === i, () => pick('sampleIdx', i), r, SPANS[i]))}
+              </View>
               {s.autoGear === undefined && s.autoRate === undefined && <Text style={styles.note}>The meter did not answer the settings request.</Text>}
               {!api.canEdit && <Text style={styles.note}>Stop the current run to change settings.</Text>}
               {!!note && <Text style={styles.note}>{note}</Text>}
