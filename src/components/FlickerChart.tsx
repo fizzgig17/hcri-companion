@@ -256,7 +256,7 @@ export default function FlickerChart({ reading, running, history, settings, uplo
       </TouchableOpacity>
     );
   };
-  const noteTxt = canControl && !running && readingNote ? 'New sample clears the current reading (it stays in History).' : '';
+  const noteTxt = canControl && !running && readingNote ? readingNote === 'unsaved' ? 'New sample clears the current reading (it isn’t saved to History).' : 'New sample clears the current reading (it stays in History).' : '';
   const renderActions = (extras?: React.ReactNode) =>
     canControl ? (
       <>

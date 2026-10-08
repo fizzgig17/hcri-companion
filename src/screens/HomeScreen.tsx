@@ -1383,8 +1383,8 @@ export default function HomeScreen({ navigation }: any) {
             scrollInputIntoView={scrollInputIntoView}
             pagerResetKey={pagerResetKey}
             flicker={
-              (status === 'connected' || status === 'uploading' || status === 'measuring') && deviceSupportsFlicker(deviceName)
-                ? { reading: flickerReading, running: mode === 'flicker', focusNonce: flickerFocus, history: flickerHistory, settings: flickerSettingsApi, upload: flickerUploadApi, target: mode === 'flicker' ? flickerTarget : null, onStart: startFlickerSample, onStop: stopFlicker, canSampleReading, fromReading: flickerFromReading, redoLabel: result?.flicker ? 'Redo for reading' : 'Add to reading', readingNote: result ? 'reading' : undefined }
+              (status === 'connected' || status === 'uploading' || status === 'measuring') && deviceSupportsFlicker(deviceName) && mode !== 'live'
+                ? { reading: flickerReading, running: mode === 'flicker', focusNonce: flickerFocus, history: flickerHistory, settings: flickerSettingsApi, upload: flickerUploadApi, target: mode === 'flicker' ? flickerTarget : null, onStart: startFlickerSample, onStop: stopFlicker, canSampleReading, fromReading: flickerFromReading, redoLabel: result?.flicker ? 'Redo for reading' : 'Add to reading', readingNote: result ? (currentReadingId ? 'saved' : 'unsaved') : undefined }
                 : undefined
             }
           />
@@ -1428,7 +1428,7 @@ export default function HomeScreen({ navigation }: any) {
           onCopyLink={copyReportLink}
           onResetConnection={resetConnection}
           liveSupported={deviceSupportsLive(deviceName)}
-          flickerSupported={deviceSupportsFlicker(deviceName)}
+          flickerSupported={deviceSupportsFlicker(deviceName) && mode !== 'live'}
           activeMode={mode}
           onToggleLive={toggleLive}
           onToggleFlicker={() => setFlickerFocus((n) => n + 1)}
