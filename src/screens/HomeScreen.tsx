@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MeterConnection } from '../ble/MeterConnection';
 import type { BatteryStatus } from '../ble/protocol';
 import { deviceSupportsLive, deviceSupportsFlicker } from '../ble/protocol';
-import { startLiveSpectrum, startFlicker, readFlickerSettings, writeFlickerSetting, type LiveSession, type FlickerReading } from '../ble/liveSessions';
+import { startLiveSpectrum, startFlicker, captureFlickerOnce, readFlickerSettings, writeFlickerSetting, type LiveSession, type FlickerReading } from '../ble/liveSessions';
 import type { FlickerSettingsApi } from '../components/FlickerSettingsModal';
 import { initializeMeter, takeMeasurement, EMPTY_READING_ERROR } from '../ble/takeMeasurement';
 import { MeterResult } from '../ble/parseResult';
@@ -25,7 +25,7 @@ import { uploadToHcri } from '../hcri/uploadToHcri';
 import { getReportLink } from '../hcri/getReportLink';
 import { fetchSampleReading } from '../hcri/fetchSampleReading';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
-import { loadKeepAwakePreference, loadStayConnectedInBackgroundPreference } from '../storage/preferences';
+import { loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
 import { addReading, recordUpload } from '../storage/readingHistory';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
@@ -654,6 +654,15 @@ export default function HomeScreen({ navigation }: any) {
           if (e?.name !== EMPTY_READING_ERROR) throw e;
           appendLog('Meter returned an empty reading -- retrying once...');
           r = await takeMeasurement(connRef.current, appendLog);
+        }
+      }
+      // Optional extra (Settings -> "Capture flicker with each reading", off by default): one flicker snapshot
+      // after the spectrum, saved with the reading. Failure never affects the reading itself.
+      if (!r.source && deviceSupportsFlicker(r.deviceName) && (await loadFlickerWithReadingPreference().catch(() => false))) {
+        const f = await captureFlickerOnce(connRef.current, appendLog);
+        if (f) {
+          r = { ...r, flicker: f };
+          setFlickerReading(f);
         }
       }
       if (!r.source) {

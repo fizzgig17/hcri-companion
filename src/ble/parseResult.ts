@@ -36,6 +36,22 @@ export interface MeterResult {
   tbStatus?: number;
   /** Torch Bearer only: true when the HPCS-matching spectral correction (ble/tbCorrection.ts) was applied to this spectrum, false for the raw spectrum. */
   tbCorrected?: boolean;
+  /** One-shot flicker capture taken with this reading (Settings -> "Capture flicker with each reading"); absent when off or the capture failed. */
+  flicker?: FlickerCapture;
+}
+
+/** A single flicker snapshot: the meter's statistics plus the 400-sample waveform. Same shape as liveSessions' FlickerReading. */
+export interface FlickerCapture {
+  frequencyHz: number;
+  percentFlicker: number;
+  flickerIndex: number;
+  cycleMs: number;
+  /** Total time the 400 samples span, in ms, if the sample rate could be read. */
+  spanMs?: number;
+  /** Meter's sample-rate index (0-10) and range/gear index (0-3) at capture time, if they answered. */
+  sampleIdx?: number;
+  gear?: number;
+  waveform: number[];
 }
 
 /** Reads a little-endian float32 at the given byte offset. */

@@ -103,7 +103,11 @@ export default function ReadingDetailScreen({ route, navigation }: any) {
         </Text>
       </View>
 
-      <SpectrumTab result={reading.result} analysis={analysis} />
+      <SpectrumTab
+        result={reading.result}
+        analysis={analysis}
+        flicker={reading.result.flicker ? { reading: reading.result.flicker, running: false, focusNonce: 0, history: [] } : undefined}
+      />
     </ScrollView>
   );
 }

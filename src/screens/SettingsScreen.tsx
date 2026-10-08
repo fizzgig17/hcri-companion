@@ -44,6 +44,8 @@ import {
   loadStayConnectedInBackgroundPreference,
   saveStayConnectedInBackgroundPreference,
   loadTbCorrectionPreference,
+  loadFlickerWithReadingPreference,
+  saveFlickerWithReadingPreference,
   saveTbCorrectionPreference,
 } from '../storage/preferences';
 import { setTbCorrectionEnabled } from '../ble/tbCorrection';
@@ -132,6 +134,7 @@ export default function SettingsScreen({ navigation, route }: any) {
   // milestones and errors, which always show regardless of this setting).
   const [verboseLogging, setVerboseLogging] = useState(false);
   const [tbCorrection, setTbCorrection] = useState(true);
+  const [flickerWithReading, setFlickerWithReading] = useState(false);
   // Which measurements show on the Main tab's result card, and in what
   // order -- starts from the built-in default so the list renders
   // immediately (not empty) while loadStatDisplayPrefs() resolves.
@@ -166,6 +169,7 @@ export default function SettingsScreen({ navigation, route }: any) {
     loadStayConnectedInBackgroundPreference().then(setStayConnectedInBackground);
     loadVerboseLoggingPreference().then(setVerboseLogging);
     loadTbCorrectionPreference().then(setTbCorrection);
+    loadFlickerWithReadingPreference().then(setFlickerWithReading);
     loadStatDisplayPrefs().then(setStatPrefs);
     // Intentionally run once on mount only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -213,6 +217,11 @@ export default function SettingsScreen({ navigation, route }: any) {
     setResultHapticsEnabled(value);
     if (value) hapticSuccess();
     await saveHapticResultsPreference(value);
+  };
+
+  const toggleFlickerWithReading = async (value: boolean) => {
+    setFlickerWithReading(value);
+    await saveFlickerWithReadingPreference(value);
   };
 
   const toggleTbCorrection = async (value: boolean) => {
@@ -723,6 +732,18 @@ export default function SettingsScreen({ navigation, route }: any) {
           </Text>
         </View>
         <Switch value={tbCorrection} onValueChange={toggleTbCorrection} trackColor={{ true: colors.accent }} />
+      </View>
+
+      <View style={styles.toggleRow}>
+        <View style={styles.toggleTextWrap}>
+          <Text style={styles.toggleLabel}>Capture flicker with each reading</Text>
+          <Text style={styles.toggleHint}>
+            After each reading, also take a one-shot flicker capture (frequency, percent flicker, flicker index
+            and waveform). Adds a few seconds per reading and only works on meters that support flicker. Saved
+            with the reading, shown on its Flicker page, and included in shared CSVs. Not uploaded to hCRI.io yet.
+          </Text>
+        </View>
+        <Switch value={flickerWithReading} onValueChange={toggleFlickerWithReading} trackColor={{ true: colors.accent }} />
       </View>
 
       <View style={styles.toggleRow}>

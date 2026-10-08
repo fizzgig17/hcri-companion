@@ -57,6 +57,19 @@ export function buildShareCsv(result: MeterResult): string {
   } else {
     lines.push(`DarkSignal,${result.darkSignal}`);
   }
+  if (result.flicker) {
+    const f = result.flicker;
+    lines.push(
+      `FlickerFrequencyHz,${f.frequencyHz.toFixed(2)}`,
+      `FlickerPercent,${f.percentFlicker.toFixed(2)}`,
+      `FlickerIndex,${f.flickerIndex.toFixed(4)}`,
+      `FlickerCycleMs,${f.cycleMs.toFixed(3)}`
+    );
+    if (f.spanMs !== undefined) lines.push(`FlickerWaveformSpanMs,${f.spanMs}`);
+    if (f.sampleIdx !== undefined) lines.push(`FlickerSampleRateIndex,${f.sampleIdx}`);
+    if (f.gear !== undefined) lines.push(`FlickerGearIndex,${f.gear}`);
+    lines.push(`FlickerWaveform,${f.waveform.join(',')}`);
+  }
   if (!result.source) {
     lines.push(
       `MeterReportedCCT,${result.cct.toFixed(0)}`,

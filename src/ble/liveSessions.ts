@@ -278,6 +278,77 @@ function startLagMonitor(log: LogFn): () => void {
   return () => clearInterval(timer);
 }
 
+/**
+ * One flicker snapshot, for "capture flicker with each reading". Starts the meter's flicker mode, waits for a
+ * capture, reads the statistics and the waveform once, then stops. Never throws and is bounded to a few
+ * seconds: on any problem it logs and returns null so the normal reading is unaffected.
+ */
+export async function captureFlickerOnce(conn: MeterConnection, log: LogFn): Promise<FlickerReading | null> {
+  const never = () => false;
+  const t0 = Date.now();
+  let started = false;
+  try {
+    conn.resetReassemblyState();
+    let spanMs: number | undefined;
+    let sampleIdx: number | undefined;
+    let gear: number | undefined;
+    const rate = await request(conn, CMD_FLICKER_SAMPLE_RATE, 0x3d, 1000, 1, () => true, never, log);
+    const rateIdx = rate && rate.body.length >= 3 ? fromBcd(rate.body[2]) : -1;
+    if (rateIdx >= 0 && rateIdx < FLICKER_SPAN_MS.length) {
+      spanMs = FLICKER_SPAN_MS[rateIdx];
+      sampleIdx = rateIdx;
+    }
+    const gearReply = await request(conn, [0x8c, 0x36], 0x36, 800, 1, () => true, never, log);
+    if (gearReply && gearReply.body.length >= 3) gear = fromBcd(gearReply.body[2]);
+
+    started = true;
+    await conn.sendCommand(CMD_START_FLICKER_CONTINUOUS);
+    await sleep(200);
+    const readyDeadline = Date.now() + 6000;
+    let ready = false;
+    while (!ready && Date.now() < readyDeadline) {
+      const m = await request(conn, CMD_FLICKER_READY, 0x3b, 600, 1, () => true, never, log);
+      if (m && m.body[2] === 0x01) ready = true;
+      else await sleep(150);
+    }
+    if (!ready) {
+      log('Flicker capture: the meter never reported a capture ready -- skipped');
+      return null;
+    }
+    const stats = await request(conn, CMD_FLICKER_STATS, 0x3c, 1500, 2, (m) => m.body.length >= 18, never, log);
+    const wave = stats
+      ? await request(conn, CMD_FLICKER_WAVE, 0x3a, 2000, 2, (m) => m.body.length >= FLICKER_WAVE_SAMPLES * 2, never, log)
+      : null;
+    if (!stats || !wave) {
+      log(`Flicker capture: incomplete (stats ${stats ? 'ok' : 'missing'}, waveform ${wave ? 'ok' : 'missing'}) -- skipped`);
+      return null;
+    }
+    const waveform: number[] = [];
+    for (let i = 0; i < FLICKER_WAVE_SAMPLES; i++) waveform.push(wave.body[2 * i] | (wave.body[2 * i + 1] << 8));
+    const reading: FlickerReading = {
+      frequencyHz: readFloat32LE(stats.body, 2),
+      percentFlicker: readFloat32LE(stats.body, 6),
+      flickerIndex: readFloat32LE(stats.body, 10),
+      cycleMs: readFloat32LE(stats.body, 14),
+      spanMs,
+      sampleIdx,
+      gear,
+      waveform,
+    };
+    log(`Flicker capture OK in ${((Date.now() - t0) / 1000).toFixed(1)}s: ${reading.frequencyHz.toFixed(1)} Hz, ${reading.percentFlicker.toFixed(1)} %`);
+    return reading;
+  } catch (e: any) {
+    log(`Flicker capture failed: ${e?.message ?? e}`);
+    return null;
+  } finally {
+    if (started) {
+      // Leave the meter out of flicker mode, and let the stop settle before the next command.
+      await sendStopReliably(conn, log).catch(() => {});
+      await sleep(350);
+    }
+  }
+}
+
 /** Continuous flicker. onReading fires per refresh; onEnd fires exactly once. */
 export function startFlicker(
   conn: MeterConnection,
