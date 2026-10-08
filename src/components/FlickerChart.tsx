@@ -10,7 +10,7 @@
 // Always drawn on white in the stock line colour #204687.
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, Share, StyleSheet, Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, Share, Alert, StyleSheet, Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import Svg, { Line, Polyline, Polygon, Circle, Path, Text as SvgText } from 'react-native-svg';
 import { flickerRisk, type FlickerReading } from '../ble/liveSessions';
 import { FLICKER_RATE_LABELS, FLICKER_GEAR_LABELS } from '../ble/protocol';
@@ -33,6 +33,10 @@ let lastNotes = '';
 
 interface Props {
   upload?: FlickerUploadApi;
+  /** Start a new run, or stop the current one. Absent when the panel only shows a saved reading. */
+  onToggle?: () => void;
+  /** The reading on screen was captured with a spectrum reading (it goes up/out with that reading). */
+  fromReading?: boolean;
   reading: FlickerReading | null;
   running: boolean;
   history: FlickerHistoryPoint[];
@@ -44,7 +48,7 @@ interface Props {
 const LINE = '#204687';
 const HEAD_H = 26;
 const STATS_H = 30;
-const ACT_H = 46;
+const ACT_H = 36;
 const RISK_H = 20;
 
 const HOLD_COLOR = '#c47f00';
@@ -54,6 +58,7 @@ const ICON_SHARE = 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3
 const ICON_GEAR =
   'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z';
 const ICON_UPLOAD = 'M16 16l-4-4-4 4M12 12v9M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3';
+const ICON_HELP = 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01';
 const ICON_PAUSE = 'M7 5h3.5v14H7zM13.5 5H17v14h-3.5z';
 const ICON_PLAY = 'M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z';
 
@@ -106,7 +111,8 @@ function fmtMs(ms: number): string {
 const HIGH_LINE: [number, number][] = [[1, 0.2], [8, 0.2], [90, 2.25], [90, 7.2], [2000, 160]];
 const LOW_LINE: [number, number][] = [[1, 0.1], [8, 0.1], [8, 0.08], [90, 0.9], [90, 3], [2000, 66.6]];
 
-export default function FlickerChart({ reading, running, history, settings, upload, width, height }: Props) {
+export default function FlickerChart({ reading, running, history, settings, upload, onToggle, fromReading, width, height }: Props) {
+  const [snap, setSnap] = useState<FlickerReading | null>(null);
   const [showUpload, setShowUpload] = useState(false);
   const [upTitle, setUpTitle] = useState('');
   const [upNotes, setUpNotes] = useState('');
@@ -114,11 +120,10 @@ export default function FlickerChart({ reading, running, history, settings, uplo
   const [upMsg, setUpMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [view, setView] = useState<'wave' | 'risk'>('wave');
-  const [held, setHeld] = useState<FlickerReading | null>(null);
   const [zoom, setZoom] = useState(1);
   const [start, setStart] = useState(0);
 
-  const shown = held ?? reading;
+  const shown = reading;
 
   // Run counter: refreshes received and time since this run started (resets each time Flicker is started).
   const [refreshes, setRefreshes] = useState(0);
@@ -126,8 +131,7 @@ export default function FlickerChart({ reading, running, history, settings, uplo
   const runStart = useRef(0);
   useEffect(() => {
     if (!running) return;
-    // A fresh run always starts live: drop any pause and zoom left over from the previous one.
-    setHeld(null);
+    // A fresh run starts un-zoomed.
     setZoom(1);
     setStart(0);
     runStart.current = Date.now();
@@ -163,11 +167,13 @@ export default function FlickerChart({ reading, running, history, settings, uplo
     statLabel: { color: '#666', fontSize: 9, marginTop: 0 },
     actRow: { height: ACT_H, flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#e3e5ea' },
     actBtn: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-    actTxt: { fontSize: 10, fontWeight: '600', marginTop: 2 },
+    actTxt: { fontSize: 10, fontWeight: '600', marginTop: 0 },
     riskRow: { height: RISK_H, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
     badge: { paddingHorizontal: 10, paddingVertical: 2, borderRadius: 10 },
     badgeTxt: { fontSize: 11.5, fontWeight: '700' },
     hint: { color: '#666', fontSize: 12.5, textAlign: 'center' },
+    startPill: { flexDirection: 'row', alignItems: 'center', marginTop: 14, backgroundColor: LINE, borderRadius: 18, paddingHorizontal: 18, paddingVertical: 8 },
+    startPillTxt: { color: '#fff', fontSize: 13, fontWeight: '700', marginLeft: 6 },
   });
 
   const wf = shown?.waveform;
@@ -190,17 +196,47 @@ export default function FlickerChart({ reading, running, history, settings, uplo
     return { n, max, min, norm, period, first, duty };
   }, [wf]);
 
+  const showHelp = () =>
+    Alert.alert(
+      'Flicker readings',
+      'Live flicker: tap Start to measure continuously. The chart updates about every second. Pause stops the run and keeps the last reading on screen, which you can then Share or Upload to hCRI.io.\n\n' +
+        'Flicker with a reading: turn on "Capture flicker with each reading" in Settings and one flicker snapshot is taken right after each spectrum reading. It is saved with that reading and goes up to hCRI.io with it, so Share and Upload are not shown for it.\n\n' +
+        'The gear sets the meter’s flicker range and sample rate.'
+    );
+  const headRight = (
+    <>
+      <TouchableOpacity style={styles.iconPill} onPress={showHelp} accessibilityLabel="About flicker readings" hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
+        <HeaderIcon d={ICON_HELP} color={LINE} size={16} />
+      </TouchableOpacity>
+      {settings && (
+        <TouchableOpacity style={styles.iconPill} onPress={() => setShowSettings(true)} accessibilityLabel="Flicker settings" hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
+          <HeaderIcon d={ICON_GEAR} color={LINE} size={16} />
+        </TouchableOpacity>
+      )}
+    </>
+  );
+  const startBtn = (
+    <TouchableOpacity style={styles.actBtn} onPress={onToggle} accessibilityLabel={running ? 'Pause flicker' : 'Start flicker'}>
+      <HeaderIcon d={running ? ICON_PAUSE : ICON_PLAY} color={LINE} fill size={20} />
+      <Text style={[styles.actTxt, { color: LINE }]} allowFontScaling={false}>{running ? 'Pause' : 'Start'}</Text>
+    </TouchableOpacity>
+  );
+
   if (!shown || !analysis) {
     return (
-      <View style={{ height, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 }}>
-        <Text style={styles.hint}>
-          {running ? 'Waiting for the meter…' : 'Tap Flicker below to measure this light’s flicker.'}
-        </Text>
-        {settings && !running && (
-          <TouchableOpacity style={[styles.pill, { marginTop: 14, marginLeft: 0 }]} onPress={() => setShowSettings(true)}>
-            <Text style={styles.pillTxt} allowFontScaling={false}>Flicker settings</Text>
-          </TouchableOpacity>
-        )}
+      <View style={{ height }}>
+        <View style={[styles.head, { justifyContent: 'flex-end' }]}>{headRight}</View>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 }}>
+          <Text style={styles.hint}>
+            {running ? 'Waiting for the meter…' : onToggle ? 'Tap Start to measure this light’s flicker.' : 'No flicker reading.'}
+          </Text>
+          {onToggle && (
+            <TouchableOpacity style={[styles.startPill]} onPress={onToggle} accessibilityLabel={running ? 'Pause flicker' : 'Start flicker'}>
+              <HeaderIcon d={running ? ICON_PAUSE : ICON_PLAY} color="#fff" fill size={16} />
+              <Text style={styles.startPillTxt} allowFontScaling={false}>{running ? 'Pause' : 'Start'}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
         {settings && <FlickerSettingsModal visible={showSettings} onClose={() => setShowSettings(false)} api={settings} />}
       </View>
     );
@@ -245,7 +281,7 @@ export default function FlickerChart({ reading, running, history, settings, uplo
 
   const openUpload = async () => {
     if (!upload) return;
-    setHeld(held ?? reading); // upload exactly the frame on screen
+    setSnap(shown); // upload exactly the frame on screen
     setUpMsg(null);
     setUpNotes(lastNotes);
     setUpTitle(lastTitle || (await upload.defaultTitle().catch(() => '')));
@@ -254,7 +290,7 @@ export default function FlickerChart({ reading, running, history, settings, uplo
   const doUpload = async () => {
     if (!upload || upBusy) return;
     setUpBusy(true);
-    const err = await upload.send(shown, upTitle.trim(), upNotes.trim()).catch((e: any) => String(e?.message ?? e));
+    const err = await upload.send(snap ?? shown, upTitle.trim(), upNotes.trim()).catch((e: any) => String(e?.message ?? e));
     setUpBusy(false);
     if (err) {
       setUpMsg({ ok: false, text: err });
@@ -266,11 +302,11 @@ export default function FlickerChart({ reading, running, history, settings, uplo
     }
   };
 
-  const bodyH = Math.max(40, height - HEAD_H - STATS_H - RISK_H - ACT_H - 2);
+  const bodyH = Math.max(40, height - HEAD_H - STATS_H - RISK_H - (onToggle ? ACT_H : 0) - 2);
 
   // ---------------- waveform view ----------------
   const renderWave = () => {
-    const padL = 30, padR = 8, padT = 16, padB = 28;
+    const padL = 30, padR = 8, padT = 16, padB = 18;
     const plotW = Math.max(10, width - padL - padR);
     const plotH = Math.max(10, bodyH - padT - padB);
     const yMax = max === 0 ? 1 : 1.2;
@@ -312,9 +348,6 @@ export default function FlickerChart({ reading, running, history, settings, uplo
             </SvgText>
           </>
         ) : null}
-        <SvgText x={padL + plotW / 2} y={bodyH - 2} fontSize={9} fill="#666" textAnchor="middle">
-          {`${msPerSample ? 'Time' : 'Sample'}${zoom > 1 ? `  (zoom ${zoom}×)` : ''}`}
-        </SvgText>
       </Svg>
     );
   };
@@ -390,6 +423,7 @@ export default function FlickerChart({ reading, running, history, settings, uplo
             </TouchableOpacity>
           </>
         )}
+        {headRight}
       </View>
       <View style={styles.statsRow}>
         <View style={styles.stat}>
@@ -415,8 +449,8 @@ export default function FlickerChart({ reading, running, history, settings, uplo
       </View>
       <View style={styles.riskRow}>
         {(running || refreshes > 0) && (
-          <Text style={[styles.counter, { color: held ? HOLD_COLOR : running ? RISK_COLOR.none : '#666' }]} allowFontScaling={false} numberOfLines={1}>
-            {held ? 'Paused ' : running ? '● ' : ''}{refreshes} · {fmtElapsed(runMs)}
+          <Text style={[styles.counter, { color: running ? RISK_COLOR.none : HOLD_COLOR }]} allowFontScaling={false} numberOfLines={1}>
+            {running ? '● ' : 'Stopped '}{refreshes} · {fmtElapsed(runMs)}
           </Text>
         )}
         <View style={[styles.badge, { backgroundColor: RISK_TINT[risk] }]}>
@@ -427,28 +461,23 @@ export default function FlickerChart({ reading, running, history, settings, uplo
         {!!settingTxt && <Text style={styles.settingTag} allowFontScaling={false} numberOfLines={1}>{settingTxt}</Text>}
       </View>
       {view === 'wave' ? renderWave() : renderRisk()}
-      <View style={styles.actRow}>
-        <TouchableOpacity style={styles.actBtn} onPress={() => setHeld(held ? null : reading)} accessibilityLabel={held ? 'Resume display' : 'Pause display'}>
-          <HeaderIcon d={held ? ICON_PLAY : ICON_PAUSE} color={held ? HOLD_COLOR : LINE} fill size={22} />
-          <Text style={[styles.actTxt, { color: held ? HOLD_COLOR : LINE }]} allowFontScaling={false}>{held ? 'Resume' : 'Pause'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actBtn} onPress={share} accessibilityLabel="Share flicker reading">
-          <HeaderIcon d={ICON_SHARE} color={LINE} size={22} />
-          <Text style={[styles.actTxt, { color: LINE }]} allowFontScaling={false}>Share</Text>
-        </TouchableOpacity>
-        {upload && (
-          <TouchableOpacity style={styles.actBtn} onPress={openUpload} accessibilityLabel="Upload flicker to hCRI.io">
-            <HeaderIcon d={ICON_UPLOAD} color={LINE} size={22} />
-            <Text style={[styles.actTxt, { color: LINE }]} allowFontScaling={false}>Upload flicker</Text>
-          </TouchableOpacity>
-        )}
-        {settings && (
-          <TouchableOpacity style={styles.actBtn} onPress={() => setShowSettings(true)} accessibilityLabel="Flicker settings">
-            <HeaderIcon d={ICON_GEAR} color={LINE} size={22} />
-            <Text style={[styles.actTxt, { color: LINE }]} allowFontScaling={false}>Settings</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+      {onToggle && (
+        <View style={styles.actRow}>
+          {startBtn}
+          {!fromReading && (
+            <TouchableOpacity style={styles.actBtn} onPress={share} accessibilityLabel="Share flicker reading">
+              <HeaderIcon d={ICON_SHARE} color={LINE} size={20} />
+              <Text style={[styles.actTxt, { color: LINE }]} allowFontScaling={false}>Share</Text>
+            </TouchableOpacity>
+          )}
+          {!fromReading && upload && (
+            <TouchableOpacity style={styles.actBtn} onPress={openUpload} accessibilityLabel="Upload flicker to hCRI.io">
+              <HeaderIcon d={ICON_UPLOAD} color={LINE} size={20} />
+              <Text style={[styles.actTxt, { color: LINE }]} allowFontScaling={false}>Upload flicker</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
       {settings && <FlickerSettingsModal visible={showSettings} onClose={() => setShowSettings(false)} api={settings} />}
       {upload && (
         <Modal visible={showUpload} transparent animationType="fade" onRequestClose={() => { if (!upBusy) setShowUpload(false); }}>

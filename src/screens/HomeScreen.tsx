@@ -662,11 +662,13 @@ export default function HomeScreen({ navigation }: any) {
       // A new reading starts with a clean Flicker page (no leftover flicker from the previous light).
       setFlickerReading(null);
       setFlickerHistory([]);
+      setFlickerFromReading(false);
       if (!r.source && deviceSupportsFlicker(r.deviceName) && (await loadFlickerWithReadingPreference().catch(() => false))) {
         const f = await captureFlickerOnce(connRef.current, appendLog);
         if (f) {
           r = { ...r, flicker: f };
           setFlickerReading(f);
+          setFlickerFromReading(true);
         }
       }
       if (!r.source) {
@@ -740,6 +742,7 @@ export default function HomeScreen({ navigation }: any) {
   const [savingLive, setSavingLive] = useState(false);
   const [flickerReading, setFlickerReading] = useState<FlickerReading | null>(null);
   const [flickerFocus, setFlickerFocus] = useState(0);
+  const [flickerFromReading, setFlickerFromReading] = useState(false);
   const [flickerHistory, setFlickerHistory] = useState<{ f: number; p: number }[]>([]);
   // The pager only returns to the Spectrum page for a genuinely new reading, not for every Live refresh.
   const [pagerResetKey, setPagerResetKey] = useState<unknown>(null);
@@ -792,7 +795,7 @@ export default function HomeScreen({ navigation }: any) {
     setMode('flicker');
     setFlickerReading(null);
     setFlickerHistory([]);
-    setFlickerFocus((n) => n + 1);
+    setFlickerFromReading(false);
     sessionRef.current = startFlicker(
       connRef.current,
       appendLog,
@@ -1350,7 +1353,7 @@ export default function HomeScreen({ navigation }: any) {
             pagerResetKey={pagerResetKey}
             flicker={
               (status === 'connected' || status === 'uploading' || status === 'measuring') && deviceSupportsFlicker(deviceName)
-                ? { reading: flickerReading, running: mode === 'flicker', focusNonce: flickerFocus, history: flickerHistory, settings: flickerSettingsApi, upload: flickerUploadApi }
+                ? { reading: flickerReading, running: mode === 'flicker', focusNonce: flickerFocus, history: flickerHistory, settings: flickerSettingsApi, upload: flickerUploadApi, onToggle: toggleFlicker, fromReading: flickerFromReading }
                 : undefined
             }
           />
@@ -1397,7 +1400,7 @@ export default function HomeScreen({ navigation }: any) {
           flickerSupported={deviceSupportsFlicker(deviceName)}
           activeMode={mode}
           onToggleLive={toggleLive}
-          onToggleFlicker={toggleFlicker}
+          onToggleFlicker={() => setFlickerFocus((n) => n + 1)}
           canSaveLive={!!liveUnsaved}
           savingLive={savingLive}
           onSaveLive={saveLive}

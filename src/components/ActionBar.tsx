@@ -220,10 +220,9 @@ export default function ActionBar(p: Props) {
           )}
           {connected && p.flickerSupported && (
             <SideButton
-              icon={p.activeMode === 'flicker' ? 'stop' : 'flicker'}
-              label={p.activeMode === 'flicker' ? 'Stop' : 'Flicker'}
+              icon="flicker"
+              label="Flicker"
               onPress={p.onToggleFlicker}
-              disabled={p.activeMode === 'live' || status === 'uploading'}
               accent={p.activeMode === 'flicker'}
             />
           )}
