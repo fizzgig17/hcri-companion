@@ -814,6 +814,11 @@ export default function HomeScreen({ navigation }: any) {
     }
     if (mode !== 'idle' || !connRef.current) return;
     setMode('flicker');
+    // A new independent sample leaves the current reading behind (it's already in History): clear it and its flicker.
+    setResult(null);
+    setCurrentReadingId(null);
+    setUploadSucceeded(false);
+    setLastUploadedReport(null);
     setFlickerReading(null);
     setFlickerHistory([]);
     setFlickerFromReading(false);
@@ -1374,7 +1379,7 @@ export default function HomeScreen({ navigation }: any) {
             pagerResetKey={pagerResetKey}
             flicker={
               (status === 'connected' || status === 'uploading' || status === 'measuring') && deviceSupportsFlicker(deviceName)
-                ? { reading: flickerReading, running: mode === 'flicker' || flickerBusy, focusNonce: flickerFocus, history: flickerHistory, settings: flickerSettingsApi, upload: flickerUploadApi, onToggle: toggleFlicker, fromReading: flickerFromReading, onRedo: canRedoFlicker ? redoReadingFlicker : undefined, redoLabel: result?.flicker ? 'Redo for reading' : 'Add to reading' }
+                ? { reading: flickerReading, running: mode === 'flicker' || flickerBusy, focusNonce: flickerFocus, history: flickerHistory, settings: flickerSettingsApi, upload: flickerUploadApi, onToggle: toggleFlicker, fromReading: flickerFromReading, onRedo: canRedoFlicker ? redoReadingFlicker : undefined, redoLabel: result?.flicker ? 'Redo for reading' : 'Add to reading', readingNote: uploadSucceeded || lastUploadedReport ? 'Reading uploaded' : 'For this reading' }
                 : undefined
             }
           />

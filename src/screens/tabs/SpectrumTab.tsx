@@ -317,10 +317,10 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
                   <View style={[styles.chromCard, fill && { height: cardH, marginBottom: 0 }]}>
                     {fill ? (
                       <FixedBox h={innerH}>
-                        {(h) => <FlickerChart reading={flicker.reading} running={flicker.running} history={flicker.history} settings={flicker.settings} upload={flicker.upload} onToggle={flicker.onToggle} fromReading={flicker.fromReading} width={chartWidth} height={h} />}
+                        {(h) => <FlickerChart reading={flicker.reading} running={flicker.running} history={flicker.history} settings={flicker.settings} upload={flicker.upload} onToggle={flicker.onToggle} onRedo={flicker.onRedo} redoLabel={flicker.redoLabel} readingNote={flicker.readingNote} fromReading={flicker.fromReading} width={chartWidth} height={h} />}
                       </FixedBox>
                     ) : (
-                      <FlickerChart reading={flicker.reading} running={flicker.running} history={flicker.history} settings={flicker.settings} upload={flicker.upload} onToggle={flicker.onToggle} fromReading={flicker.fromReading} width={chartWidth} height={230} />
+                      <FlickerChart reading={flicker.reading} running={flicker.running} history={flicker.history} settings={flicker.settings} upload={flicker.upload} onToggle={flicker.onToggle} onRedo={flicker.onRedo} redoLabel={flicker.redoLabel} readingNote={flicker.readingNote} fromReading={flicker.fromReading} width={chartWidth} height={230} />
                     )}
                   </View>
                 ),
