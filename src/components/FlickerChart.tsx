@@ -10,7 +10,7 @@
 // Always drawn on white in the stock line colour #204687.
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, Share, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Share, StyleSheet, Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import Svg, { Line, Polyline, Polygon, Circle, Path, Text as SvgText } from 'react-native-svg';
 import { flickerRisk, type FlickerReading } from '../ble/liveSessions';
 import { FLICKER_RATE_LABELS, FLICKER_GEAR_LABELS } from '../ble/protocol';
@@ -21,7 +21,18 @@ export interface FlickerHistoryPoint {
   p: number;
 }
 
+/** Standalone flicker upload to hCRI.io. `send` returns an error message, or null on success. */
+export interface FlickerUploadApi {
+  defaultTitle: () => Promise<string>;
+  send: (reading: FlickerReading, title: string, notes: string) => Promise<string | null>;
+}
+
+// Remembered between uploads (until the app closes).
+let lastTitle = '';
+let lastNotes = '';
+
 interface Props {
+  upload?: FlickerUploadApi;
   reading: FlickerReading | null;
   running: boolean;
   history: FlickerHistoryPoint[];
@@ -41,6 +52,7 @@ const HOLD_COLOR = '#c47f00';
 const ICON_SHARE = 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12';
 const ICON_GEAR =
   'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z';
+const ICON_UPLOAD = 'M18 10a6 6 0 0 0-11.7-1.5A4.5 4.5 0 0 0 7 17.5h2M12 12v9M8.5 15.5 12 12l3.5 3.5';
 const ICON_PAUSE = 'M7 5h3.5v14H7zM13.5 5H17v14h-3.5z';
 const ICON_PLAY = 'M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z';
 
@@ -93,7 +105,12 @@ function fmtMs(ms: number): string {
 const HIGH_LINE: [number, number][] = [[1, 0.2], [8, 0.2], [90, 2.25], [90, 7.2], [2000, 160]];
 const LOW_LINE: [number, number][] = [[1, 0.1], [8, 0.1], [8, 0.08], [90, 0.9], [90, 3], [2000, 66.6]];
 
-export default function FlickerChart({ reading, running, history, settings, width, height }: Props) {
+export default function FlickerChart({ reading, running, history, settings, upload, width, height }: Props) {
+  const [showUpload, setShowUpload] = useState(false);
+  const [upTitle, setUpTitle] = useState('');
+  const [upNotes, setUpNotes] = useState('');
+  const [upBusy, setUpBusy] = useState(false);
+  const [upMsg, setUpMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [view, setView] = useState<'wave' | 'risk'>('wave');
   const [held, setHeld] = useState<FlickerReading | null>(null);
@@ -216,6 +233,29 @@ export default function FlickerChart({ reading, running, history, settings, widt
       shown.waveform.join(','),
     ];
     Share.share({ message: lines.join('\n') }).catch(() => {});
+  };
+
+  const openUpload = async () => {
+    if (!upload) return;
+    setHeld(held ?? reading); // upload exactly the frame on screen
+    setUpMsg(null);
+    setUpNotes(lastNotes);
+    setUpTitle(lastTitle || (await upload.defaultTitle().catch(() => '')));
+    setShowUpload(true);
+  };
+  const doUpload = async () => {
+    if (!upload || upBusy) return;
+    setUpBusy(true);
+    const err = await upload.send(shown, upTitle.trim(), upNotes.trim()).catch((e: any) => String(e?.message ?? e));
+    setUpBusy(false);
+    if (err) {
+      setUpMsg({ ok: false, text: err });
+    } else {
+      lastTitle = upTitle.trim();
+      lastNotes = upNotes.trim();
+      setUpMsg({ ok: true, text: 'Uploaded to hCRI.io' });
+      setTimeout(() => setShowUpload(false), 900);
+    }
   };
 
   const bodyH = Math.max(40, height - HEAD_H - STATS_H - RISK_H - 2);
@@ -353,6 +393,11 @@ export default function FlickerChart({ reading, running, history, settings, widt
         <TouchableOpacity style={styles.iconPill} onPress={share} accessibilityLabel="Share reading">
           <HeaderIcon d={ICON_SHARE} color={LINE} />
         </TouchableOpacity>
+        {upload && (
+          <TouchableOpacity style={styles.iconPill} onPress={openUpload} accessibilityLabel="Upload flicker to hCRI.io">
+            <HeaderIcon d={ICON_UPLOAD} color={LINE} />
+          </TouchableOpacity>
+        )}
         {settings && (
           <TouchableOpacity style={styles.iconPill} onPress={() => setShowSettings(true)} accessibilityLabel="Flicker settings">
             <HeaderIcon d={ICON_GEAR} color={LINE} />
@@ -396,6 +441,41 @@ export default function FlickerChart({ reading, running, history, settings, widt
       </View>
       {view === 'wave' ? renderWave() : renderRisk()}
       {settings && <FlickerSettingsModal visible={showSettings} onClose={() => setShowSettings(false)} api={settings} />}
+      {upload && (
+        <Modal visible={showUpload} transparent animationType="fade" onRequestClose={() => { if (!upBusy) setShowUpload(false); }}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 20 }}>
+            <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 16 }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: '#111', marginBottom: 10 }}>Upload flicker to hCRI.io</Text>
+              <Text style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>Title</Text>
+              <TextInput
+                value={upTitle}
+                onChangeText={setUpTitle}
+                multiline
+                numberOfLines={2}
+                selectTextOnFocus
+                style={{ borderWidth: 1, borderColor: '#C5C9D3', borderRadius: 8, padding: 8, minHeight: 56, textAlignVertical: 'top', color: '#111' }}
+              />
+              <Text style={{ fontSize: 12, color: '#666', marginTop: 10, marginBottom: 4 }}>Notes (optional)</Text>
+              <TextInput
+                value={upNotes}
+                onChangeText={setUpNotes}
+                multiline
+                numberOfLines={4}
+                style={{ borderWidth: 1, borderColor: '#C5C9D3', borderRadius: 8, padding: 8, minHeight: 90, textAlignVertical: 'top', color: '#111' }}
+              />
+              {!!upMsg && <Text style={{ marginTop: 10, color: upMsg.ok ? RISK_COLOR.none : RISK_COLOR.high, fontSize: 13 }}>{upMsg.text}</Text>}
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 14 }}>
+                <TouchableOpacity onPress={() => setShowUpload(false)} disabled={upBusy} style={{ padding: 10 }}>
+                  <Text style={{ color: LINE, fontWeight: '700' }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={doUpload} disabled={upBusy} style={{ backgroundColor: LINE, borderRadius: 8, paddingHorizontal: 18, paddingVertical: 10, marginLeft: 8, minWidth: 90, alignItems: 'center' }}>
+                  {upBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700' }}>Upload</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+      )}
     </View>
   );
 }

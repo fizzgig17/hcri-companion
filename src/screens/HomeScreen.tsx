@@ -16,12 +16,13 @@ import type { BatteryStatus } from '../ble/protocol';
 import { deviceSupportsLive, deviceSupportsFlicker } from '../ble/protocol';
 import { startLiveSpectrum, startFlicker, captureFlickerOnce, readFlickerSettings, writeFlickerSetting, type LiveSession, type FlickerReading } from '../ble/liveSessions';
 import type { FlickerSettingsApi } from '../components/FlickerSettingsModal';
+import type { FlickerUploadApi } from '../components/FlickerChart';
 import { initializeMeter, takeMeasurement, EMPTY_READING_ERROR } from '../ble/takeMeasurement';
 import { MeterResult } from '../ble/parseResult';
 import { analyzeSpectrum } from '../utils/spectralAnalysis';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { buildCsv, defaultLabel } from '../hcri/buildCsv';
-import { uploadReadingToHcri } from '../hcri/uploadFlickerToHcri';
+import { uploadReadingToHcri, uploadFlickerToHcri } from '../hcri/uploadFlickerToHcri';
 import { getReportLink } from '../hcri/getReportLink';
 import { fetchSampleReading } from '../hcri/fetchSampleReading';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
@@ -826,6 +827,25 @@ export default function HomeScreen({ navigation }: any) {
     }
   }, [liveUnsaved, savingLive, appendLog]);
 
+  const flickerUploadApi = useMemo<FlickerUploadApi>(
+    () => ({
+      defaultTitle: async () =>
+        `${deviceName ?? 'Meter'} flicker ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+      send: async (reading, title, notes) => {
+        const creds = await loadHcriCredentials();
+        if (!creds) return 'Add your hCRI.io username and API token in Settings first.';
+        const ok = await uploadFlickerToHcri(
+          reading,
+          { label: title || `${deviceName ?? 'Meter'} flicker`, model: deviceName ?? undefined, notes },
+          creds.token,
+          appendLog
+        );
+        return ok ? null : 'Upload failed. Check Logs for details (hCRI.io may not support flicker yet).';
+      },
+    }),
+    [deviceName, appendLog]
+  );
+
   const flickerSettingsApi = useMemo<FlickerSettingsApi>(
     () => ({
       load: async () => (connRef.current ? readFlickerSettings(connRef.current, appendLog) : {}),
@@ -1327,7 +1347,7 @@ export default function HomeScreen({ navigation }: any) {
             pagerResetKey={pagerResetKey}
             flicker={
               (status === 'connected' || status === 'uploading' || status === 'measuring') && deviceSupportsFlicker(deviceName)
-                ? { reading: flickerReading, running: mode === 'flicker', focusNonce: flickerFocus, history: flickerHistory, settings: flickerSettingsApi }
+                ? { reading: flickerReading, running: mode === 'flicker', focusNonce: flickerFocus, history: flickerHistory, settings: flickerSettingsApi, upload: flickerUploadApi }
                 : undefined
             }
           />

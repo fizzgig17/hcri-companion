@@ -34,3 +34,13 @@ test('no flicker call without a capture', async () => {
   await uploadReadingToHcri({} as any, 'csv', 'L', 'tok');
   expect(calls.length).toBe(1);
 });
+
+test('standalone flicker upload sends notes and no reportId', async () => {
+  const calls = mockFetch(201);
+  const { uploadFlickerToHcri } = require('../src/hcri/uploadFlickerToHcri');
+  const ok = await uploadFlickerToHcri(flicker, { label: 'T', notes: 'n' }, 'tok');
+  expect(ok).toBe(true);
+  const body = JSON.parse(calls[0].init.body);
+  expect(body.reportId).toBeUndefined();
+  expect(body.notes).toBe('n');
+});

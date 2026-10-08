@@ -29,6 +29,7 @@ import RValuesBarChart from '../../components/RValuesBarChart';
 import FlickerChart from '../../components/FlickerChart';
 import type { FlickerReading } from '../../ble/liveSessions';
 import type { FlickerSettingsApi } from '../../components/FlickerSettingsModal';
+import type { FlickerUploadApi } from '../../components/FlickerChart';
 import SwipablePages from '../../components/SwipablePages';
 import { useTheme } from '../../contexts/ThemeContext';
 import { MeterResult } from '../../ble/parseResult';
@@ -67,7 +68,7 @@ interface Props {
   /** Set when `result` is a sample from a public hCRI.io report (not a reading from the person's own meter) -- only changes the "What's this?" text. */
   sampleLabel?: string;
   /** Present only when the connected meter can measure flicker: adds the fourth (Flicker) page. `focusNonce` changing jumps to it. */
-  flicker?: { reading: FlickerReading | null; running: boolean; focusNonce: number; history: { f: number; p: number }[]; settings?: FlickerSettingsApi };
+  flicker?: { reading: FlickerReading | null; running: boolean; focusNonce: number; history: { f: number; p: number }[]; settings?: FlickerSettingsApi; upload?: FlickerUploadApi };
   /** Changing this sends the pager back to the Spectrum page; defaults to `result`. Live updates replace `result` constantly without changing this. */
   pagerResetKey?: unknown;
 }
@@ -316,10 +317,10 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
                   <View style={[styles.chromCard, fill && { height: cardH, marginBottom: 0 }]}>
                     {fill ? (
                       <FixedBox h={innerH}>
-                        {(h) => <FlickerChart reading={flicker.reading} running={flicker.running} history={flicker.history} settings={flicker.settings} width={chartWidth} height={h} />}
+                        {(h) => <FlickerChart reading={flicker.reading} running={flicker.running} history={flicker.history} settings={flicker.settings} upload={flicker.upload} width={chartWidth} height={h} />}
                       </FixedBox>
                     ) : (
-                      <FlickerChart reading={flicker.reading} running={flicker.running} history={flicker.history} settings={flicker.settings} width={chartWidth} height={230} />
+                      <FlickerChart reading={flicker.reading} running={flicker.running} history={flicker.history} settings={flicker.settings} upload={flicker.upload} width={chartWidth} height={230} />
                     )}
                   </View>
                 ),

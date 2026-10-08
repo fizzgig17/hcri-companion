@@ -12,7 +12,7 @@ const HCRI_FLICKER_URL = `${HCRI_API_BASE}/index.php/api/v1/flicker`;
 
 export async function uploadFlickerToHcri(
   flicker: FlickerCapture,
-  opts: { reportId: number; label: string; model?: string },
+  opts: { reportId?: number; label: string; model?: string; notes?: string },
   token: string,
   log?: (msg: string) => void
 ): Promise<boolean> {
@@ -27,9 +27,10 @@ export async function uploadFlickerToHcri(
       cycleMs: flicker.cycleMs,
       waveform: flicker.waveform,
       label: opts.label,
-      reportId: opts.reportId,
       capturedAt: new Date().toISOString(),
     };
+    if (typeof opts.reportId === 'number') body.reportId = opts.reportId;
+    if (opts.notes) body.notes = opts.notes;
     if (typeof flicker.spanMs === 'number') body.spanMs = flicker.spanMs;
     if (opts.model) body.model = opts.model;
     if (Object.keys(settings).length) body.settings = settings;
@@ -40,13 +41,13 @@ export async function uploadFlickerToHcri(
       body: JSON.stringify(body),
     });
     if (!response.ok) {
-      log?.(`Flicker upload skipped (${response.status}) -- the report itself was uploaded.`);
+      log?.(`Flicker upload skipped (${response.status})${opts.reportId ? ' -- the report itself was uploaded' : ''}.`);
       return false;
     }
-    log?.(`Flicker reading attached to report ${opts.reportId}.`);
+    log?.(opts.reportId ? `Flicker reading attached to report ${opts.reportId}.` : 'Flicker reading uploaded.');
     return true;
   } catch (e: any) {
-    log?.(`Flicker upload failed: ${e?.message ?? e} -- the report itself was uploaded.`);
+    log?.(`Flicker upload failed: ${e?.message ?? e}${opts.reportId ? ' -- the report itself was uploaded' : ''}.`);
     return false;
   }
 }
