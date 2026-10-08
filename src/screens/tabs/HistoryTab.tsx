@@ -21,7 +21,7 @@
 // unsaved in a field you haven't blurred yet.
 
 import React, { useMemo, useRef, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal, ScrollView } from 'react-native';
 import PrimaryButton from '../../components/PrimaryButton';
 import CollapsibleSection from '../../components/CollapsibleSection';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -132,8 +132,8 @@ function HistoryRow({
     [reading.analysis, reading.result.spectrum]
   );
 
-  // Guards against committing twice: Save fires on touch-down (see below) AND
-  // on the normal press release, and the keyboard's Done key can also submit.
+  // Guards against committing twice (the Save button and the keyboard's Done
+  // key can both submit).
   const committedRef = useRef(false);
 
   const openEditor = () => {
@@ -198,7 +198,8 @@ function HistoryRow({
       minHeight: 32,
       marginBottom: 6,
     },
-    modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'flex-start', paddingTop: 70, paddingHorizontal: 24 },
+    modalBackdropScroll: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
+    modalBackdropContent: { flexGrow: 1, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 70, paddingHorizontal: 24 },
     modalSheet: {
       width: '100%',
       maxWidth: 400,
@@ -315,7 +316,19 @@ function HistoryRow({
           setTimeout(() => inputRef.current?.focus(), 150);
         }}
       >
-        <View style={styles.modalBackdrop}>
+        {/* A ScrollView with keyboardShouldPersistTaps="always" rather than a
+            plain View: with the keyboard open, a plain View makes Android
+            treat the first tap anywhere outside the text box as "dismiss the
+            keyboard" and never delivers it to Save/Cancel, so Save took two
+            taps (the first just closed the keyboard). This tells it to hand
+            the tap straight to the button. Scrolling is off -- it's only
+            here for that tap behaviour. */}
+        <ScrollView
+          style={styles.modalBackdropScroll}
+          contentContainerStyle={styles.modalBackdropContent}
+          keyboardShouldPersistTaps="always"
+          scrollEnabled={false}
+        >
           <View style={styles.modalSheet}>
             <Text style={styles.modalTitle}>Reading title</Text>
             <TextInput
@@ -334,22 +347,12 @@ function HistoryRow({
               <TouchableOpacity style={styles.modalCancel} onPress={() => setModalVisible(false)}>
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
-              {/* onPressIn as well as onPress: with the keyboard up, the first
-                  tap on Android could be eaten by the keyboard/layout change
-                  before the release registered as a press, so Save needed two
-                  taps. Firing on touch-down avoids that; committedRef keeps
-                  the later onPress from running it a second time. */}
-              <TouchableOpacity
-                style={styles.modalSave}
-                onPressIn={commitRename}
-                onPress={commitRename}
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-              >
+              <TouchableOpacity style={styles.modalSave} onPress={commitRename}>
                 <Text style={styles.modalSaveText}>Save</Text>
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </ScrollView>
       </Modal>
 
       {!selectMode && (
