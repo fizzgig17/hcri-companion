@@ -84,7 +84,7 @@ export default function DataTab({
   // See HomeScreen.tsx's scrollInputIntoView comment -- needs a ref to the
   // actual TextInput, not just a position, since it measures this input's
   // layout relative to the ScrollView HomeScreen owns.
-  const titleInputRef = useRef<TextInput>(null);
+  const titleInputRef = useRef<React.ComponentRef<typeof TextInput>>(null);
 
   const styles = StyleSheet.create({
     empty: { paddingVertical: 40, alignItems: 'center' },
@@ -342,10 +342,12 @@ export default function DataTab({
           <Text style={styles.rowLabel}>Device</Text>
           <Text style={styles.rowValue}>{result.deviceName}</Text>
         </View>
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>Firmware</Text>
-          <Text style={styles.rowValue}>{result.firmwareVersion}</Text>
-        </View>
+        {result.source !== 'torchbearer' && (
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Firmware</Text>
+            <Text style={styles.rowValue}>{result.firmwareVersion}</Text>
+          </View>
+        )}
         <View style={styles.row}>
           <Text style={styles.rowLabel}>Integration Time</Text>
           <Text style={styles.rowValue}>{result.integrationTimeMs.toFixed(1)} ms</Text>

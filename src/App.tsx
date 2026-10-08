@@ -34,7 +34,8 @@ import { UpdateProvider } from './contexts/UpdateContext';
 import { DevBuildProvider } from './contexts/DevBuildContext';
 import UpdateBanner from './components/UpdateBanner';
 import { setTapHapticsEnabled, setResultHapticsEnabled } from './utils/haptics';
-import { loadHapticTapsPreference, loadHapticResultsPreference } from './storage/preferences';
+import { loadHapticTapsPreference, loadHapticResultsPreference, loadTbCorrectionPreference } from './storage/preferences';
+import { setTbCorrectionEnabled } from './ble/tbCorrection';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -101,6 +102,7 @@ function Navigation() {
   useEffect(() => {
     loadHapticTapsPreference().then(setTapHapticsEnabled).catch(() => {});
     loadHapticResultsPreference().then(setResultHapticsEnabled).catch(() => {});
+    loadTbCorrectionPreference().then(setTbCorrectionEnabled).catch(() => {});
   }, []);
 
   return (

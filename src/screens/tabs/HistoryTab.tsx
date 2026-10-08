@@ -2,7 +2,7 @@
 //
 // Every completed measurement, most-recent first (see
 // ../../storage/readingHistory.ts -- persisted locally, survives app
-// restarts). Each row's label is editable in place -- committed on blur --
+// restarts). Each row's label is editable by tapping it (popup editor, same as Main's upload title)
 // and can be uploaded to hCRI.io or shared as CSV independently of
 // whatever the "current"/latest reading on Main/Data happens to be right
 // now. Uploading uses whatever label is currently in the field (even if
@@ -20,8 +20,8 @@
 // selected reading's already-committed label, not whatever's sitting
 // unsaved in a field you haven't blurred yet.
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import React, { useMemo, useRef, useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal } from 'react-native';
 import PrimaryButton from '../../components/PrimaryButton';
 import CollapsibleSection from '../../components/CollapsibleSection';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -42,6 +42,8 @@ interface Props {
   onDeleteMany: (ids: string[]) => void | Promise<void>;
   onShareOne: (reading: SavedReading) => void;
   onShareAll: () => void;
+  /** Shares just the checked readings (Select mode) as one CSV -- or as a single reading's own CSV when only one is checked. */
+  onShareMany: (ids: string[]) => void;
   /** Opens ReadingDetailScreen for one saved reading -- the same measurement grid and Spectrum/Chrom/R-Values pages the Main/Spectrum tabs show for the current reading, just fed this past one instead (see ReadingDetailScreen.tsx). */
   onOpen: (reading: SavedReading) => void;
   /** Which reading (if any) is currently mid-upload, so only ITS button shows a spinner/disables -- the others stay usable. Also used to show progress during a bulk upload, since that walks this same id through the list one at a time. */
@@ -110,7 +112,11 @@ function HistoryRow({
   onOpenReport: (reading: SavedReading, tm30: boolean) => void;
 }) {
   const { colors } = useTheme();
-  const [text, setText] = useState(reading.label);
+  // Title editing works like the Main tab's: tap the title, edit it in a
+  // popup (so the keyboard never covers it), Save commits the rename.
+  const [modalVisible, setModalVisible] = useState(false);
+  const [draft, setDraft] = useState(reading.label);
+  const inputRef = useRef<any>(null);
 
   // Spectrum-derived CCT/Ra for the row summary below, same values
   // Main/Spectrum/Data show -- NOT the device-reported result.cct/result.ra
@@ -126,20 +132,22 @@ function HistoryRow({
     [reading.analysis, reading.result.spectrum]
   );
 
-  // Keep the field in sync if this reading's label changes from elsewhere
-  // (e.g. a rename that came from the upload flow itself) -- without this,
-  // an upload-triggered rename would silently desync the field from what's
-  // actually saved until the next full history reload.
-  useEffect(() => {
-    setText(reading.label);
-  }, [reading.label]);
+  // Guards against committing twice (the Save button and the keyboard's Done
+  // key can both submit).
+  const committedRef = useRef(false);
+
+  const openEditor = () => {
+    setDraft(reading.label);
+    committedRef.current = false;
+    setModalVisible(true);
+  };
 
   const commitRename = () => {
-    const trimmed = text.trim();
-    if (!trimmed) {
-      setText(reading.label); // don't allow blanking a saved reading's name out
-      return;
-    }
+    if (committedRef.current) return;
+    committedRef.current = true;
+    const trimmed = draft.trim();
+    setModalVisible(false);
+    if (!trimmed) return; // don't allow blanking a saved reading's name out
     if (trimmed !== reading.label) {
       onRename(reading.id, trimmed);
     }
@@ -190,6 +198,35 @@ function HistoryRow({
       minHeight: 32,
       marginBottom: 6,
     },
+    modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'flex-start', paddingTop: 70, paddingHorizontal: 24 },
+    modalSheet: {
+      width: '100%',
+      maxWidth: 400,
+      backgroundColor: colors.card,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      padding: 18,
+    },
+    modalTitle: { color: colors.text, fontSize: 16, fontWeight: '700', marginBottom: 14 },
+    modalInput: {
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 8,
+      color: colors.text,
+      fontSize: 14,
+      minHeight: 70,
+      maxHeight: 120,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      textAlignVertical: 'top',
+    },
+    modalButtons: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 8 },
+    modalCancel: { alignItems: 'center', paddingVertical: 12, marginTop: 6 },
+    modalCancelText: { color: colors.muted, fontSize: 13, fontWeight: '600' },
+    modalSave: { backgroundColor: colors.accent, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 22, marginLeft: 8, marginTop: 6 },
+    modalSaveText: { color: colors.text, fontSize: 14, fontWeight: '700' },
 
     rowActions: { flexDirection: 'row', marginHorizontal: -4 },
     actionButton: {
@@ -257,27 +294,59 @@ function HistoryRow({
         )}
       </View>
 
-      {/* multiline so a long label (now username + date + time + timezone +
-          device by default, not just a bare timestamp) actually wraps into
-          view instead of being clipped off the edge of a single-line
-          field -- same reasoning as the Upload Title field on Data tab. */}
-      <TextInput
+      {/* Tap to edit in a popup, same as the Main tab's upload title. */}
+      <TouchableOpacity
         style={styles.labelInput}
-        value={text}
-        onChangeText={setText}
-        onBlur={commitRename}
-        editable={!selectMode}
-        autoCapitalize="none"
-        autoCorrect={false}
-        multiline
-        textAlignVertical="top"
-      />
+        onPress={openEditor}
+        disabled={selectMode}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel="Reading title. Tap to edit."
+      >
+        <Text style={{ color: colors.text, fontSize: 13 }}>{reading.label}</Text>
+      </TouchableOpacity>
+
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+        onShow={() => {
+          setTimeout(() => inputRef.current?.focus(), 150);
+        }}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>Reading title</Text>
+            <TextInput
+              ref={inputRef}
+              style={styles.modalInput}
+              value={draft}
+              onChangeText={setDraft}
+              multiline
+              autoCapitalize="none"
+              autoCorrect={false}
+              submitBehavior="blurAndSubmit"
+              returnKeyType="done"
+              onSubmitEditing={commitRename}
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setModalVisible(false)}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalSave} onPress={commitRename}>
+                <Text style={styles.modalSaveText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {!selectMode && (
         <View style={styles.rowActions}>
           <TouchableOpacity
             style={[styles.actionButton, uploading && styles.actionButtonDisabled]}
-            onPress={() => onUploadWithLabel(reading.id, text.trim() || reading.label)}
+            onPress={() => onUploadWithLabel(reading.id, reading.label)}
             disabled={uploading}
           >
             {uploading ? (
@@ -372,6 +441,7 @@ export default function HistoryTab({
   onDeleteMany,
   onShareOne,
   onShareAll,
+  onShareMany,
   onOpen,
   uploadingId,
   bulkUploading,
@@ -456,6 +526,12 @@ export default function HistoryTab({
     onUploadMany(ids);
   };
 
+  const handleShareSelected = () => {
+    if (selected.size === 0) return;
+    const ids = history.filter((r) => selected.has(r.id)).map((r) => r.id);
+    onShareMany(ids);
+  };
+
   const handleDeleteSelected = () => {
     if (selected.size === 0) return;
     const ids = history.filter((r) => selected.has(r.id)).map((r) => r.id);
@@ -486,16 +562,27 @@ export default function HistoryTab({
     empty: { paddingVertical: 40, alignItems: 'center' },
     emptyText: { color: colors.muted, fontSize: 13, textAlign: 'center', paddingHorizontal: 20 },
 
-    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 8 },
-    headerTitle: { color: colors.muted, fontSize: 12, marginBottom: 4, flexShrink: 1 },
+    // Top bar: the count on the left, two small matching pills on the right,
+    // all centered on one line (this used to be a big full-size button next to
+    // a bare text link, which sat at different heights and looked clunky).
+    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+    headerTitle: { color: colors.muted, fontSize: 12, flexShrink: 1, marginRight: 8 },
     headerButtons: { flexDirection: 'row', alignItems: 'center' },
-    selectText: { color: colors.accent, fontSize: 13, fontWeight: '600', marginRight: 16, marginBottom: 4 },
-    cancelText: { color: colors.muted, fontSize: 13, fontWeight: '600', marginBottom: 4 },
+    headerPill: {
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+      marginLeft: 8,
+    },
+    headerPillText: { color: colors.text, fontSize: 12.5, fontWeight: '600' },
+    headerPillAccentText: { color: colors.accent, fontSize: 12.5, fontWeight: '600' },
 
     selectBar: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
+      flexDirection: 'column',
+      alignItems: 'stretch',
       backgroundColor: colors.card,
       borderWidth: 1,
       borderColor: colors.cardBorder,
@@ -504,13 +591,13 @@ export default function HistoryTab({
       paddingVertical: 10,
       marginBottom: 10,
     },
-    selectAllText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
-    selectBarButtons: { flexDirection: 'row' },
+    selectAllText: { color: colors.accent, fontSize: 13, fontWeight: '600', alignSelf: 'flex-start' },
+    selectBarButtons: { flexDirection: 'row', marginTop: 6, marginLeft: -8 },
     // Overrides PrimaryButton's default marginTop:8 (meant for a full-width
     // button stacked below other content) -- here it sits inline next to
     // "Select All" text, so that top margin would push it visibly lower than
     // its sibling instead of centering with it.
-    selectBarButton: { marginTop: 0, marginLeft: 8 },
+    selectBarButton: { marginTop: 0, marginLeft: 8, flex: 1, paddingHorizontal: 8, paddingVertical: 10 },
 
     dateGroup: { marginBottom: 2 },
     todayLabel: {
@@ -551,15 +638,17 @@ export default function HistoryTab({
         </Text>
         <View style={styles.headerButtons}>
           {selectMode ? (
-            <TouchableOpacity onPress={exitSelectMode} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={styles.cancelText}>Cancel</Text>
+            <TouchableOpacity style={styles.headerPill} onPress={exitSelectMode}>
+              <Text style={styles.headerPillText}>Cancel</Text>
             </TouchableOpacity>
           ) : (
             <>
-              <TouchableOpacity onPress={() => setSelectMode(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={styles.selectText}>Select</Text>
+              <TouchableOpacity style={styles.headerPill} onPress={() => setSelectMode(true)}>
+                <Text style={styles.headerPillAccentText}>Select</Text>
               </TouchableOpacity>
-              <PrimaryButton title="Share All as CSV" onPress={onShareAll} variant="muted" />
+              <TouchableOpacity style={styles.headerPill} onPress={onShareAll}>
+                <Text style={styles.headerPillText}>Share all</Text>
+              </TouchableOpacity>
             </>
           )}
         </View>
@@ -572,6 +661,13 @@ export default function HistoryTab({
           </TouchableOpacity>
           <View style={styles.selectBarButtons}>
             <PrimaryButton
+              title="Share"
+              onPress={handleShareSelected}
+              disabled={selected.size === 0 || bulkUploading || bulkDeleting}
+              variant="muted"
+              style={styles.selectBarButton}
+            />
+            <PrimaryButton
               title={bulkDeleting ? 'Deleting…' : 'Delete'}
               onPress={handleDeleteSelected}
               disabled={selected.size === 0 || bulkUploading || bulkDeleting}
@@ -579,7 +675,7 @@ export default function HistoryTab({
               style={styles.selectBarButton}
             />
             <PrimaryButton
-              title={bulkUploading ? 'Uploading…' : `Upload ${selected.size || ''} Selected`.trim()}
+              title={bulkUploading ? 'Uploading…' : selected.size ? `Upload (${selected.size})` : 'Upload'}
               onPress={handleUploadSelected}
               disabled={selected.size === 0 || bulkUploading || bulkDeleting}
               style={styles.selectBarButton}

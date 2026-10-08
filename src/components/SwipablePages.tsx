@@ -98,7 +98,7 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
   const clipH = fill ? Math.max(0, Math.floor((fixedHeight ?? 0) - DOTS_H)) : 0;
   const pageH = fill ? clipH : fixedHeight;
   const [scrollLocked, setScrollLocked] = useState(false);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   // Note: no system-gesture exclusion zones here. They used to reserve the pager's left/right
   // edges for chart paging, which swallowed the Android Back swipe whenever it began over a chart.
   // Back to the first page whenever resetKey changes (not on first mount).
@@ -180,6 +180,11 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
               pagingEnabled
               decelerationRate="fast"
               nestedScrollEnabled
+              // Same reason as HistoryScreen's ScrollView: the default
+              // ("never") eats the first tap while the keyboard is up, which
+              // broke Save/Cancel in popups opened from a page (the rename
+              // popup needed two taps).
+              keyboardShouldPersistTaps="handled"
               scrollEnabled={!scrollLocked}
               overScrollMode="never"
               bounces={false}

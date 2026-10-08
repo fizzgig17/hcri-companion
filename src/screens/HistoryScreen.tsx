@@ -288,6 +288,19 @@ export default function HistoryScreen({ navigation }: any) {
     withBackgroundDisconnectSuppressed(() => shareSingleReadingCsv(reading.result, reading.label));
   }, []);
 
+  const shareManyFromHistory = useCallback(
+    (ids: string[]) => {
+      const picked = history.filter((r) => ids.includes(r.id));
+      if (picked.length === 0) return;
+      if (picked.length === 1) {
+        withBackgroundDisconnectSuppressed(() => shareSingleReadingCsv(picked[0].result, picked[0].label));
+      } else {
+        withBackgroundDisconnectSuppressed(() => shareAllReadingsCsv(picked));
+      }
+    },
+    [history]
+  );
+
   const shareAllFromHistory = useCallback(() => {
     withBackgroundDisconnectSuppressed(() => shareAllReadingsCsv(history));
   }, [history]);
@@ -304,7 +317,13 @@ export default function HistoryScreen({ navigation }: any) {
     // status-bar/notch inset for itself right above this screen, and
     // requesting it again here double-stacks it into a dead gap.
     <SafeAreaView style={styles.container} edges={IS_DEV_BUILD ? ['left', 'right'] : ['top', 'left', 'right']}>
-      <ScrollView contentContainerStyle={styles.content}>
+      {/* keyboardShouldPersistTaps="handled": this ScrollView is a parent (in
+          React terms) of the rename popup in HistoryTab, and its default
+          ("never") eats the first tap while the keyboard is up -- it just
+          dismissed the keyboard and never passed the tap to the popup's Save
+          button, so Save took two taps. "handled" lets a tap on a button go
+          straight through. */}
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>History</Text>
         <HistoryTab
           history={history}
@@ -316,6 +335,7 @@ export default function HistoryScreen({ navigation }: any) {
           onDeleteMany={deleteManyFromHistory}
           onShareOne={shareOneFromHistory}
           onShareAll={shareAllFromHistory}
+          onShareMany={shareManyFromHistory}
           onOpen={(reading) => navigation.navigate('ReadingDetail', { reading })}
           uploadingId={historyUploadingId}
           bulkUploading={historyBulkUploading}

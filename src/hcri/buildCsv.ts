@@ -7,6 +7,7 @@
 // so there's no need to duplicate that math here or send it over the wire.
 
 import { MeterResult } from '../ble/parseResult';
+import { analyzeSpectrum } from '../utils/spectralAnalysis';
 
 export function buildCsv(result: MeterResult): string {
   const lines: string[] = [];
@@ -21,6 +22,48 @@ export function buildCsv(result: MeterResult): string {
     lines.push(`${point.nm},${point.value}`);
   }
 
+  return lines.join('\n');
+}
+
+/**
+ * The CSV that gets SHARED (not uploaded): the exact upload CSV above, then a
+ * short key-value summary after the spectrum -- the numbers the app shows
+ * (computed from the spectrum), the meter's own lux, and for an HPCS reading
+ * the meter's own CCT/Ra/Duv for comparison. The summary sits after the data
+ * on purpose so the top of the file and the nm,value rows stay exactly what
+ * hCRI.io's format expects; uploads still use buildCsv() unchanged.
+ */
+export function buildShareCsv(result: MeterResult): string {
+  const a = analyzeSpectrum(result.spectrum);
+  const lines = [
+    buildCsv(result),
+    '',
+    'Summary,computed from the spectrum above',
+    `CCT,${a.cct.toFixed(0)}`,
+    `Duv,${a.duv.toFixed(5)}`,
+    `Ra,${a.ra}`,
+    `R9,${a.r9}`,
+    `Lux,${result.lux != null ? result.lux.toFixed(1) : ""}`,
+    `x,${a.x.toFixed(4)}`,
+    `y,${a.y.toFixed(4)}`,
+    `Rf,${a.rf.toFixed(1)}`,
+    `Rg,${a.rg.toFixed(1)}`,
+    `IntegrationTimeMs,${result.integrationTimeMs}`,
+  ];
+  lines.push(`PeakSignal,${result.peakSignal}`);
+  if (result.source === 'torchbearer') {
+    lines.push(`TorchBearerStatus,${['normal', 'over-exposed', 'under-exposed'][result.tbStatus ?? 0] ?? result.tbStatus}`);
+    lines.push(`SpectralCorrection,${result.tbCorrected ? 'applied' : 'none (raw)'}`);
+  } else {
+    lines.push(`DarkSignal,${result.darkSignal}`);
+  }
+  if (!result.source) {
+    lines.push(
+      `MeterReportedCCT,${result.cct.toFixed(0)}`,
+      `MeterReportedRa,${result.ra.toFixed(1)}`,
+      `MeterReportedDuv,${result.duv.toFixed(5)}`
+    );
+  }
   return lines.join('\n');
 }
 
@@ -92,6 +135,6 @@ export function defaultLabel(username: string | null, deviceName?: string | null
  */
 export function buildCombinedCsv(readings: { label: string; savedAt: number; result: MeterResult }[]): string {
   return readings
-    .map((r) => [`Reading,${r.label}`, `SavedAt,${new Date(r.savedAt).toISOString()}`, buildCsv(r.result)].join('\n'))
+    .map((r) => [`Reading,${r.label}`, `SavedAt,${new Date(r.savedAt).toISOString()}`, buildShareCsv(r.result)].join('\n'))
     .join('\n\n');
 }

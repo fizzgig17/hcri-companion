@@ -9,7 +9,7 @@
 //
 // Requires: react-native-ble-plx (already installed in this project).
 
-import { BleManager, Device, Characteristic, Subscription } from 'react-native-ble-plx';
+import { BleManager, Device, Characteristic, Subscription, ScanMode } from 'react-native-ble-plx';
 import { Buffer } from 'buffer';
 import { PermissionsAndroid, Platform } from 'react-native';
 import {
@@ -22,6 +22,11 @@ import {
   FLICKER_WAVE_REPLY_BYTES,
 } from './protocol';
 import type { BatteryStatus } from './protocol';
+import {
+  TB_SERVICE_UUID, TB_CMD_UUID, TB_RESULT_UUID, TB_STATUS_UUID, TB_CMD_SCAN_B64, TB_STATE_ERROR,
+  isTorchBearerName, TbReassembler, tbToMeterResult,
+} from './torchBearer';
+import type { MeterResult } from './parseResult';
 import {
   saveLastDeviceId,
   loadLastDeviceId,
@@ -60,10 +65,10 @@ declare global {
 }
 
 function getSharedBleManager(): BleManager {
-  if (!global.__hcriBleManagerSingleton) {
-    global.__hcriBleManagerSingleton = new BleManager();
+  if (!globalThis.__hcriBleManagerSingleton) {
+    globalThis.__hcriBleManagerSingleton = new BleManager();
   }
-  return global.__hcriBleManagerSingleton;
+  return globalThis.__hcriBleManagerSingleton;
 }
 
 /**
@@ -143,7 +148,12 @@ async function readBluetoothState(manager: BleManager, settleMs = 1500): Promise
 /** True if the advertised name matches any known meter model prefix (see protocol.ts's METER_NAME_PREFIXES for why this is a list, not one hardcoded string). */
 function matchesKnownMeter(name: string | null | undefined): boolean {
   if (!name) return false;
-  return METER_NAME_PREFIXES.some((prefix) => name.startsWith(prefix));
+  return METER_NAME_PREFIXES.some((prefix) => name.startsWith(prefix)) || isTorchBearerName(name);
+}
+
+/** True if a scanned device advertises the Torch Bearer bridge's service UUID (Android can leave device.name empty for BLE-only devices, so the name alone isn't always enough). */
+function advertisesTorchBearer(device: Device | null | undefined): boolean {
+  return !!device?.serviceUUIDs?.some((u) => u.toLowerCase() === TB_SERVICE_UUID);
 }
 
 /** Space-separated hex, e.g. "8c 05 a0 0f 00 00 01" -- for wire-level traffic logging only, doesn't affect any parsing/control-flow decision. */
@@ -229,6 +239,14 @@ export class MeterConnection {
    * Exposed so the app can display "found service UUID: ..." during the
    * one-time discovery step.
    */
+  // Torch Bearer (ESP32 bridge) mode -- see torchBearer.ts. Set only when the
+  // connected device's name says so; every HPCS code path ignores these.
+  private cancelActiveScan: (() => void) | null = null;
+  private tbMode = false;
+  private tbSubs: Subscription[] = [];
+  private tbReassembler = new TbReassembler();
+  private tbWaiter: { resolve: (r: MeterResult) => void; reject: (e: Error) => void } | null = null;
+
   public serviceUuid: string = METER_SERVICE_UUID_PLACEHOLDER;
   public characteristicUuid: string = METER_CHARACTERISTIC_UUID_PLACEHOLDER;
 
@@ -269,8 +287,9 @@ export class MeterConnection {
    */
   async scanForKnownMeters(
     windowMs = 3000,
-    opts?: { preferDeviceId?: string | null; minListenMs?: number }
+    opts?: { preferDeviceId?: string | null; minListenMs?: number; quiet?: boolean }
   ): Promise<Device[]> {
+    const quiet = !!opts?.quiet;
     const authorized = await requestBlePermissions();
     if (!authorized) {
       throw new Error(
@@ -282,7 +301,10 @@ export class MeterConnection {
     // "meter not found on cold start, works after tapping Connect again".
     await waitForPoweredOn(this.manager);
 
-    this.log(`Scanning for known meter models (${METER_NAME_PREFIXES.join(', ')})...`);
+    if (!quiet) this.log(`Scanning for known meter models (${METER_NAME_PREFIXES.join(', ')})...`);
+    // Only one scan at a time: end any scan still running (e.g. the background
+    // poll) so its timer can't stop THIS scan later.
+    this.stopScan();
 
     // Fast path: if the caller knows which meter it's after (the one used
     // last time) and that exact meter shows up, don't sit out the rest of
@@ -304,15 +326,32 @@ export class MeterConnection {
         done = true;
         if (earlyTimer) clearTimeout(earlyTimer);
         clearTimeout(windowTimer);
+        if (this.cancelActiveScan === finish) this.cancelActiveScan = null;
         this.manager.stopDeviceScan();
         resolve();
       };
-      this.manager.startDeviceScan(null, { allowDuplicates: false }, (error, device) => {
+      this.cancelActiveScan = finish;
+      // LowLatency = listen continuously. Android's default scan modes only
+      // listen for part of each cycle, which is how a meter (especially one
+      // advertising every 100+ ms) could be missed inside a short window.
+      this.manager.startDeviceScan(null, { allowDuplicates: false, scanMode: ScanMode.LowLatency }, (error, device) => {
         if (error) {
           this.log(`Scan error: ${error.message}`);
           return;
         }
-        if (matchesKnownMeter(device?.name)) {
+        // Verbose-log every device the scan hears (name, localName, id, RSSI, any
+        // advertised service UUIDs, and whether it matched) -- so when a meter
+        // "isn't found" the Logs tab shows what WAS in the air and why each
+        // device was or wasn't taken.
+        if (device && !quiet) {
+          const isMatch = matchesKnownMeter(device.name) || matchesKnownMeter(device.localName) || advertisesTorchBearer(device);
+          this.log(
+            `scan: ${isMatch ? 'MATCH ' : 'skip  '}name=${JSON.stringify(device.name)} local=${JSON.stringify(device.localName)} id=${device.id} rssi=${device.rssi}` +
+              `${device.serviceUUIDs?.length ? ` svc=${device.serviceUUIDs.join(',')}` : ''}`,
+            true
+          );
+        }
+        if (matchesKnownMeter(device?.name) || matchesKnownMeter(device?.localName) || advertisesTorchBearer(device)) {
           found.set(device!.id, device!);
           if (preferId && device!.id === preferId && !earlyTimer) {
             const wait = Math.max(0, minListenMs - (Date.now() - startedAt));
@@ -324,6 +363,8 @@ export class MeterConnection {
     });
 
     const devices = Array.from(found.values()).sort((a, b) => (b.rssi ?? -999) - (a.rssi ?? -999));
+    if (quiet) return devices;
+    this.log(`scan: finished after ${Date.now() - startedAt} ms, ${found.size} matching device(s)`, true);
     this.log(
       devices.length === 0
         ? 'No known meter models found.'
@@ -332,6 +373,11 @@ export class MeterConnection {
             .join(', ')}`
     );
     return devices;
+  }
+
+  /** Ends a scan started by scanForKnownMeters() early (it then resolves with whatever it had heard so far). No-op when none is running. */
+  stopScan(): void {
+    this.cancelActiveScan?.();
   }
 
   /**
@@ -358,11 +404,31 @@ export class MeterConnection {
     // with more than one candidate, and the person is now picking from the
     // overlay) -- stop it before connecting, since some Android BLE stacks
     // get flaky about connecting while a scan is still active.
+    this.stopScan();
     this.manager.stopDeviceScan();
 
-    this.log(`Connecting to ${deviceId}...`);
-    const device = await this.manager.connectToDevice(deviceId);
-    return this.finishConnecting(device);
+    // Android's first GATT connect attempt sometimes fails outright (status
+    // 133 and friends) even though the device is right there -- one clean
+    // retry after dropping whatever half-open link that left behind fixes
+    // most of those.
+    let lastErr: any = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        this.log(attempt === 1 ? `Connecting to ${deviceId}...` : `Connecting to ${deviceId} (retry)...`);
+        const device = await this.manager.connectToDevice(deviceId, { timeout: 10000 });
+        return await this.finishConnecting(device);
+      } catch (e: any) {
+        lastErr = e;
+        this.log(`Connect attempt ${attempt} failed: ${e?.message ?? e}`);
+        try {
+          await this.manager.cancelDeviceConnection(deviceId);
+        } catch {
+          // nothing to cancel
+        }
+        if (attempt < 2) await new Promise<void>((r) => setTimeout(() => r(), 700));
+      }
+    }
+    throw lastErr;
   }
 
   /** Shared post-connect setup: service/characteristic discovery, MTU request, subscribing, and wiring the disconnect listener. Called from connectToDevice() -- the only way to connect now, whether it's the single match scanForKnownMeters() found or a pick from the device-picker overlay. */
@@ -378,6 +444,19 @@ export class MeterConnection {
     } catch (e) {
       this.log(`requestMTU failed (continuing anyway): ${e}`);
     }
+
+    let isTb = isTorchBearerName(connected.name) || isTorchBearerName(connected.localName);
+    if (!isTb) {
+      try {
+        isTb = (await connected.services()).some((sv) => sv.uuid.toLowerCase() === TB_SERVICE_UUID);
+      } catch {
+        // fall through -- treated as a regular meter
+      }
+    }
+    if (isTb) {
+      return this.finishConnectingTorchBearer(connected);
+    }
+    this.tbMode = false;
 
     this.device = connected;
     // Fire-and-forget: persisted so a FUTURE MeterConnection instance (e.g.
@@ -410,6 +489,120 @@ export class MeterConnection {
     });
 
     return connected;
+  }
+
+  /** True when the connected device is a Torch Bearer bridge rather than an HPCS meter. */
+  isTorchBearer(): boolean {
+    return this.tbMode && this.isConnected();
+  }
+
+  /** Torch Bearer connection setup: find the bridge's characteristics, subscribe to results + status, and wire the disconnect listener. */
+  private async finishConnectingTorchBearer(connected: Device): Promise<Device> {
+    this.log('Torch Bearer detected -- setting up the bridge service...');
+    const chars = await connected.characteristicsForService(TB_SERVICE_UUID);
+    const find = (uuid: string) => chars.find((c) => c.uuid.toLowerCase() === uuid);
+    const cmd = find(TB_CMD_UUID);
+    const res = find(TB_RESULT_UUID);
+    const sta = find(TB_STATUS_UUID);
+    if (!cmd || !res || !sta) {
+      await connected.cancelConnection().catch(() => {});
+      throw new Error('This Torch Bearer is missing its expected Bluetooth service -- is the bridge firmware up to date?');
+    }
+    this.tbMode = true;
+    this.device = connected;
+    this.characteristic = cmd; // so isConnected() works unchanged
+    this.serviceUuid = TB_SERVICE_UUID;
+    this.characteristicUuid = TB_CMD_UUID;
+    saveLastDeviceId(connected.id).catch((e) => this.log(`Failed to persist last device id: ${e}`));
+
+    this.tbSubs.forEach((x) => x.remove());
+    this.tbReassembler.reset();
+    this.tbSubs = [
+      res.monitor((error, char) => {
+        if (error) {
+          this.log(`Torch Bearer result notification error: ${error.message}`);
+          return;
+        }
+        if (!char?.value) return;
+        const arr = new Uint8Array(Buffer.from(char.value, 'base64'));
+        this.log(`<- TB result (${arr.length}B): ${toHex(arr.subarray(0, 12))}${arr.length > 12 ? ' ...' : ''}`, true);
+        try {
+          const scan = this.tbReassembler.push(arr);
+          if (scan && this.tbWaiter) {
+            const w = this.tbWaiter;
+            this.tbWaiter = null;
+            this.log(`Torch Bearer scan complete: ${scan.spectrum.length} points, exposure ${scan.summary.exposureMs.toFixed(1)} ms, status ${scan.summary.status}`);
+            w.resolve(tbToMeterResult(scan, connected.name ?? connected.localName ?? 'Torch Bearer'));
+          }
+        } catch (e: any) {
+          this.tbReassembler.reset();
+          if (this.tbWaiter) {
+            const w = this.tbWaiter;
+            this.tbWaiter = null;
+            w.reject(e instanceof Error ? e : new Error(String(e)));
+          }
+        }
+      }),
+      sta.monitor((error, char) => {
+        if (error || !char?.value) return;
+        const arr = new Uint8Array(Buffer.from(char.value, 'base64'));
+        this.log(`<- TB status: state ${arr[0]} try ${arr[1]}`, true);
+        if (arr[0] === TB_STATE_ERROR && this.tbWaiter) {
+          const w = this.tbWaiter;
+          this.tbWaiter = null;
+          w.reject(new Error('The Torch Bearer could not scan -- check that the spectrometer is plugged into it.'));
+        }
+      }),
+    ];
+
+    this.disconnectSubscription?.remove();
+    this.disconnectSubscription = connected.onDisconnected((error) => {
+      this.log(`Torch Bearer disconnected${error ? `: ${error.message}` : ''}`);
+      this.device = null;
+      this.characteristic = null;
+      this.tbSubs.forEach((x) => x.remove());
+      this.tbSubs = [];
+      if (this.tbWaiter) {
+        const w = this.tbWaiter;
+        this.tbWaiter = null;
+        w.reject(new Error('Torch Bearer disconnected during the scan.'));
+      }
+      this.tbMode = false;
+      this.onDisconnectedCallback();
+    });
+    return connected;
+  }
+
+  /**
+   * Takes one reading on a connected Torch Bearer: writes the scan command,
+   * then waits for the bridge to finish (it auto-exposes, which can take a
+   * few seconds -- up to ~2 s per attempt in dim light) and stream the
+   * spectrum back. Rejects on a bridge error, a disconnect, or the timeout.
+   */
+  async takeTorchBearerReading(timeoutMs = 60000): Promise<MeterResult> {
+    if (!this.isTorchBearer() || !this.characteristic) throw new Error('Not connected to a Torch Bearer');
+    if (this.tbWaiter) throw new Error('A Torch Bearer scan is already running');
+    this.tbReassembler.reset();
+    const result = new Promise<MeterResult>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (this.tbWaiter) {
+          this.tbWaiter = null;
+          reject(new Error('Timed out waiting for the Torch Bearer to finish scanning.'));
+        }
+      }, timeoutMs);
+      this.tbWaiter = {
+        resolve: (r) => { clearTimeout(timer); resolve(r); },
+        reject: (e) => { clearTimeout(timer); reject(e); },
+      };
+    });
+    this.log('Torch Bearer: sending scan command');
+    try {
+      await this.characteristic.writeWithResponse(TB_CMD_SCAN_B64);
+    } catch (e) {
+      this.tbWaiter = null;
+      throw e;
+    }
+    return result;
   }
 
   /**
@@ -619,6 +812,7 @@ export class MeterConnection {
 
   async sendCommand(bytes: number[]): Promise<void> {
     if (!this.characteristic) throw new Error('Not connected');
+    if (this.tbMode) throw new Error('That feature is not available on the Torch Bearer.');
     const base64 = Buffer.from(bytes).toString('base64');
     // Same reasoning as the notify-side log in subscribe() above: pure
     // logging, no effect on control flow. Pairing "-> write" with "<-
@@ -640,7 +834,7 @@ export class MeterConnection {
    * should avoid starting it while a measurement is in flight.
    */
   readBattery(timeoutMs = 1500): Promise<BatteryStatus | null> {
-    if (!this.isConnected()) return Promise.resolve(null);
+    if (!this.isConnected() || this.tbMode) return Promise.resolve(null); // the Torch Bearer bridge has no battery report
     return new Promise((resolve) => {
       let settled = false;
       let off: () => void = () => {};
@@ -671,7 +865,7 @@ export class MeterConnection {
 
   /** The connected device's advertised name (e.g. "HPCS-310-0326030"), or null if not connected. Used to pick the right field-offset map for parseResult, since different models lay their result body out differently. */
   getDeviceName(): string | null {
-    return this.device?.name ?? null;
+    return this.device?.name ?? (this.tbMode ? 'Torch Bearer' : null);
   }
 
   /** The connected device's BLE identifier, or null if not connected. Used by takeMeasurement()'s reconnect-per-reading experiment to reconnect to the SAME physical meter via connectToDevice() rather than re-running the name-prefix scan. */
@@ -767,6 +961,9 @@ export class MeterConnection {
     this.notifySubscription = null;
     this.siblingSubscriptions.forEach((s) => s.remove());
     this.siblingSubscriptions = [];
+    this.tbSubs.forEach((x) => x.remove());
+    this.tbSubs = [];
+    this.tbMode = false;
     if (this.device) {
       await this.device.cancelConnection().catch(() => {});
     }

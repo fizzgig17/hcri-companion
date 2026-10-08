@@ -43,7 +43,7 @@ export default function LogsTab({ log, onShare, onClear }: Props) {
     ]);
   };
 
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   // Tracked purely to compute "the middle" -- content height from the log
   // box's own onContentSizeChange, viewport height from its onLayout. Both
   // start at 0 (nothing scrolls anywhere until real measurements come in,

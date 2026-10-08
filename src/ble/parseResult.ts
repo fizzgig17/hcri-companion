@@ -30,6 +30,12 @@ export interface MeterResult {
   spectrum: { nm: number; value: number }[];
   /** Set only on a "test reading" pulled from a public hCRI.io report (see hcri/fetchSampleReading.ts) -- never on a real measurement. Marks it as not-from-a-meter so it isn't saved to History or uploaded. */
   sampleLabel?: string;
+  /** Set to 'torchbearer' on a reading from the Torch Bearer bridge (spectrum-only device): the HPCS-specific peak/dark ADC signal doesn't exist there, so the UI leaves those out. */
+  source?: 'torchbearer';
+  /** Torch Bearer only: the spectrometer's own exposure status on the final frame -- 0 normal, 1 over-exposed, 2 under-exposed. */
+  tbStatus?: number;
+  /** Torch Bearer only: true when the HPCS-matching spectral correction (ble/tbCorrection.ts) was applied to this spectrum, false for the raw spectrum. */
+  tbCorrected?: boolean;
 }
 
 /** Reads a little-endian float32 at the given byte offset. */
