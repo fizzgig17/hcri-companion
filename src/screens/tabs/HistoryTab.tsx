@@ -132,12 +132,19 @@ function HistoryRow({
     [reading.analysis, reading.result.spectrum]
   );
 
+  // Guards against committing twice: Save fires on touch-down (see below) AND
+  // on the normal press release, and the keyboard's Done key can also submit.
+  const committedRef = useRef(false);
+
   const openEditor = () => {
     setDraft(reading.label);
+    committedRef.current = false;
     setModalVisible(true);
   };
 
   const commitRename = () => {
+    if (committedRef.current) return;
+    committedRef.current = true;
     const trimmed = draft.trim();
     setModalVisible(false);
     if (!trimmed) return; // don't allow blanking a saved reading's name out
@@ -327,7 +334,17 @@ function HistoryRow({
               <TouchableOpacity style={styles.modalCancel} onPress={() => setModalVisible(false)}>
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.modalSave} onPress={commitRename}>
+              {/* onPressIn as well as onPress: with the keyboard up, the first
+                  tap on Android could be eaten by the keyboard/layout change
+                  before the release registered as a press, so Save needed two
+                  taps. Firing on touch-down avoids that; committedRef keeps
+                  the later onPress from running it a second time. */}
+              <TouchableOpacity
+                style={styles.modalSave}
+                onPressIn={commitRename}
+                onPress={commitRename}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
                 <Text style={styles.modalSaveText}>Save</Text>
               </TouchableOpacity>
             </View>
@@ -555,11 +572,23 @@ export default function HistoryTab({
     empty: { paddingVertical: 40, alignItems: 'center' },
     emptyText: { color: colors.muted, fontSize: 13, textAlign: 'center', paddingHorizontal: 20 },
 
-    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 8 },
-    headerTitle: { color: colors.muted, fontSize: 12, marginBottom: 4, flexShrink: 1 },
+    // Top bar: the count on the left, two small matching pills on the right,
+    // all centered on one line (this used to be a big full-size button next to
+    // a bare text link, which sat at different heights and looked clunky).
+    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+    headerTitle: { color: colors.muted, fontSize: 12, flexShrink: 1, marginRight: 8 },
     headerButtons: { flexDirection: 'row', alignItems: 'center' },
-    selectText: { color: colors.accent, fontSize: 13, fontWeight: '600', marginRight: 16, marginBottom: 4 },
-    cancelText: { color: colors.muted, fontSize: 13, fontWeight: '600', marginBottom: 4 },
+    headerPill: {
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+      marginLeft: 8,
+    },
+    headerPillText: { color: colors.text, fontSize: 12.5, fontWeight: '600' },
+    headerPillAccentText: { color: colors.accent, fontSize: 12.5, fontWeight: '600' },
 
     selectBar: {
       flexDirection: 'column',
@@ -578,7 +607,7 @@ export default function HistoryTab({
     // button stacked below other content) -- here it sits inline next to
     // "Select All" text, so that top margin would push it visibly lower than
     // its sibling instead of centering with it.
-    selectBarButton: { marginTop: 0, marginLeft: 8, flex: 1, paddingHorizontal: 8 },
+    selectBarButton: { marginTop: 0, marginLeft: 8, flex: 1, paddingHorizontal: 8, paddingVertical: 10 },
 
     dateGroup: { marginBottom: 2 },
     todayLabel: {
@@ -619,15 +648,17 @@ export default function HistoryTab({
         </Text>
         <View style={styles.headerButtons}>
           {selectMode ? (
-            <TouchableOpacity onPress={exitSelectMode} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={styles.cancelText}>Cancel</Text>
+            <TouchableOpacity style={styles.headerPill} onPress={exitSelectMode}>
+              <Text style={styles.headerPillText}>Cancel</Text>
             </TouchableOpacity>
           ) : (
             <>
-              <TouchableOpacity onPress={() => setSelectMode(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={styles.selectText}>Select</Text>
+              <TouchableOpacity style={styles.headerPill} onPress={() => setSelectMode(true)}>
+                <Text style={styles.headerPillAccentText}>Select</Text>
               </TouchableOpacity>
-              <PrimaryButton title="Share All as CSV" onPress={onShareAll} variant="muted" />
+              <TouchableOpacity style={styles.headerPill} onPress={onShareAll}>
+                <Text style={styles.headerPillText}>Share all</Text>
+              </TouchableOpacity>
             </>
           )}
         </View>
@@ -654,7 +685,7 @@ export default function HistoryTab({
               style={styles.selectBarButton}
             />
             <PrimaryButton
-              title={bulkUploading ? 'Uploading…' : `Upload ${selected.size || ''} Selected`.trim()}
+              title={bulkUploading ? 'Uploading…' : selected.size ? `Upload (${selected.size})` : 'Upload'}
               onPress={handleUploadSelected}
               disabled={selected.size === 0 || bulkUploading || bulkDeleting}
               style={styles.selectBarButton}

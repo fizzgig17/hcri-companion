@@ -22,6 +22,7 @@
 import { analyzeSpectrum } from '../utils/spectralAnalysis';
 import { cieColorMatch } from '../utils/cieChromaticity';
 import type { MeterResult } from './parseResult';
+import { applyTbCorrection, isTbCorrectionEnabled } from './tbCorrection';
 
 export const TB_NAME_PREFIX = 'Torch Bearer';
 export const TB_SERVICE_UUID = '7a1c0001-5b2e-4f0a-9c3d-2e8f6b4a1d00';
@@ -150,7 +151,11 @@ export class TbReassembler {
  * tobes-ui project); they have NOT been calibrated against a reference meter.
  */
 export function tbToMeterResult(scan: TbScan, deviceName: string): MeterResult {
-  const { spectrum, summary } = scan;
+  const { summary } = scan;
+  // The bridge sends the raw spectrum; the app applies the HPCS-matching
+  // correction (tbCorrection.ts) unless it's switched off in Settings.
+  const corrected = isTbCorrectionEnabled();
+  const spectrum = corrected ? applyTbCorrection(scan.spectrum) : scan.spectrum;
   const a = analyzeSpectrum(spectrum);
 
   // Photopic illuminance: 683 lm/W * sum(ybar * E(lambda) * dlambda). Step is 1 nm.
@@ -186,5 +191,6 @@ export function tbToMeterResult(scan: TbScan, deviceName: string): MeterResult {
     spectrum,
     source: 'torchbearer',
     tbStatus: summary.status,
+    tbCorrected: corrected,
   };
 }

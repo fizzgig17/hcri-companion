@@ -87,6 +87,20 @@ export async function saveStayConnectedInBackgroundPreference(enabled: boolean):
   await AsyncStorage.setItem(STAY_CONNECTED_IN_BACKGROUND_KEY, enabled ? 'true' : 'false');
 }
 
+// Default ON -- the Torch Bearer's raw spectrum reads a few percent high in
+// CCT next to the HPCS; the correction in ble/tbCorrection.ts brings it back
+// in line (see that file for how it was checked). Off gives the raw spectrum.
+const TB_CORRECTION_KEY = 'hcri.io.pref.torchBearerCorrection';
+
+export async function loadTbCorrectionPreference(): Promise<boolean> {
+  const raw = await AsyncStorage.getItem(TB_CORRECTION_KEY);
+  return raw === null ? true : raw === 'true';
+}
+
+export async function saveTbCorrectionPreference(enabled: boolean): Promise<void> {
+  await AsyncStorage.setItem(TB_CORRECTION_KEY, enabled ? 'true' : 'false');
+}
+
 // Defaults to 'system' -- a fresh install should follow the phone's own
 // light/dark setting rather than forcing dark (this app's original, only
 // look) on someone whose phone is set to light mode. Light and Dark are

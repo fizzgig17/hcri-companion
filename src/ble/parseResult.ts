@@ -34,6 +34,8 @@ export interface MeterResult {
   source?: 'torchbearer';
   /** Torch Bearer only: the spectrometer's own exposure status on the final frame -- 0 normal, 1 over-exposed, 2 under-exposed. */
   tbStatus?: number;
+  /** Torch Bearer only: true when the HPCS-matching spectral correction (ble/tbCorrection.ts) was applied to this spectrum, false for the raw spectrum. */
+  tbCorrected?: boolean;
 }
 
 /** Reads a little-endian float32 at the given byte offset. */

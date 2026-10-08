@@ -53,6 +53,7 @@ export function buildShareCsv(result: MeterResult): string {
   lines.push(`PeakSignal,${result.peakSignal}`);
   if (result.source === 'torchbearer') {
     lines.push(`TorchBearerStatus,${['normal', 'over-exposed', 'under-exposed'][result.tbStatus ?? 0] ?? result.tbStatus}`);
+    lines.push(`SpectralCorrection,${result.tbCorrected ? 'applied' : 'none (raw)'}`);
   } else {
     lines.push(`DarkSignal,${result.darkSignal}`);
   }

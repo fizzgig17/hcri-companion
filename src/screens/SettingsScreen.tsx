@@ -43,7 +43,10 @@ import {
   saveVerboseLoggingPreference,
   loadStayConnectedInBackgroundPreference,
   saveStayConnectedInBackgroundPreference,
+  loadTbCorrectionPreference,
+  saveTbCorrectionPreference,
 } from '../storage/preferences';
+import { setTbCorrectionEnabled } from '../ble/tbCorrection';
 import {
   StatDisplayPrefs,
   loadStatDisplayPrefs,
@@ -128,6 +131,7 @@ export default function SettingsScreen({ navigation, route }: any) {
   // dumps and full raw-result-body dump, not the ordinary connect/measure
   // milestones and errors, which always show regardless of this setting).
   const [verboseLogging, setVerboseLogging] = useState(false);
+  const [tbCorrection, setTbCorrection] = useState(true);
   // Which measurements show on the Main tab's result card, and in what
   // order -- starts from the built-in default so the list renders
   // immediately (not empty) while loadStatDisplayPrefs() resolves.
@@ -161,6 +165,7 @@ export default function SettingsScreen({ navigation, route }: any) {
     loadHapticResultsPreference().then(setHapticResults);
     loadStayConnectedInBackgroundPreference().then(setStayConnectedInBackground);
     loadVerboseLoggingPreference().then(setVerboseLogging);
+    loadTbCorrectionPreference().then(setTbCorrection);
     loadStatDisplayPrefs().then(setStatPrefs);
     // Intentionally run once on mount only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -208,6 +213,12 @@ export default function SettingsScreen({ navigation, route }: any) {
     setResultHapticsEnabled(value);
     if (value) hapticSuccess();
     await saveHapticResultsPreference(value);
+  };
+
+  const toggleTbCorrection = async (value: boolean) => {
+    setTbCorrection(value);
+    setTbCorrectionEnabled(value); // applies to the very next Torch Bearer scan
+    await saveTbCorrectionPreference(value);
   };
 
   const toggleKeepAwake = async (value: boolean) => {
@@ -700,6 +711,18 @@ export default function SettingsScreen({ navigation, route }: any) {
           onValueChange={toggleStayConnectedInBackground}
           trackColor={{ true: colors.accent }}
         />
+      </View>
+
+      <View style={styles.toggleRow}>
+        <View style={styles.toggleTextWrap}>
+          <Text style={styles.toggleLabel}>Torch Bearer correction</Text>
+          <Text style={styles.toggleHint}>
+            Adjusts the Torch Bearer's spectrum so its CCT, Duv and color-rendering numbers line up with the
+            HPCS meter (it reads a few percent high in CCT without it). Leave on for normal use; turn off to
+            see the raw, uncorrected spectrum. Applies to new scans, and saved CSVs say which one was used.
+          </Text>
+        </View>
+        <Switch value={tbCorrection} onValueChange={toggleTbCorrection} trackColor={{ true: colors.accent }} />
       </View>
 
       <View style={styles.toggleRow}>
