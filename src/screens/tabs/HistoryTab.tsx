@@ -248,11 +248,11 @@ function HistoryRow({
       borderWidth: 1,
       borderColor: colors.cardBorder,
       borderRadius: 8,
-      paddingVertical: 6,
+      paddingVertical: 4,
       alignItems: 'center',
     },
     actionButtonDisabled: { opacity: 0.6 },
-    actionButtonText: { color: colors.text, fontSize: 11, fontWeight: '600', marginTop: 3 },
+    actionButtonText: { color: colors.text, fontSize: 10, fontWeight: '600', marginTop: 1 },
 
     // Same outlined-pill treatment as MainTab/DataTab's Copy Link button --
     // kept as its own small pill rather than folded into actionButton's
@@ -303,11 +303,11 @@ function HistoryRow({
         </View>
         {!selectMode && (
           <View style={styles.rowHeaderButtons}>
-            <TouchableOpacity onPress={() => onOpen(reading)} style={{ marginRight: 18 }} accessibilityRole="button" accessibilityLabel="View reading" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <ActionIcon d={ICON_EYE} color={colors.info} size={22} />
+            <TouchableOpacity onPress={() => onOpen(reading)} style={{ marginRight: 16 }} accessibilityRole="button" accessibilityLabel="View reading" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <ActionIcon d={ICON_EYE} color={colors.info} size={19} />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => onDelete(reading.id)} accessibilityRole="button" accessibilityLabel="Delete reading" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <ActionIcon d={ICON_TRASH} color={colors.danger} size={22} />
+              <ActionIcon d={ICON_TRASH} color={colors.danger} size={19} />
             </TouchableOpacity>
           </View>
         )}
@@ -372,13 +372,13 @@ function HistoryRow({
               <ActivityIndicator size="small" color={colors.text} />
             ) : (
               <>
-                <ActionIcon d={ICON_CLOUD} color={colors.text} />
+                <ActionIcon d={ICON_CLOUD} color={colors.text} size={17} />
                 <Text style={styles.actionButtonText}>Upload</Text>
               </>
             )}
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionButton} onPress={() => onShareOne(reading)}>
-            <ActionIcon d={ICON_TRAY} color={colors.text} />
+            <ActionIcon d={ICON_TRAY} color={colors.text} size={17} />
             <Text style={styles.actionButtonText}>Share CSV</Text>
           </TouchableOpacity>
         </View>
