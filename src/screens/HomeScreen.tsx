@@ -21,7 +21,7 @@ import { MeterResult } from '../ble/parseResult';
 import { analyzeSpectrum } from '../utils/spectralAnalysis';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { buildCsv, defaultLabel } from '../hcri/buildCsv';
-import { uploadToHcri } from '../hcri/uploadToHcri';
+import { uploadReadingToHcri } from '../hcri/uploadFlickerToHcri';
 import { getReportLink } from '../hcri/getReportLink';
 import { fetchSampleReading } from '../hcri/fetchSampleReading';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
@@ -1110,7 +1110,7 @@ export default function HomeScreen({ navigation }: any) {
     // the field's genuinely empty, rather than silently ignoring a typed
     // title.
     const label = uploadTitle.trim() || defaultLabel(creds.username, result.deviceName);
-    const res = await uploadToHcri(csv, label, creds.token, appendLog);
+    const res = await uploadReadingToHcri(result, csv, label, creds.token, appendLog);
     // The raw server response (res.message -- hCRI.io's API returns JSON)
     // still goes to Logs for anyone actually debugging an upload either way.
     appendLog(res.message);
