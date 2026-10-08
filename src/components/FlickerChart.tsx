@@ -43,7 +43,8 @@ interface Props {
 
 const LINE = '#204687';
 const HEAD_H = 26;
-const STATS_H = 36;
+const STATS_H = 30;
+const ACT_H = 46;
 const RISK_H = 20;
 
 const HOLD_COLOR = '#c47f00';
@@ -52,13 +53,13 @@ const HOLD_COLOR = '#c47f00';
 const ICON_SHARE = 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12';
 const ICON_GEAR =
   'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z';
-const ICON_UPLOAD = 'M18 10a6 6 0 0 0-11.7-1.5A4.5 4.5 0 0 0 7 17.5h2M12 12v9M8.5 15.5 12 12l3.5 3.5';
+const ICON_UPLOAD = 'M16 16l-4-4-4 4M12 12v9M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3';
 const ICON_PAUSE = 'M7 5h3.5v14H7zM13.5 5H17v14h-3.5z';
 const ICON_PLAY = 'M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z';
 
-function HeaderIcon({ d, color, fill }: { d: string; color: string; fill?: boolean }) {
+function HeaderIcon({ d, color, fill, size = 15 }: { d: string; color: string; fill?: boolean; size?: number }) {
   return (
-    <Svg width={15} height={15} viewBox="0 0 24 24" fill={fill ? color : 'none'} stroke={fill ? 'none' : color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={fill ? color : 'none'} stroke={fill ? 'none' : color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Path d={d} />
     </Svg>
   );
@@ -158,8 +159,11 @@ export default function FlickerChart({ reading, running, history, settings, uplo
     settingTag: { position: 'absolute', right: 2, fontSize: 11, fontWeight: '600', color: '#666' },
     statsRow: { flexDirection: 'row', height: STATS_H },
     stat: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-    statVal: { color: '#111', fontSize: 14.5, fontWeight: '700' },
-    statLabel: { color: '#666', fontSize: 9.5, marginTop: 1 },
+    statVal: { color: '#111', fontSize: 12.5, fontWeight: '700' },
+    statLabel: { color: '#666', fontSize: 9, marginTop: 0 },
+    actRow: { height: ACT_H, flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#e3e5ea' },
+    actBtn: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    actTxt: { fontSize: 10, fontWeight: '600', marginTop: 2 },
     riskRow: { height: RISK_H, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
     badge: { paddingHorizontal: 10, paddingVertical: 2, borderRadius: 10 },
     badgeTxt: { fontSize: 11.5, fontWeight: '700' },
@@ -262,7 +266,7 @@ export default function FlickerChart({ reading, running, history, settings, uplo
     }
   };
 
-  const bodyH = Math.max(40, height - HEAD_H - STATS_H - RISK_H - 2);
+  const bodyH = Math.max(40, height - HEAD_H - STATS_H - RISK_H - ACT_H - 2);
 
   // ---------------- waveform view ----------------
   const renderWave = () => {
@@ -309,8 +313,7 @@ export default function FlickerChart({ reading, running, history, settings, uplo
           </>
         ) : null}
         <SvgText x={padL + plotW / 2} y={bodyH - 2} fontSize={9} fill="#666" textAnchor="middle">
-          {msPerSample ? 'Time' : 'Sample'}
-          {zoom > 1 ? `  (zoom ${zoom}×)` : ''}
+          {`${msPerSample ? 'Time' : 'Sample'}${zoom > 1 ? `  (zoom ${zoom}×)` : ''}`}
         </SvgText>
       </Svg>
     );
@@ -387,26 +390,6 @@ export default function FlickerChart({ reading, running, history, settings, uplo
             </TouchableOpacity>
           </>
         )}
-        <TouchableOpacity
-          style={[styles.iconPill, !!held && styles.holdOn]}
-          onPress={() => setHeld(held ? null : reading)}
-          accessibilityLabel={held ? 'Resume display' : 'Pause display'}
-        >
-          <HeaderIcon d={held ? ICON_PLAY : ICON_PAUSE} color={held ? '#fff' : LINE} fill />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.iconPill} onPress={share} accessibilityLabel="Share reading">
-          <HeaderIcon d={ICON_SHARE} color={LINE} />
-        </TouchableOpacity>
-        {upload && (
-          <TouchableOpacity style={styles.iconPill} onPress={openUpload} accessibilityLabel="Upload flicker to hCRI.io">
-            <HeaderIcon d={ICON_UPLOAD} color={LINE} />
-          </TouchableOpacity>
-        )}
-        {settings && (
-          <TouchableOpacity style={styles.iconPill} onPress={() => setShowSettings(true)} accessibilityLabel="Flicker settings">
-            <HeaderIcon d={ICON_GEAR} color={LINE} />
-          </TouchableOpacity>
-        )}
       </View>
       <View style={styles.statsRow}>
         <View style={styles.stat}>
@@ -444,6 +427,28 @@ export default function FlickerChart({ reading, running, history, settings, uplo
         {!!settingTxt && <Text style={styles.settingTag} allowFontScaling={false} numberOfLines={1}>{settingTxt}</Text>}
       </View>
       {view === 'wave' ? renderWave() : renderRisk()}
+      <View style={styles.actRow}>
+        <TouchableOpacity style={styles.actBtn} onPress={() => setHeld(held ? null : reading)} accessibilityLabel={held ? 'Resume display' : 'Pause display'}>
+          <HeaderIcon d={held ? ICON_PLAY : ICON_PAUSE} color={held ? HOLD_COLOR : LINE} fill size={22} />
+          <Text style={[styles.actTxt, { color: held ? HOLD_COLOR : LINE }]} allowFontScaling={false}>{held ? 'Resume' : 'Pause'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actBtn} onPress={share} accessibilityLabel="Share flicker reading">
+          <HeaderIcon d={ICON_SHARE} color={LINE} size={22} />
+          <Text style={[styles.actTxt, { color: LINE }]} allowFontScaling={false}>Share</Text>
+        </TouchableOpacity>
+        {upload && (
+          <TouchableOpacity style={styles.actBtn} onPress={openUpload} accessibilityLabel="Upload flicker to hCRI.io">
+            <HeaderIcon d={ICON_UPLOAD} color={LINE} size={22} />
+            <Text style={[styles.actTxt, { color: LINE }]} allowFontScaling={false}>Upload flicker</Text>
+          </TouchableOpacity>
+        )}
+        {settings && (
+          <TouchableOpacity style={styles.actBtn} onPress={() => setShowSettings(true)} accessibilityLabel="Flicker settings">
+            <HeaderIcon d={ICON_GEAR} color={LINE} size={22} />
+            <Text style={[styles.actTxt, { color: LINE }]} allowFontScaling={false}>Settings</Text>
+          </TouchableOpacity>
+        )}
+      </View>
       {settings && <FlickerSettingsModal visible={showSettings} onClose={() => setShowSettings(false)} api={settings} />}
       {upload && (
         <Modal visible={showUpload} transparent animationType="fade" onRequestClose={() => { if (!upBusy) setShowUpload(false); }}>

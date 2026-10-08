@@ -22,11 +22,21 @@
 
 import React, { useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal } from 'react-native';
-import Svg, { Polyline } from 'react-native-svg';
+import Svg, { Polyline, Path } from 'react-native-svg';
 import PrimaryButton from '../../components/PrimaryButton';
 import CollapsibleSection from '../../components/CollapsibleSection';
 import { useTheme } from '../../contexts/ThemeContext';
 import { SavedReading } from '../../storage/readingHistory';
+
+const ICON_CLOUD = 'M16 16l-4-4-4 4M12 12v9M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3';
+const ICON_TRAY = 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12';
+function ActionIcon({ d, color }: { d: string; color: string }) {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d={d} />
+    </Svg>
+  );
+}
 import { analyzeSpectrum } from '../../utils/spectralAnalysis';
 
 interface Props {
@@ -237,11 +247,11 @@ function HistoryRow({
       borderWidth: 1,
       borderColor: colors.cardBorder,
       borderRadius: 8,
-      paddingVertical: 8,
+      paddingVertical: 6,
       alignItems: 'center',
     },
     actionButtonDisabled: { opacity: 0.6 },
-    actionButtonText: { color: colors.text, fontSize: 13, fontWeight: '600' },
+    actionButtonText: { color: colors.text, fontSize: 11, fontWeight: '600', marginTop: 3 },
 
     // Same outlined-pill treatment as MainTab/DataTab's Copy Link button --
     // kept as its own small pill rather than folded into actionButton's
@@ -360,10 +370,14 @@ function HistoryRow({
             {uploading ? (
               <ActivityIndicator size="small" color={colors.text} />
             ) : (
-              <Text style={styles.actionButtonText}>Upload</Text>
+              <>
+                <ActionIcon d={ICON_CLOUD} color={colors.text} />
+                <Text style={styles.actionButtonText}>Upload</Text>
+              </>
             )}
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionButton} onPress={() => onShareOne(reading)}>
+            <ActionIcon d={ICON_TRAY} color={colors.text} />
             <Text style={styles.actionButtonText}>Share CSV</Text>
           </TouchableOpacity>
         </View>

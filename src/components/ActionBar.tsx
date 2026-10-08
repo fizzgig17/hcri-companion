@@ -21,7 +21,7 @@ const ICON_PATHS: Record<Exclude<IconName, 'play' | 'stop'>, string> = {
   flicker: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
   save: 'M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8',
   bluetooth: 'M6.5 6.5l11 11L12 23V1l5.5 5.5-11 11',
-  upload: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12',
+  upload: 'M16 16l-4-4-4 4M12 12v9M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3',
   power: 'M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10',
   copy: 'M9 9h11v11H9zM5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1',
   check: 'M20 6L9 17l-5-5',
@@ -192,7 +192,7 @@ export default function ActionBar(p: Props) {
           {connected && idle && !p.canSaveLive && !p.isSample && !p.uploadSucceeded && (
             <SideButton
               icon="upload"
-              label="Upload"
+              label="Upload reading"
               onPress={p.onUpload}
               disabled={uploadDisabled}
               busy={status === 'uploading'}
