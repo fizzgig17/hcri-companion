@@ -29,6 +29,8 @@ import { SavedReading } from '../../storage/readingHistory';
 
 const ICON_CLOUD = 'M16 16l-4-4-4 4M12 12v9M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3';
 const ICON_TRASH = 'M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6';
+const ICON_X = 'M18 6L6 18M6 6l12 12';
+const ICON_CHECK = 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11';
 const ICON_EYE = 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z';
 const ICON_TRAY = 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12';
 function ActionIcon({ d, color, size = 22 }: { d: string; color: string; size?: number }) {
@@ -303,10 +305,16 @@ function HistoryRow({
         </View>
         {!selectMode && (
           <View style={styles.rowHeaderButtons}>
-            <TouchableOpacity onPress={() => onOpen(reading)} style={{ marginRight: 16 }} accessibilityRole="button" accessibilityLabel="View reading" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <TouchableOpacity onPress={() => onUploadWithLabel(reading.id, reading.label)} disabled={uploading} style={{ marginRight: 14, opacity: uploading ? 0.6 : 1 }} accessibilityRole="button" accessibilityLabel="Upload reading" hitSlop={{ top: 10, bottom: 10, left: 7, right: 7 }}>
+              {uploading ? <ActivityIndicator size="small" color={colors.accent} /> : <ActionIcon d={ICON_CLOUD} color={colors.accent} size={19} />}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => onShareOne(reading)} style={{ marginRight: 14 }} accessibilityRole="button" accessibilityLabel="Share CSV" hitSlop={{ top: 10, bottom: 10, left: 7, right: 7 }}>
+              <ActionIcon d={ICON_TRAY} color={colors.text} size={19} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => onOpen(reading)} style={{ marginRight: 14 }} accessibilityRole="button" accessibilityLabel="View reading" hitSlop={{ top: 10, bottom: 10, left: 7, right: 7 }}>
               <ActionIcon d={ICON_EYE} color={colors.info} size={19} />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => onDelete(reading.id)} accessibilityRole="button" accessibilityLabel="Delete reading" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <TouchableOpacity onPress={() => onDelete(reading.id)} accessibilityRole="button" accessibilityLabel="Delete reading" hitSlop={{ top: 10, bottom: 10, left: 7, right: 7 }}>
               <ActionIcon d={ICON_TRASH} color={colors.danger} size={19} />
             </TouchableOpacity>
           </View>
@@ -360,29 +368,6 @@ function HistoryRow({
           </View>
         </View>
       </Modal>
-
-      {!selectMode && (
-        <View style={styles.rowActions}>
-          <TouchableOpacity
-            style={[styles.actionButton, uploading && styles.actionButtonDisabled]}
-            onPress={() => onUploadWithLabel(reading.id, reading.label)}
-            disabled={uploading}
-          >
-            {uploading ? (
-              <ActivityIndicator size="small" color={colors.text} />
-            ) : (
-              <>
-                <ActionIcon d={ICON_CLOUD} color={colors.text} size={17} />
-                <Text style={styles.actionButtonText}>Upload</Text>
-              </>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton} onPress={() => onShareOne(reading)}>
-            <ActionIcon d={ICON_TRAY} color={colors.text} size={17} />
-            <Text style={styles.actionButtonText}>Share CSV</Text>
-          </TouchableOpacity>
-        </View>
-      )}
 
       {/* Only once this reading actually has a stored report to point at
           (readingHistory.ts's reportId/reportIsPublic, set by whichever
@@ -591,6 +576,8 @@ export default function HistoryTab({
     headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
     headerTitle: { color: colors.muted, fontSize: 12, flexShrink: 1, marginRight: 8 },
     headerButtons: { flexDirection: 'row', alignItems: 'center' },
+    headerIcon: { alignItems: 'center', marginLeft: 16, minWidth: 40 },
+    headerIconText: { color: colors.text, fontSize: 10, fontWeight: '600', marginTop: 1 },
     headerPill: {
       borderWidth: 1,
       borderColor: colors.cardBorder,
@@ -663,16 +650,19 @@ export default function HistoryTab({
         </Text>
         <View style={styles.headerButtons}>
           {selectMode ? (
-            <TouchableOpacity style={styles.headerPill} onPress={exitSelectMode}>
-              <Text style={styles.headerPillText}>Cancel</Text>
+            <TouchableOpacity style={styles.headerIcon} onPress={exitSelectMode} accessibilityRole="button" accessibilityLabel="Cancel selection">
+              <ActionIcon d={ICON_X} color={colors.text} size={20} />
+              <Text style={styles.headerIconText}>Cancel</Text>
             </TouchableOpacity>
           ) : (
             <>
-              <TouchableOpacity style={styles.headerPill} onPress={() => setSelectMode(true)}>
-                <Text style={styles.headerPillAccentText}>Select</Text>
+              <TouchableOpacity style={styles.headerIcon} onPress={() => setSelectMode(true)} accessibilityRole="button" accessibilityLabel="Select readings">
+                <ActionIcon d={ICON_CHECK} color={colors.accent} size={20} />
+                <Text style={[styles.headerIconText, { color: colors.accent }]}>Select</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.headerPill} onPress={onShareAll}>
-                <Text style={styles.headerPillText}>Share all</Text>
+              <TouchableOpacity style={styles.headerIcon} onPress={onShareAll} accessibilityRole="button" accessibilityLabel="Share all readings">
+                <ActionIcon d={ICON_TRAY} color={colors.text} size={20} />
+                <Text style={styles.headerIconText}>Share all</Text>
               </TouchableOpacity>
             </>
           )}
