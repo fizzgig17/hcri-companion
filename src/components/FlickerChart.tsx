@@ -58,6 +58,7 @@ const LINE = '#204687';
 const HEAD_H = 26;
 const STATS_H = 30;
 const ACT_H = 36;
+const NOTE_H = 20;
 const RISK_H = 20;
 
 const HOLD_COLOR = '#c47f00';
@@ -175,7 +176,8 @@ export default function FlickerChart({ reading, running, history, settings, uplo
     stat: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     statVal: { color: '#111', fontSize: 12.5, fontWeight: '700' },
     statLabel: { color: '#666', fontSize: 9, marginTop: 0 },
-    actRow: { height: ACT_H, flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#e3e5ea' },
+    actRow: { height: ACT_H, flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#e3e5ea' },
+    note: { height: NOTE_H, textAlign: 'center', fontSize: 10, color: '#777', textAlignVertical: 'center' },
     actBtn: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     actTxt: { fontSize: 10, fontWeight: '600', marginTop: 0 },
     riskRow: { height: RISK_H, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
@@ -254,8 +256,10 @@ export default function FlickerChart({ reading, running, history, settings, uplo
       </TouchableOpacity>
     );
   };
+  const noteTxt = canControl && !running && readingNote ? 'New sample clears the current reading (it stays in History).' : '';
   const renderActions = (extras?: React.ReactNode) =>
     canControl ? (
+      <>
       <View style={styles.actRow}>
         {canSampleReading && sampleBtn('reading', ICON_REDO, redoLabel ?? 'Add to reading', 'Take a flicker sample for the current reading')}
         {running && (
@@ -267,6 +271,8 @@ export default function FlickerChart({ reading, running, history, settings, uplo
         {sampleBtn('new', ICON_PLAY, 'New sample', 'Start a new independent flicker sample')}
         {!running && extras}
       </View>
+      {!!noteTxt && <Text style={styles.note} allowFontScaling={false}>{noteTxt}</Text>}
+      </>
     ) : null;
 
   if (!shown || !analysis) {
@@ -275,7 +281,7 @@ export default function FlickerChart({ reading, running, history, settings, uplo
         <View style={[styles.head, { justifyContent: 'flex-end' }]}>{headRight}</View>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 }}>
           <Text style={styles.hint}>
-            {running ? 'Waiting for the meter…' : canControl ? 'Choose a sample below.' : 'No flicker reading.'}
+            {running ? 'Waiting for the meter…' : canSampleReading ? 'Take a sample for this reading, or a new one on its own.' : canControl ? 'Tap New sample to measure this light’s flicker.' : 'No flicker reading.'}
           </Text>
         </View>
         {renderActions()}
@@ -344,7 +350,7 @@ export default function FlickerChart({ reading, running, history, settings, uplo
     }
   };
 
-  const bodyH = Math.max(40, height - HEAD_H - STATS_H - RISK_H - (canControl ? ACT_H : 0) - 2);
+  const bodyH = Math.max(40, height - HEAD_H - STATS_H - RISK_H - (canControl ? ACT_H + (noteTxt ? NOTE_H : 0) : 0) - 2);
 
   // ---------------- waveform view ----------------
   const renderWave = () => {
@@ -490,7 +496,6 @@ export default function FlickerChart({ reading, running, history, settings, uplo
         </View>
       </View>
       <View style={styles.riskRow}>
-        {fromReading && !!readingNote && <Text style={styles.settingTag} allowFontScaling={false} numberOfLines={1}>{readingNote}</Text>}
         {(running || refreshes > 0) && (
           <Text style={[styles.counter, { color: running ? RISK_COLOR.none : HOLD_COLOR }]} allowFontScaling={false} numberOfLines={1}>
             {running ? '● ' : 'Stopped '}{refreshes} · {fmtElapsed(runMs)}
