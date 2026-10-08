@@ -215,6 +215,7 @@ export default function FlickerChart({ reading, running, history, settings, uplo
       )}
     </>
   );
+  const canRun = !!onToggle && !fromReading; // a flicker captured with a reading is read-only: no Start/Pause
   const startBtn = (
     <TouchableOpacity style={styles.actBtn} onPress={onToggle} accessibilityLabel={running ? 'Pause flicker' : 'Start flicker'}>
       <HeaderIcon d={running ? ICON_PAUSE : ICON_PLAY} color={LINE} fill size={20} />
@@ -228,9 +229,9 @@ export default function FlickerChart({ reading, running, history, settings, uplo
         <View style={[styles.head, { justifyContent: 'flex-end' }]}>{headRight}</View>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 }}>
           <Text style={styles.hint}>
-            {running ? 'Waiting for the meter…' : onToggle ? 'Tap Start to measure this light’s flicker.' : 'No flicker reading.'}
+            {running ? 'Waiting for the meter…' : canRun ? 'Tap Start to measure this light’s flicker.' : 'No flicker reading.'}
           </Text>
-          {onToggle && (
+          {canRun && (
             <TouchableOpacity style={[styles.startPill]} onPress={onToggle} accessibilityLabel={running ? 'Pause flicker' : 'Start flicker'}>
               <HeaderIcon d={running ? ICON_PAUSE : ICON_PLAY} color="#fff" fill size={16} />
               <Text style={styles.startPillTxt} allowFontScaling={false}>{running ? 'Pause' : 'Start'}</Text>
@@ -302,7 +303,7 @@ export default function FlickerChart({ reading, running, history, settings, uplo
     }
   };
 
-  const bodyH = Math.max(40, height - HEAD_H - STATS_H - RISK_H - (onToggle ? ACT_H : 0) - 2);
+  const bodyH = Math.max(40, height - HEAD_H - STATS_H - RISK_H - (canRun ? ACT_H : 0) - 2);
 
   // ---------------- waveform view ----------------
   const renderWave = () => {
@@ -461,7 +462,7 @@ export default function FlickerChart({ reading, running, history, settings, uplo
         {!!settingTxt && <Text style={styles.settingTag} allowFontScaling={false} numberOfLines={1}>{settingTxt}</Text>}
       </View>
       {view === 'wave' ? renderWave() : renderRisk()}
-      {onToggle && (
+      {canRun && (
         <View style={styles.actRow}>
           {startBtn}
           {!fromReading && (
