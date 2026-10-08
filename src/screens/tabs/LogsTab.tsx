@@ -33,6 +33,10 @@ interface Props {
   onClear: () => void;
 }
 
+// The log can hold thousands of lines with Verbose logging on; drawing them all (and redrawing every few
+// hundred ms during Live/Flicker) would slow the app, so only the newest are drawn. Sharing still sends everything.
+const SHOWN_LINES = 200;
+
 export default function LogsTab({ log, onShare, onClear }: Props) {
   const { colors } = useTheme();
 
@@ -142,7 +146,10 @@ export default function LogsTab({ log, onShare, onClear }: Props) {
             onLayout={(e: LayoutChangeEvent) => setViewportHeight(e.nativeEvent.layout.height)}
             onContentSizeChange={(_w, h) => setContentHeight(h)}
           >
-            {log.map((line, i) => (
+            {log.length > SHOWN_LINES && (
+              <Text style={styles.logLine}>{`... ${log.length - SHOWN_LINES} earlier lines not shown here -- Share Debug Log includes all ${log.length}`}</Text>
+            )}
+            {log.slice(-SHOWN_LINES).map((line, i) => (
               <Text key={i} style={styles.logLine}>
                 {line}
               </Text>

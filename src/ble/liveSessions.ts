@@ -130,6 +130,7 @@ export function startLiveSpectrum(
 async function sendStopReliably(conn: MeterConnection, log: LogFn): Promise<void> {
   try {
     await conn.sendCommand(CMD_STOP_SAMPLING);
+    log('Stop (8C 25) handed to the Bluetooth stack', true);
   } catch (e: any) {
     log(`Stop failed: ${e?.message ?? e}`);
     return;
@@ -195,11 +196,16 @@ async function request(
   log: LogFn
 ): Promise<MeterMessage | null> {
   for (let i = 0; i < tries && !isStopped(); i++) {
+    const tSend = Date.now();
     const waiting = waitForMessage(conn, sub, timeoutMs, accept, isStopped);
     await conn.sendCommand(cmd);
     const m = await waiting;
-    if (m) return m;
-    if (!isStopped()) log(`No reply to ${cmd.map((b) => b.toString(16).padStart(2, '0')).join(' ')} (try ${i + 1}/${tries})`);
+    const name = cmd.map((b) => b.toString(16).padStart(2, '0')).join(' ');
+    if (m) {
+      log(`reply to ${name} in ${Date.now() - tSend}ms (${m.body.length}B)`, true);
+      return m;
+    }
+    if (!isStopped()) log(`No reply to ${name} (try ${i + 1}/${tries}, waited ${Date.now() - tSend}ms; last notification of any kind ${conn.msSinceLastNotify()} ago)`);
   }
   return null;
 }
@@ -254,6 +260,21 @@ export async function writeFlickerSetting(
   return !!m;
 }
 
+/**
+ * Diagnostics: logs (verbose) whenever the app's own JavaScript thread was stalled for a while, by watching how
+ * late a 250ms timer fires. Tells "the app froze" apart from "the meter went quiet". Returns a stop function.
+ */
+function startLagMonitor(log: LogFn): () => void {
+  let last = Date.now();
+  const timer = setInterval(() => {
+    const now = Date.now();
+    const late = now - last - 250;
+    last = now;
+    if (late > 400) log(`App JS thread stalled ~${late}ms`, true);
+  }, 250);
+  return () => clearInterval(timer);
+}
+
 /** Continuous flicker. onReading fires per refresh; onEnd fires exactly once. */
 export function startFlicker(
   conn: MeterConnection,
@@ -263,9 +284,13 @@ export function startFlicker(
 ): LiveSession {
   let stopped = false;
   let ended = false;
+  const stopLagMonitor = startLagMonitor(log);
+  conn.setCompactNotifyLog(true);
   const end = (err?: Error) => {
     if (ended) return;
     ended = true;
+    stopLagMonitor();
+    conn.setCompactNotifyLog(false);
     onEnd(err);
   };
   const isStopped = () => stopped;
@@ -331,6 +356,7 @@ export function startFlicker(
           log(
             `Flicker: incomplete cycle after ${cycle} good cycles ${since()} (stats ${stats ? 'ok' : 'missing'} in ${tStats - tCycle}ms, waveform ${wave ? 'ok' : 'missing'}; link ${conn.isConnected() ? 'still up' : 'DOWN'})`
           );
+          log(`Flicker: link check after failure: ${await conn.diagnoseLink()}`, true);
           conn.resetReassemblyState();
           if (failures >= 3) throw new Error('The meter stopped answering flicker requests.');
           continue;

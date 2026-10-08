@@ -24,10 +24,10 @@ const DEVELOPER_EMAIL = 'marc.getter@gmail.com';
 // truncate or reject a huge message themselves, but that's on them to
 // handle, same as it would be for a photo or any other oversized share --
 // it's not something to pre-truncate down to a few thousand chars for
-// every target. 100k safely leaves enormous headroom under the binder
+// every target. 300k (a verbose Flicker session is a few thousand lines) safely leaves enormous headroom under the binder
 // limit while comfortably fitting even a very large multi-reading debug
 // log with several hex dumps in it.
-const MAX_BODY_CHARS = 100000;
+const MAX_BODY_CHARS = 300000;
 
 export async function shareDebugLog(log: string[], context?: { deviceName?: string }): Promise<void> {
   const header = [
