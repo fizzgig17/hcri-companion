@@ -35,6 +35,9 @@ interface Props {
   upload?: FlickerUploadApi;
   /** Start a new run, or stop the current one. Absent when the panel only shows a saved reading. */
   onToggle?: () => void;
+  /** Re-measure flicker for the reading just taken (only offered while that reading hasn't been uploaded). */
+  onRedo?: () => void;
+  redoLabel?: string;
   /** The reading on screen was captured with a spectrum reading (it goes up/out with that reading). */
   fromReading?: boolean;
   reading: FlickerReading | null;
@@ -58,6 +61,7 @@ const ICON_SHARE = 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3
 const ICON_GEAR =
   'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z';
 const ICON_UPLOAD = 'M16 16l-4-4-4 4M12 12v9M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3';
+const ICON_REDO = 'M23 4v6h-6M20.49 15a9 9 0 1 1-2.12-9.36L23 10';
 const ICON_HELP = 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01';
 const ICON_PAUSE = 'M7 5h3.5v14H7zM13.5 5H17v14h-3.5z';
 const ICON_PLAY = 'M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z';
@@ -111,7 +115,7 @@ function fmtMs(ms: number): string {
 const HIGH_LINE: [number, number][] = [[1, 0.2], [8, 0.2], [90, 2.25], [90, 7.2], [2000, 160]];
 const LOW_LINE: [number, number][] = [[1, 0.1], [8, 0.1], [8, 0.08], [90, 0.9], [90, 3], [2000, 66.6]];
 
-export default function FlickerChart({ reading, running, history, settings, upload, onToggle, fromReading, width, height }: Props) {
+export default function FlickerChart({ reading, running, history, settings, upload, onToggle, onRedo, redoLabel, fromReading, width, height }: Props) {
   const [snap, setSnap] = useState<FlickerReading | null>(null);
   const [showUpload, setShowUpload] = useState(false);
   const [upTitle, setUpTitle] = useState('');
@@ -216,6 +220,18 @@ export default function FlickerChart({ reading, running, history, settings, uplo
     </>
   );
   const canRun = !!onToggle && !fromReading; // a flicker captured with a reading is read-only: no Start/Pause
+  const redoBtn = onRedo ? (
+    <TouchableOpacity style={[styles.actBtn, running && { opacity: 0.4 }]} disabled={running} onPress={onRedo} accessibilityLabel="Measure flicker for the reading">
+      <HeaderIcon d={ICON_REDO} color={LINE} size={20} />
+      <Text style={[styles.actTxt, { color: LINE }]} allowFontScaling={false}>{redoLabel ?? 'Redo for reading'}</Text>
+    </TouchableOpacity>
+  ) : null;
+  const newTestBtn = (
+    <TouchableOpacity style={styles.actBtn} onPress={onToggle} accessibilityLabel="Start a new independent flicker test">
+      <HeaderIcon d={ICON_PLAY} color={LINE} fill size={20} />
+      <Text style={[styles.actTxt, { color: LINE }]} allowFontScaling={false}>New test</Text>
+    </TouchableOpacity>
+  );
   const startBtn = (
     <TouchableOpacity style={styles.actBtn} onPress={onToggle} accessibilityLabel={running ? 'Pause flicker' : 'Start flicker'}>
       <HeaderIcon d={running ? ICON_PAUSE : ICON_PLAY} color={LINE} fill size={20} />
@@ -231,6 +247,12 @@ export default function FlickerChart({ reading, running, history, settings, uplo
           <Text style={styles.hint}>
             {running ? 'Waiting for the meter…' : canRun ? 'Tap Start to measure this light’s flicker.' : 'No flicker reading.'}
           </Text>
+          {onRedo && !running && (
+            <TouchableOpacity style={[styles.startPill, { marginBottom: 8 }]} onPress={onRedo} accessibilityLabel="Measure flicker for the reading">
+              <HeaderIcon d={ICON_REDO} color="#fff" size={16} />
+              <Text style={styles.startPillTxt} allowFontScaling={false}>{redoLabel ?? 'Add to reading'}</Text>
+            </TouchableOpacity>
+          )}
           {canRun && (
             <TouchableOpacity style={[styles.startPill]} onPress={onToggle} accessibilityLabel={running ? 'Pause flicker' : 'Start flicker'}>
               <HeaderIcon d={running ? ICON_PAUSE : ICON_PLAY} color="#fff" fill size={16} />
@@ -303,7 +325,7 @@ export default function FlickerChart({ reading, running, history, settings, uplo
     }
   };
 
-  const bodyH = Math.max(40, height - HEAD_H - STATS_H - RISK_H - (canRun ? ACT_H : 0) - 2);
+  const bodyH = Math.max(40, height - HEAD_H - STATS_H - RISK_H - (onToggle ? ACT_H : 0) - 2);
 
   // ---------------- waveform view ----------------
   const renderWave = () => {
@@ -462,6 +484,12 @@ export default function FlickerChart({ reading, running, history, settings, uplo
         {!!settingTxt && <Text style={styles.settingTag} allowFontScaling={false} numberOfLines={1}>{settingTxt}</Text>}
       </View>
       {view === 'wave' ? renderWave() : renderRisk()}
+      {!!onToggle && fromReading && (
+        <View style={styles.actRow}>
+          {redoBtn}
+          {newTestBtn}
+        </View>
+      )}
       {canRun && (
         <View style={styles.actRow}>
           {startBtn}

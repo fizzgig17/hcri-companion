@@ -28,7 +28,7 @@ import { fetchSampleReading } from '../hcri/fetchSampleReading';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
 import { loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
-import { addReading, recordUpload } from '../storage/readingHistory';
+import { addReading, recordUpload, setReadingFlicker } from '../storage/readingHistory';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
 import { shareDebugLog } from '../utils/shareLog';
 import { shareSingleReadingCsv } from '../utils/shareCsv';
@@ -786,6 +786,27 @@ export default function HomeScreen({ navigation }: any) {
     );
   }, [mode, stopActiveMode, appendLog]);
 
+  // Re-measure flicker for the reading just taken. Only while that reading hasn't been uploaded (an uploaded report can't change).
+  const [flickerBusy, setFlickerBusy] = useState(false);
+  const canRedoFlicker = !!result && !result.source && !!currentReadingId && !uploadSucceeded && !lastUploadedReport && status === 'connected' && mode === 'idle' && !flickerBusy;
+  const redoReadingFlicker = useCallback(async () => {
+    if (!connRef.current || !result || !currentReadingId) return;
+    setFlickerBusy(true);
+    try {
+      const f = await captureFlickerOnce(connRef.current, appendLog);
+      if (f) {
+        setFlickerReading(f);
+        setFlickerFromReading(true);
+        setResult((r) => (r ? { ...r, flicker: f } : r));
+        await setReadingFlicker(currentReadingId, f).catch((e: any) => appendLog(`Failed to save flicker to history: ${e.message}`));
+      } else {
+        Alert.alert('Flicker', 'The meter did not return a flicker reading. Try again.');
+      }
+    } finally {
+      setFlickerBusy(false);
+    }
+  }, [result, currentReadingId]);
+
   const toggleFlicker = useCallback(async () => {
     if (mode === 'flicker') {
       await stopActiveMode();
@@ -1353,7 +1374,7 @@ export default function HomeScreen({ navigation }: any) {
             pagerResetKey={pagerResetKey}
             flicker={
               (status === 'connected' || status === 'uploading' || status === 'measuring') && deviceSupportsFlicker(deviceName)
-                ? { reading: flickerReading, running: mode === 'flicker', focusNonce: flickerFocus, history: flickerHistory, settings: flickerSettingsApi, upload: flickerUploadApi, onToggle: toggleFlicker, fromReading: flickerFromReading }
+                ? { reading: flickerReading, running: mode === 'flicker' || flickerBusy, focusNonce: flickerFocus, history: flickerHistory, settings: flickerSettingsApi, upload: flickerUploadApi, onToggle: toggleFlicker, fromReading: flickerFromReading, onRedo: canRedoFlicker ? redoReadingFlicker : undefined, redoLabel: result?.flicker ? 'Redo for reading' : 'Add to reading' }
                 : undefined
             }
           />
