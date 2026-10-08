@@ -1,16 +1,17 @@
 // src/components/FlickerChart.tsx
 //
 // The Flicker page. Two views: the waveform (default) and an IEEE-1789-style
-// risk chart. Header controls: Hold (freeze the display while the meter keeps
-// running), zoom/pan, Share. Waveform scale matches the stock app: samples are
+// risk chart. Header controls: pause/play (freeze the display while the meter keeps
+// running; amber play icon while frozen), zoom/pan, share, settings gear. A small
+// counter shows how many refreshes and how long the current run has gone. Waveform scale matches the stock app: samples are
 // divided by the largest sample, the vertical axis runs from (min/max * 0.8)
 // to 1.2. The horizontal axis is real time when the meter's sample rate is
 // known and agrees with the measured cycle time, otherwise sample numbers.
 // Always drawn on white in the stock line colour #204687.
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, Share, StyleSheet } from 'react-native';
-import Svg, { Line, Polyline, Polygon, Circle, Text as SvgText } from 'react-native-svg';
+import Svg, { Line, Polyline, Polygon, Circle, Path, Text as SvgText } from 'react-native-svg';
 import { flickerRisk, type FlickerReading } from '../ble/liveSessions';
 import FlickerSettingsModal, { type FlickerSettingsApi } from './FlickerSettingsModal';
 
@@ -32,6 +33,28 @@ const LINE = '#204687';
 const HEAD_H = 26;
 const STATS_H = 36;
 const RISK_H = 20;
+
+const HOLD_COLOR = '#c47f00';
+
+// Header icons (24x24 grid, stroke style like the rest of the app's icons).
+const ICON_SHARE = 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12';
+const ICON_GEAR =
+  'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z';
+const ICON_PAUSE = 'M7 5h3.5v14H7zM13.5 5H17v14h-3.5z';
+const ICON_PLAY = 'M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z';
+
+function HeaderIcon({ d, color, fill }: { d: string; color: string; fill?: boolean }) {
+  return (
+    <Svg width={15} height={15} viewBox="0 0 24 24" fill={fill ? color : 'none'} stroke={fill ? 'none' : color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d={d} />
+    </Svg>
+  );
+}
+
+function fmtElapsed(ms: number): string {
+  const t = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+}
 
 const RISK_TEXT = { none: 'No Risk', low: 'Low Risk', high: 'High Risk' } as const;
 const RISK_COLOR = { none: '#2e8b4f', low: '#c47f00', high: '#cc2828' } as const;
@@ -78,6 +101,23 @@ export default function FlickerChart({ reading, running, history, settings, widt
 
   const shown = held ?? reading;
 
+  // Run counter: refreshes received and time since this run started (resets each time Flicker is started).
+  const [refreshes, setRefreshes] = useState(0);
+  const [runMs, setRunMs] = useState(0);
+  const runStart = useRef(0);
+  useEffect(() => {
+    if (!running) return;
+    runStart.current = Date.now();
+    setRefreshes(0);
+    setRunMs(0);
+    const t = setInterval(() => setRunMs(Date.now() - runStart.current), 1000);
+    return () => clearInterval(t);
+  }, [running]);
+  useEffect(() => {
+    if (running && reading) setRefreshes((c) => c + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reading]);
+
   const styles = StyleSheet.create({
     head: { flexDirection: 'row', alignItems: 'center', height: HEAD_H },
     seg: { flexDirection: 'row', borderWidth: 1, borderColor: '#C5C9D3', borderRadius: 6, overflow: 'hidden' },
@@ -90,6 +130,10 @@ export default function FlickerChart({ reading, running, history, settings, widt
     pillOn: { backgroundColor: LINE, borderColor: LINE },
     pillTxt: { fontSize: 11, fontWeight: '700', color: LINE },
     pillTxtOn: { color: '#fff' },
+    iconPill: { marginLeft: 5, width: 30, height: 22, borderRadius: 6, borderWidth: 1, borderColor: '#C5C9D3', alignItems: 'center', justifyContent: 'center' },
+    holdOn: { backgroundColor: HOLD_COLOR, borderColor: HOLD_COLOR },
+    counter: { position: 'absolute', left: 2, fontSize: 11, fontWeight: '600' },
+    pausedTag: { position: 'absolute', right: 2, fontSize: 11, fontWeight: '700', color: HOLD_COLOR },
     statsRow: { flexDirection: 'row', height: STATS_H },
     stat: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     statVal: { color: '#111', fontSize: 14.5, fontWeight: '700' },
@@ -291,15 +335,19 @@ export default function FlickerChart({ reading, running, history, settings, widt
             </TouchableOpacity>
           </>
         )}
-        <TouchableOpacity style={[styles.pill, !!held && styles.pillOn]} onPress={() => setHeld(held ? null : reading)}>
-          <Text style={[styles.pillTxt, !!held && styles.pillTxtOn]} allowFontScaling={false}>{held ? 'Held' : 'Hold'}</Text>
+        <TouchableOpacity
+          style={[styles.iconPill, !!held && styles.holdOn]}
+          onPress={() => setHeld(held ? null : reading)}
+          accessibilityLabel={held ? 'Resume display' : 'Pause display'}
+        >
+          <HeaderIcon d={held ? ICON_PLAY : ICON_PAUSE} color={held ? '#fff' : LINE} fill />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.pill} onPress={share}>
-          <Text style={styles.pillTxt} allowFontScaling={false}>Share</Text>
+        <TouchableOpacity style={styles.iconPill} onPress={share} accessibilityLabel="Share reading">
+          <HeaderIcon d={ICON_SHARE} color={LINE} />
         </TouchableOpacity>
         {settings && (
-          <TouchableOpacity style={styles.pill} onPress={() => setShowSettings(true)}>
-            <Text style={styles.pillTxt} allowFontScaling={false}>Set</Text>
+          <TouchableOpacity style={styles.iconPill} onPress={() => setShowSettings(true)} accessibilityLabel="Flicker settings">
+            <HeaderIcon d={ICON_GEAR} color={LINE} />
           </TouchableOpacity>
         )}
       </View>
@@ -326,11 +374,17 @@ export default function FlickerChart({ reading, running, history, settings, widt
         </View>
       </View>
       <View style={styles.riskRow}>
+        {(running || refreshes > 0) && (
+          <Text style={[styles.counter, { color: running ? RISK_COLOR.none : '#666' }]} allowFontScaling={false} numberOfLines={1}>
+            {running ? '● ' : ''}{refreshes} · {fmtElapsed(runMs)}
+          </Text>
+        )}
         <View style={[styles.badge, { backgroundColor: RISK_TINT[risk] }]}>
           <Text style={[styles.badgeTxt, { color: RISK_COLOR[risk] }]} allowFontScaling={false} numberOfLines={1}>
             Risk tip: {RISK_TEXT[risk]}
           </Text>
         </View>
+        {!!held && <Text style={styles.pausedTag} allowFontScaling={false}>Paused</Text>}
       </View>
       {view === 'wave' ? renderWave() : renderRisk()}
       {settings && <FlickerSettingsModal visible={showSettings} onClose={() => setShowSettings(false)} api={settings} />}
