@@ -227,9 +227,9 @@ export default function FlickerChart({ reading, running, history, settings, uplo
     </TouchableOpacity>
   ) : null;
   const newTestBtn = (
-    <TouchableOpacity style={styles.actBtn} onPress={onToggle} accessibilityLabel="Start a new independent flicker test">
+    <TouchableOpacity style={styles.actBtn} onPress={onToggle} accessibilityLabel="Start a new independent flicker sample">
       <HeaderIcon d={ICON_PLAY} color={LINE} fill size={20} />
-      <Text style={[styles.actTxt, { color: LINE }]} allowFontScaling={false}>New test</Text>
+      <Text style={[styles.actTxt, { color: LINE }]} allowFontScaling={false}>New sample</Text>
     </TouchableOpacity>
   );
   const startBtn = (
