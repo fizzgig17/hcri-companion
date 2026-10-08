@@ -23,16 +23,17 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal } from 'react-native';
 import Svg, { Polyline, Path } from 'react-native-svg';
-import PrimaryButton from '../../components/PrimaryButton';
 import CollapsibleSection from '../../components/CollapsibleSection';
 import { useTheme } from '../../contexts/ThemeContext';
 import { SavedReading } from '../../storage/readingHistory';
 
 const ICON_CLOUD = 'M16 16l-4-4-4 4M12 12v9M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3';
+const ICON_TRASH = 'M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6';
+const ICON_EYE = 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z';
 const ICON_TRAY = 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12';
-function ActionIcon({ d, color }: { d: string; color: string }) {
+function ActionIcon({ d, color, size = 22 }: { d: string; color: string; size?: number }) {
   return (
-    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Path d={d} />
     </Svg>
   );
@@ -302,11 +303,11 @@ function HistoryRow({
         </View>
         {!selectMode && (
           <View style={styles.rowHeaderButtons}>
-            <TouchableOpacity onPress={() => onOpen(reading)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={styles.viewText}>View</Text>
+            <TouchableOpacity onPress={() => onOpen(reading)} style={{ marginRight: 18 }} accessibilityRole="button" accessibilityLabel="View reading" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <ActionIcon d={ICON_EYE} color={colors.info} size={22} />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => onDelete(reading.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={styles.deleteText}>Delete</Text>
+            <TouchableOpacity onPress={() => onDelete(reading.id)} accessibilityRole="button" accessibilityLabel="Delete reading" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <ActionIcon d={ICON_TRASH} color={colors.danger} size={22} />
             </TouchableOpacity>
           </View>
         )}
@@ -619,6 +620,8 @@ export default function HistoryTab({
     // button stacked below other content) -- here it sits inline next to
     // "Select All" text, so that top margin would push it visibly lower than
     // its sibling instead of centering with it.
+    selectBarIconButton: { flex: 1, marginLeft: 8, paddingVertical: 8, alignItems: 'center', borderRadius: 10, borderWidth: 1, borderColor: colors.cardBorder, backgroundColor: colors.card },
+    selectBarIconText: { fontSize: 11, fontWeight: '600', marginTop: 3 },
     selectBarButton: { marginTop: 0, marginLeft: 8, flex: 1, paddingHorizontal: 8, paddingVertical: 10 },
 
     dateGroup: { marginBottom: 2 },
@@ -682,26 +685,27 @@ export default function HistoryTab({
             <Text style={styles.selectAllText}>Select All</Text>
           </TouchableOpacity>
           <View style={styles.selectBarButtons}>
-            <PrimaryButton
-              title="Share"
-              onPress={handleShareSelected}
-              disabled={selected.size === 0 || bulkUploading || bulkDeleting}
-              variant="muted"
-              style={styles.selectBarButton}
-            />
-            <PrimaryButton
-              title={bulkDeleting ? 'Deleting…' : 'Delete'}
-              onPress={handleDeleteSelected}
-              disabled={selected.size === 0 || bulkUploading || bulkDeleting}
-              variant="danger"
-              style={styles.selectBarButton}
-            />
-            <PrimaryButton
-              title={bulkUploading ? 'Uploading…' : selected.size ? `Upload (${selected.size})` : 'Upload'}
-              onPress={handleUploadSelected}
-              disabled={selected.size === 0 || bulkUploading || bulkDeleting}
-              style={styles.selectBarButton}
-            />
+            {([
+              { icon: ICON_TRAY, label: 'Share', onPress: handleShareSelected, color: colors.text },
+              { icon: ICON_TRASH, label: bulkDeleting ? 'Deleting…' : 'Delete', onPress: handleDeleteSelected, color: colors.danger, border: colors.danger },
+              { icon: ICON_CLOUD, label: bulkUploading ? 'Uploading…' : selected.size ? `Upload (${selected.size})` : 'Upload', onPress: handleUploadSelected, color: colors.accent, border: colors.accent },
+            ] as const).map((b) => {
+              const off = selected.size === 0 || bulkUploading || bulkDeleting;
+              return (
+                <TouchableOpacity
+                  key={b.label}
+                  onPress={b.onPress}
+                  disabled={off}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel={b.label}
+                  style={[styles.selectBarIconButton, 'border' in b && { borderColor: b.border }, off && { opacity: 0.5 }]}
+                >
+                  <ActionIcon d={b.icon} color={b.color} />
+                  <Text style={[styles.selectBarIconText, { color: b.color }]} numberOfLines={1}>{b.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
       )}
