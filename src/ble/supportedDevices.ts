@@ -82,10 +82,13 @@ export const SUPPORTED_DEVICES: SupportedDevice[] = [
   {
     model: 'Torch Bearer (via ESP32 bridge)',
     matchedBy: 'Advertised name starts with "Torch Bearer" (the T-Display S3 bridge firmware, not the spectrometer itself)',
-    verified: false,
+    verified: true,
+    verifiedDate: '2026-10-07',
     notes: [
+      'Needs the hCRI ESP32 bridge: a LilyGO T-Display S3 running the open-source bridge firmware sits between the Torch Bearer spectrometer and your phone. Hardware list and install steps: github.com/fizzgig17/hcri-esp32-bridge',
       'Spectrum-only device: CCT, Duv, CRI/R1-R15 and TM-30 Rf/Rg are computed by the app from the spectrum, the same way as for the HPCS meters.',
-      'Lux and PAR are calculated from the raw spectrum using the Torch Bearer\'s own units (W/m\u00b2/nm) and have NOT been calibrated against a reference meter yet -- treat them as approximate.',
+      'Spectral correction (Settings -> Torch Bearer correction, on by default) lines CCT, Duv, Ra and R9 up with the HPCS: on five independent lamps CCT RMS error fell from 208 K to 36 K. It is shape-only; each shared CSV records whether it was applied.',
+      'Lux and PAR are calculated from the raw spectrum using the Torch Bearer\'s own units (W/m\u00b2/nm) and have NOT been calibrated against a reference meter yet -- treat them as approximate (typically within about 15% of the HPCS).',
       'Single reading only for now: Live, Flicker and battery are not available on this device.',
     ],
   },

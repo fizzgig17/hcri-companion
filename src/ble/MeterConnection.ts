@@ -65,10 +65,10 @@ declare global {
 }
 
 function getSharedBleManager(): BleManager {
-  if (!global.__hcriBleManagerSingleton) {
-    global.__hcriBleManagerSingleton = new BleManager();
+  if (!globalThis.__hcriBleManagerSingleton) {
+    globalThis.__hcriBleManagerSingleton = new BleManager();
   }
-  return global.__hcriBleManagerSingleton;
+  return globalThis.__hcriBleManagerSingleton;
 }
 
 /**

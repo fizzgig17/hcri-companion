@@ -176,7 +176,7 @@ export default function MainTab({
   // See HomeScreen.tsx's scrollInputIntoView comment -- needs a ref to the
   // actual TextInput, not just a position, since it measures this input's
   // layout relative to the ScrollView HomeScreen owns.
-  const titleInputRef = useRef<TextInput>(null);
+  const titleInputRef = useRef<React.ComponentRef<typeof TextInput>>(null);
   const [titleModalVisible, setTitleModalVisible] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   // Tiles that actually have a value, and how densely to pack them: the

@@ -160,7 +160,7 @@ export default function HomeScreen({ navigation }: any) {
   // keyboard comes up and covers it (see scrollInputIntoView below). Owned
   // here rather than inside each tab since the ScrollView itself is owned
   // here; a tab-local ScrollView ref would have nothing to scroll.
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
 
   // Confirmed 2026-10-04: android:windowSoftInputMode="adjustResize" (see
   // AndroidManifest.xml) resizes the window when the keyboard appears, but
