@@ -493,6 +493,7 @@ export default function FlickerChart({ reading, running, history, settings, uplo
       {canRun && (
         <View style={styles.actRow}>
           {startBtn}
+          {redoBtn}
           {!fromReading && (
             <TouchableOpacity style={styles.actBtn} onPress={share} accessibilityLabel="Share flicker reading">
               <HeaderIcon d={ICON_SHARE} color={LINE} size={20} />
