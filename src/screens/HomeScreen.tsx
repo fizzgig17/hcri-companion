@@ -786,39 +786,42 @@ export default function HomeScreen({ navigation }: any) {
     );
   }, [mode, stopActiveMode, appendLog]);
 
-  // Re-measure flicker for the reading just taken. Only while that reading hasn't been uploaded (an uploaded report can't change).
-  const [flickerBusy, setFlickerBusy] = useState(false);
-  const canRedoFlicker = !!result && !result.source && !!currentReadingId && !uploadSucceeded && !lastUploadedReport && status === 'connected' && mode === 'idle' && !flickerBusy;
-  const redoReadingFlicker = useCallback(async () => {
-    if (!connRef.current || !result || !currentReadingId) return;
-    setFlickerBusy(true);
-    try {
-      const f = await captureFlickerOnce(connRef.current, appendLog);
-      if (f) {
-        setFlickerReading(f);
-        setFlickerFromReading(true);
-        setResult((r) => (r ? { ...r, flicker: f } : r));
-        await setReadingFlicker(currentReadingId, f).catch((e: any) => appendLog(`Failed to save flicker to history: ${e.message}`));
-      } else {
-        Alert.alert('Flicker', 'The meter did not return a flicker reading. Try again.');
-      }
-    } finally {
-      setFlickerBusy(false);
-    }
-  }, [result, currentReadingId]);
+  // Flicker samples. 'reading' = the sample belongs to the current reading (kept with it and in History);
+  // 'new' = an independent sample, which leaves the current reading behind. Both run the same stream and share Stop.
+  const [flickerTarget, setFlickerTarget] = useState<'reading' | 'new'>('new');
+  const flickerLatestRef = useRef<FlickerReading | null>(null);
+  const canSampleReading = !!result && !result.source && !!currentReadingId && !uploadSucceeded && !lastUploadedReport && status === 'connected' && (mode === 'idle' || mode === 'flicker');
 
-  const toggleFlicker = useCallback(async () => {
-    if (mode === 'flicker') {
-      await stopActiveMode();
-      return;
+  const finishReadingSample = useCallback(() => {
+    const f = flickerLatestRef.current ?? result?.flicker ?? null;
+    if (!f) return;
+    setFlickerReading(f);
+    setFlickerFromReading(true);
+    if (flickerLatestRef.current) {
+      setResult((r) => (r ? { ...r, flicker: f } : r));
+      if (currentReadingId) setReadingFlicker(currentReadingId, f).catch((e: any) => appendLog(`Failed to save flicker to history: ${e.message}`));
     }
+  }, [result, currentReadingId, appendLog]);
+
+  const stopFlicker = useCallback(async () => {
+    if (mode !== 'flicker') return;
+    const wasReading = flickerTarget === 'reading';
+    await stopActiveMode();
+    if (wasReading) finishReadingSample();
+  }, [mode, flickerTarget, stopActiveMode, finishReadingSample]);
+
+  const startFlickerSample = useCallback(async (target: 'reading' | 'new') => {
     if (mode !== 'idle' || !connRef.current) return;
+    setFlickerTarget(target);
+    flickerLatestRef.current = null;
     setMode('flicker');
-    // A new independent sample leaves the current reading behind (it's already in History): clear it and its flicker.
-    setResult(null);
-    setCurrentReadingId(null);
-    setUploadSucceeded(false);
-    setLastUploadedReport(null);
+    if (target === 'new') {
+      // An independent sample leaves the current reading behind (it's already in History): clear it and its flicker.
+      setResult(null);
+      setCurrentReadingId(null);
+      setUploadSucceeded(false);
+      setLastUploadedReport(null);
+    }
     setFlickerReading(null);
     setFlickerHistory([]);
     setFlickerFromReading(false);
@@ -826,6 +829,7 @@ export default function HomeScreen({ navigation }: any) {
       connRef.current,
       appendLog,
       (r) => {
+        flickerLatestRef.current = r;
         setFlickerReading(r);
         setFlickerHistory((h) => [...h.slice(-39), { f: r.frequencyHz, p: r.percentFlicker }]);
       },
@@ -838,7 +842,7 @@ export default function HomeScreen({ navigation }: any) {
         }
       }
     );
-  }, [mode, stopActiveMode, appendLog]);
+  }, [mode, appendLog]);
 
   const saveLive = useCallback(async () => {
     const r = liveUnsaved;
@@ -1379,7 +1383,7 @@ export default function HomeScreen({ navigation }: any) {
             pagerResetKey={pagerResetKey}
             flicker={
               (status === 'connected' || status === 'uploading' || status === 'measuring') && deviceSupportsFlicker(deviceName)
-                ? { reading: flickerReading, running: mode === 'flicker' || flickerBusy, focusNonce: flickerFocus, history: flickerHistory, settings: flickerSettingsApi, upload: flickerUploadApi, onToggle: toggleFlicker, fromReading: flickerFromReading, onRedo: canRedoFlicker ? redoReadingFlicker : undefined, redoLabel: result?.flicker ? 'Redo for reading' : 'Add to reading', readingNote: uploadSucceeded || lastUploadedReport ? 'Reading uploaded' : 'For this reading' }
+                ? { reading: flickerReading, running: mode === 'flicker', focusNonce: flickerFocus, history: flickerHistory, settings: flickerSettingsApi, upload: flickerUploadApi, target: mode === 'flicker' ? flickerTarget : null, onStart: startFlickerSample, onStop: stopFlicker, canSampleReading, fromReading: flickerFromReading, redoLabel: result?.flicker ? 'Redo for reading' : 'Add to reading', readingNote: uploadSucceeded || lastUploadedReport ? 'Reading uploaded' : 'For this reading' }
                 : undefined
             }
           />
