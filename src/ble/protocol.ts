@@ -96,6 +96,9 @@ export const CMD_FLICKER_WAVE = [0x8c, 0x3a]; // reply: 8C 3A + 400 x uint16 LE,
 export const CMD_FLICKER_SAMPLE_RATE = [0x8c, 0x3d]; // reply 8C 3D <index 0-10> into FLICKER_SPAN_MS
 // Total time the 400 plotted samples span, per sample-rate index (from the vendor app's own "sampling time" table).
 export const FLICKER_SPAN_MS = [100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50];
+// Display labels for the meter's flicker settings (index-aligned with FLICKER_SPAN_MS).
+export const FLICKER_RATE_LABELS = ['100 Hz', '200 Hz', '500 Hz', '1 kHz', '2 kHz', '5 kHz', '10 kHz', '20 kHz', '50 kHz', '100 kHz', '200 kHz'];
+export const FLICKER_GEAR_LABELS = ['x1', 'x10', 'x100', 'x1k'];
 export const FLICKER_WAVE_SAMPLES = 400;
 export const FLICKER_WAVE_REPLY_BYTES = 2 + FLICKER_WAVE_SAMPLES * 2; // 802
 

@@ -13,6 +13,7 @@ import React, { useEffect, useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, Switch, ActivityIndicator, StyleSheet } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import type { FlickerSettings, FlickerSettingKey } from '../ble/liveSessions';
+import { FLICKER_RATE_LABELS, FLICKER_GEAR_LABELS } from '../ble/protocol';
 
 export interface FlickerSettingsApi {
   load: () => Promise<FlickerSettings>;
@@ -21,8 +22,8 @@ export interface FlickerSettingsApi {
   canEdit: boolean;
 }
 
-const GEARS = ['x1', 'x10', 'x100', 'x1k'];
-const RATES = ['100 Hz', '200 Hz', '500 Hz', '1 kHz', '2 kHz', '5 kHz', '10 kHz', '20 kHz', '50 kHz', '100 kHz', '200 kHz'];
+const GEARS = FLICKER_GEAR_LABELS;
+const RATES = FLICKER_RATE_LABELS;
 const SPANS = ['100 s', '50 s', '20 s', '10 s', '5 s', '2 s', '1 s', '500 ms', '200 ms', '100 ms', '50 ms'];
 
 export default function FlickerSettingsModal({ visible, onClose, api }: { visible: boolean; onClose: () => void; api: FlickerSettingsApi }) {

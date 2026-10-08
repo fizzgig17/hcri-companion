@@ -13,6 +13,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, Share, StyleSheet } from 'react-native';
 import Svg, { Line, Polyline, Polygon, Circle, Path, Text as SvgText } from 'react-native-svg';
 import { flickerRisk, type FlickerReading } from '../ble/liveSessions';
+import { FLICKER_RATE_LABELS, FLICKER_GEAR_LABELS } from '../ble/protocol';
 import FlickerSettingsModal, { type FlickerSettingsApi } from './FlickerSettingsModal';
 
 export interface FlickerHistoryPoint {
@@ -133,7 +134,7 @@ export default function FlickerChart({ reading, running, history, settings, widt
     iconPill: { marginLeft: 5, width: 30, height: 22, borderRadius: 6, borderWidth: 1, borderColor: '#C5C9D3', alignItems: 'center', justifyContent: 'center' },
     holdOn: { backgroundColor: HOLD_COLOR, borderColor: HOLD_COLOR },
     counter: { position: 'absolute', left: 2, fontSize: 11, fontWeight: '600' },
-    pausedTag: { position: 'absolute', right: 2, fontSize: 11, fontWeight: '700', color: HOLD_COLOR },
+    settingTag: { position: 'absolute', right: 2, fontSize: 11, fontWeight: '600', color: '#666' },
     statsRow: { flexDirection: 'row', height: STATS_H },
     stat: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     statVal: { color: '#111', fontSize: 14.5, fontWeight: '700' },
@@ -181,6 +182,13 @@ export default function FlickerChart({ reading, running, history, settings, widt
   }
 
   const { n, max, min, norm, period, first, duty } = analysis;
+  // The meter's sample rate and range for this run, e.g. "20 kHz · x10".
+  const settingTxt = [
+    shown.sampleIdx !== undefined ? FLICKER_RATE_LABELS[shown.sampleIdx] : null,
+    shown.gear !== undefined ? FLICKER_GEAR_LABELS[shown.gear] : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
   const fmt = (v: number) => (Number.isFinite(v) ? v : 0);
   const risk = flickerRisk(shown.frequencyHz, shown.percentFlicker);
 
@@ -375,8 +383,8 @@ export default function FlickerChart({ reading, running, history, settings, widt
       </View>
       <View style={styles.riskRow}>
         {(running || refreshes > 0) && (
-          <Text style={[styles.counter, { color: running ? RISK_COLOR.none : '#666' }]} allowFontScaling={false} numberOfLines={1}>
-            {running ? '● ' : ''}{refreshes} · {fmtElapsed(runMs)}
+          <Text style={[styles.counter, { color: held ? HOLD_COLOR : running ? RISK_COLOR.none : '#666' }]} allowFontScaling={false} numberOfLines={1}>
+            {held ? 'Paused ' : running ? '● ' : ''}{refreshes} · {fmtElapsed(runMs)}
           </Text>
         )}
         <View style={[styles.badge, { backgroundColor: RISK_TINT[risk] }]}>
@@ -384,7 +392,7 @@ export default function FlickerChart({ reading, running, history, settings, widt
             Risk tip: {RISK_TEXT[risk]}
           </Text>
         </View>
-        {!!held && <Text style={styles.pausedTag} allowFontScaling={false}>Paused</Text>}
+        {!!settingTxt && <Text style={styles.settingTag} allowFontScaling={false} numberOfLines={1}>{settingTxt}</Text>}
       </View>
       {view === 'wave' ? renderWave() : renderRisk()}
       {settings && <FlickerSettingsModal visible={showSettings} onClose={() => setShowSettings(false)} api={settings} />}

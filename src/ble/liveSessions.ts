@@ -150,6 +150,9 @@ export interface FlickerReading {
   cycleMs: number;
   /** Total time the 400 samples span, in ms, if the meter's sample-rate setting could be read. */
   spanMs?: number;
+  /** The meter's sample-rate index (0-10) and range/gear index (0-3) when the run started, if it answered. */
+  sampleIdx?: number;
+  gear?: number;
   /** 400 raw waveform samples. */
   waveform: number[];
 }
@@ -309,6 +312,7 @@ export function startFlicker(
         // diagnostic only
       }
       // Sample-rate setting -> how much time the plotted waveform covers (lets the chart label its time axis).
+      let gearIdx: number | undefined;
       let spanMs: number | undefined;
       const rate = await request(conn, CMD_FLICKER_SAMPLE_RATE, 0x3d, 1500, 2, () => true, isStopped, log);
       const rateIdx = rate && rate.body.length >= 3 ? fromBcd(rate.body[2]) : -1;
@@ -318,6 +322,9 @@ export function startFlicker(
       } else {
         log('Flicker: could not read the sample rate; time axis will use sample numbers');
       }
+      // Range (gear) too, for the chart header. One quick try: it's display-only.
+      const gearReply = await request(conn, [0x8c, 0x36], 0x36, 800, 1, () => true, isStopped, log);
+      if (gearReply && gearReply.body.length >= 3) gearIdx = fromBcd(gearReply.body[2]);
       if (stopped) {
         end();
         return;
@@ -378,6 +385,8 @@ export function startFlicker(
           flickerIndex: readFloat32LE(stats.body, 10),
           cycleMs: readFloat32LE(stats.body, 14),
           spanMs,
+          sampleIdx: rateIdx >= 0 && rateIdx < FLICKER_SPAN_MS.length ? rateIdx : undefined,
+          gear: gearIdx,
           waveform,
         };
         if (!stopped) onReading(reading);
