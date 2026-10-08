@@ -607,8 +607,8 @@ export default function HistoryTab({
     // button stacked below other content) -- here it sits inline next to
     // "Select All" text, so that top margin would push it visibly lower than
     // its sibling instead of centering with it.
-    selectBarIconButton: { flex: 1, marginLeft: 8, paddingVertical: 8, alignItems: 'center', borderRadius: 10, borderWidth: 1, borderColor: colors.cardBorder, backgroundColor: colors.card },
-    selectBarIconText: { fontSize: 11, fontWeight: '600', marginTop: 3 },
+    selectBarIconButton: { flex: 1, marginLeft: 8, paddingVertical: 4, alignItems: 'center', borderRadius: 8, borderWidth: 1, borderColor: colors.cardBorder, backgroundColor: colors.card },
+    selectBarIconText: { fontSize: 10, fontWeight: '600', marginTop: 1 },
     selectBarButton: { marginTop: 0, marginLeft: 8, flex: 1, paddingHorizontal: 8, paddingVertical: 10 },
 
     dateGroup: { marginBottom: 2 },
@@ -691,7 +691,7 @@ export default function HistoryTab({
                   accessibilityLabel={b.label}
                   style={[styles.selectBarIconButton, 'border' in b && { borderColor: b.border }, off && { opacity: 0.5 }]}
                 >
-                  <ActionIcon d={b.icon} color={b.color} />
+                  <ActionIcon d={b.icon} color={b.color} size={17} />
                   <Text style={[styles.selectBarIconText, { color: b.color }]} numberOfLines={1}>{b.label}</Text>
                 </TouchableOpacity>
               );
