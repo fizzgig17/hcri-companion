@@ -747,7 +747,8 @@ export default function HomeScreen({ navigation }: any) {
   // The pager only returns to the Spectrum page for a genuinely new reading, not for every Live refresh.
   const [pagerResetKey, setPagerResetKey] = useState<unknown>(null);
   useEffect(() => {
-    if (result !== liveLastRef.current) setPagerResetKey(result);
+    // Clearing the reading (a New flicker sample) must not bounce the pager off the Flicker page.
+    if (result && result !== liveLastRef.current) setPagerResetKey(result);
   }, [result]);
 
   const stopActiveMode = useCallback(async () => {
