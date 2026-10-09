@@ -37,7 +37,7 @@ export function tm30InputFromReading(result: MeterResult, analysis: SpectralAnal
   return {
     title,
     takenAt,
-    deviceName: result.deviceName,
+    deviceName: result.sampleLabel ? undefined : result.deviceName,
     spectrum: result.spectrum,
     cct: analysis.cct,
     duv: analysis.duv,
