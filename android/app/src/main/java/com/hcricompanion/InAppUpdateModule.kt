@@ -21,6 +21,14 @@ class InAppUpdateModule(private val ctx: ReactApplicationContext) : ReactContext
 
   override fun getName() = "InAppUpdate"
 
+  private fun installedVersionCode(): Int =
+      try {
+        val pi = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
+        if (android.os.Build.VERSION.SDK_INT >= 28) pi.longVersionCode.toInt() else @Suppress("DEPRECATION") pi.versionCode
+      } catch (e: Exception) {
+        0
+      }
+
   @ReactMethod
   fun checkForUpdate(promise: Promise) {
     try {
@@ -30,6 +38,9 @@ class InAppUpdateModule(private val ctx: ReactApplicationContext) : ReactContext
             val map = Arguments.createMap()
             map.putBoolean("available", info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE)
             map.putInt("versionCode", info.availableVersionCode())
+            // Raw Play answer, for the log: 0 unknown, 1 not available, 2 available, 3 in progress.
+            map.putInt("availability", info.updateAvailability())
+            map.putInt("installedVersionCode", installedVersionCode())
             promise.resolve(map)
           }
           .addOnFailureListener { e -> promise.reject("E_UPDATE_CHECK", e.message, e) }
