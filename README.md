@@ -123,3 +123,16 @@ hCRI Companion is free software, © 2026 fizzgig, licensed under the GNU General
 # Contributing
 
 Bug reports and suggestions are welcome as issues. Code contributions are accepted only if the contributor agrees, in writing (a comment on the pull request is enough), that their contribution may be included under the project's license **including the App Store additional permission** in [LICENSE](LICENSE). Pull requests without that statement can't be merged.
+
+# Publishing to Google Play
+
+Every push to `master` builds the release AAB (`.github/workflows/deploy-master.yml`) and, once configured, uploads it to Google Play.
+
+One-time setup:
+
+1. In Google Cloud, create a service account and enable the **Google Play Android Developer API**; create a JSON key for it.
+2. In Play Console -> Users and permissions, invite the service account's email and grant it release permissions for this app (this can take a while to take effect).
+3. In GitHub -> Settings -> Secrets and variables -> Actions, add the secret `PLAY_SERVICE_ACCOUNT_JSON` (the whole JSON key). Until it exists the upload step is skipped.
+4. Optional repository variables: `PLAY_TRACK` (default `alpha`, the standard closed-testing track; or your custom closed track's name, `internal`, `production`) and `PLAY_RELEASE_STATUS` (default `completed`; use `draft` while the store listing is incomplete).
+
+Each release: bump `versionCode`/`versionName` in `android/app/build.gradle` (Play rejects a versionCode that isn't higher than every earlier upload) and update `whatsnew/whatsnew-en-US` (max 500 characters). The very first upload of an app must still be done by hand in Play Console.
