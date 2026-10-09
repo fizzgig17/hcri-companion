@@ -21,6 +21,7 @@ import HomeScreen from './screens/HomeScreen';
 import HistoryScreen from './screens/HistoryScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import ReadingDetailScreen from './screens/ReadingDetailScreen';
+import Tm30ReportScreen from './screens/Tm30ReportScreen';
 import ErrorBoundary from './components/ErrorBoundary';
 import DevBuildBanner from './components/DevBuildBanner';
 import SplashTitle from './components/SplashTitle';
@@ -126,6 +127,7 @@ function Navigation() {
             same relationship it had to Home before. */}
         <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
         <Stack.Screen name="ReadingDetail" component={ReadingDetailScreen} options={{ title: 'Reading' }} />
+        <Stack.Screen name="Tm30Report" component={Tm30ReportScreen} options={{ title: 'TM-30 Report' }} />
       </Stack.Navigator>
     </NavigationContainer>
     </View>

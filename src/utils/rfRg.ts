@@ -17,11 +17,10 @@
 //  - 81-point, 5nm-step arrays throughout (matching spd.php's calc_rf_rg
 //    itself, which operates at 5nm, unlike the "hires" 1nm CRI/CCT path).
 //
-// Only Rf and Rg themselves are exposed -- the per-bin/per-sample detail
-// arrays calc_rf_rg also returns (rfBins, rcsBins, rhsBins, cvgTest/cvgRef,
-// binRgb, etc.) feed hCRI.io's drill-down views and CVG wheel, which this
-// app has no UI for yet. Port those the same way (verbatim from spd.php)
-// if that ever changes.
+// calcRfRg() exposes just Rf and Rg; calcTm30() additionally returns the
+// per-bin / per-sample detail arrays (rfBins, rcsBins, rhsBins, cvgTest/cvgRef,
+// rfSamples, sampleHues) that calc_rf_rg also returns, ported the same way.
+// They feed the in-app TM-30 report (tm30Report.ts).
 
 import { CMF10_X, CMF10_Y, CMF10_Z, CES99 } from '../hcri/cesData';
 
@@ -204,25 +203,46 @@ export interface RfRg {
  * arrays it also returns; see this file's header).
  */
 export function calcRfRg(spd: number[], cct: number): RfRg {
+  const { rf, rg } = calcTm30(spd, cct);
+  return { rf, rg };
+}
+
+/** TM-30 / CIE reference illuminant at 5nm, 380-780nm (81 values): Planckian <= 4000K, CIE daylight >= 5000K, normalised blend between. */
+export function tm30ReferenceSpd(cct: number): number[] {
+  const Tr = Math.max(1667.0, Math.min(25000.0, cct));
+  if (Tr <= 4000.0) return blackbodySpd5nm(Tr);
+  if (Tr >= 5000.0) return daylightSpd5nm(Tr);
+  const p = blackbodySpd5nm(Tr);
+  const d = daylightSpd5nm(Tr);
+  const i560 = 36;
+  const pn = p[i560] > 0 ? p.map((v) => v / p[i560]) : p;
+  const dn = d[i560] > 0 ? d.map((v) => v / d[i560]) : d;
+  const w = (Tr - 4000.0) / 1000.0;
+  const ref: number[] = [];
+  for (let k = 0; k < 81; k++) ref[k] = (1.0 - w) * pn[k] + w * dn[k];
+  return ref;
+}
+
+export interface Tm30Detail extends RfRg {
+  /** Rf,hj -- fidelity per hue bin (16). */
+  rfBins: number[];
+  /** Rcs,hj -- local chroma shift per bin, as a fraction (16). */
+  rcsBins: number[];
+  /** Rhs,hj -- local hue shift per bin, degrees (16). */
+  rhsBins: number[];
+  /** Color vector graphic points, reference normalised to a unit circle (16 x [x,y]). */
+  cvgTest: [number, number][];
+  cvgRef: [number, number][];
+  /** Rf,CES -- fidelity of each of the 99 samples, and their reference hue angles. */
+  rfSamples: number[];
+  sampleHues: number[];
+}
+
+export function calcTm30(spd: number[], cct: number): Tm30Detail {
   const X10 = CMF10_X, Y10 = CMF10_Y, Z10 = CMF10_Z;
 
   // ── Build reference illuminant SPD ──────────────────────────────────────
-  const Tr = Math.max(1667.0, Math.min(25000.0, cct));
-  let ref: number[];
-  if (Tr <= 4000.0) {
-    ref = blackbodySpd5nm(Tr);
-  } else if (Tr >= 5000.0) {
-    ref = daylightSpd5nm(Tr);
-  } else {
-    const p = blackbodySpd5nm(Tr);
-    const d = daylightSpd5nm(Tr);
-    const i560 = 36;
-    const pn = p[i560] > 0 ? p.map((v) => v / p[i560]) : p;
-    const dn = d[i560] > 0 ? d.map((v) => v / d[i560]) : d;
-    const w = (Tr - 4000.0) / 1000.0;
-    ref = [];
-    for (let k = 0; k < 81; k++) ref[k] = (1.0 - w) * pn[k] + w * dn[k];
-  }
+  const ref = tm30ReferenceSpd(cct);
 
   // ── Normalize SPDs so white Y=100 ───────────────────────────────────────
   let tYw = 0.0;
@@ -307,5 +327,43 @@ export function calcRfRg(spd: number[], cct: number): RfRg {
   const rArea = polyArea(refAvg);
   const Rg = rArea > 0 ? Math.round(Math.min(130.0, Math.max(60.0, (100.0 * tArea) / rArea))) : 100;
 
-  return { rf: Rf, rg: Rg };
+  // ── Per-bin detail (matches spd.php's rfBins / rcsBins / rhsBins / cvg*) ──
+  const fid = (dE: number): number => Math.max(0.0, Math.min(100.0, 10.0 * Math.log(Math.exp((100.0 - 6.73 * dE) / 10.0) + 1.0)));
+  const binDEs: number[][] = Array.from({ length: 16 }, () => []);
+  bins.forEach((b, idx) => binDEs[b].push(dEs[idx]));
+  const rfBins: number[] = [];
+  const rcsBins: number[] = [];
+  const rhsBins: number[] = [];
+  const cvgTest: [number, number][] = [];
+  const cvgRef: [number, number][] = [];
+  for (let b = 0; b < 16; b++) {
+    const bDE = binDEs[b].length > 0 ? binDEs[b].reduce((a, c) => a + c, 0) / binDEs[b].length : meanDE;
+    rfBins.push(fid(bDE));
+    const [tx, ty] = testAvg[b];
+    const [ax, ay] = refAvg[b];
+    const tC = Math.sqrt(tx * tx + ty * ty);
+    const rC = Math.sqrt(ax * ax + ay * ay);
+    rcsBins.push(rC > 0.5 ? (tC - rC) / rC : 0.0);
+    const tH = Math.atan2(ty, tx);
+    const rH = Math.atan2(ay, ax);
+    let dH = tH - rH;
+    if (dH > Math.PI) dH -= 2 * Math.PI;
+    if (dH < -Math.PI) dH += 2 * Math.PI;
+    rhsBins.push((dH * 180) / Math.PI);
+    if (binCounts[b] === 0 || rC < 1e-9) {
+      const ang = ((22.5 * b + 11.25) * Math.PI) / 180;
+      cvgRef.push([Math.cos(ang), Math.sin(ang)]);
+      cvgTest.push([Math.cos(ang), Math.sin(ang)]);
+    } else {
+      const rad = tC / rC;
+      cvgRef.push([Math.cos(rH), Math.sin(rH)]);
+      cvgTest.push([rad * Math.cos(tH), rad * Math.sin(tH)]);
+    }
+  }
+
+  return {
+    rf: Rf, rg: Rg, rfBins, rcsBins, rhsBins, cvgTest, cvgRef,
+    rfSamples: dEs.map(fid),
+    sampleHues: refHues,
+  };
 }

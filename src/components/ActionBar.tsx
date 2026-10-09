@@ -14,11 +14,12 @@ import { useTheme } from '../contexts/ThemeContext';
 import { hapticTap } from '../utils/haptics';
 import type { Status } from '../screens/tabs/MainTab';
 
-type IconName = 'play' | 'stop' | 'bluetooth' | 'upload' | 'power' | 'copy' | 'check' | 'activity' | 'live' | 'flicker' | 'save';
+type IconName = 'play' | 'stop' | 'bluetooth' | 'upload' | 'power' | 'copy' | 'check' | 'activity' | 'live' | 'flicker' | 'save' | 'report';
 
 const ICON_PATHS: Record<Exclude<IconName, 'play' | 'stop'>, string> = {
   live: 'M21 12a9 9 0 0 0-15.5-6.2M3 12a9 9 0 0 0 15.5 6.2M21 4v5h-5M3 20v-5h5',
   flicker: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
+  report: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h8',
   save: 'M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8',
   bluetooth: 'M6.5 6.5l11 11L12 23V1l5.5 5.5-11 11',
   upload: 'M16 16l-4-4-4 4M12 12v9M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3',
@@ -81,6 +82,8 @@ interface Props {
   canSaveLive: boolean;
   savingLive: boolean;
   onSaveLive: () => void;
+  /** Opens the in-app TM-30 report for the current reading. */
+  onShowTm30: () => void;
 }
 
 export default function ActionBar(p: Props) {
@@ -226,6 +229,7 @@ export default function ActionBar(p: Props) {
               accent={p.activeMode === 'flicker'}
             />
           )}
+          {idle && p.hasReading && !p.canSaveLive && <SideButton icon="report" label="TM-30" onPress={p.onShowTm30} />}
         </View>
       </View>
     </View>
