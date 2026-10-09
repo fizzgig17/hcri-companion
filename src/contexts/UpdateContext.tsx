@@ -1,10 +1,11 @@
 // src/contexts/UpdateContext.tsx
 //
 // Checks Google Play for a newer version each time the app loads, and
-// shares the result with the banner and the Settings > Update tab.
+// shares the result with the banner and the Settings > Update tab. It only
+// checks; installing the update happens in the Play Store.
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { checkForUpdate, startImmediateUpdate, updatesSupported } from '../utils/inAppUpdate';
+import { checkForUpdate, openPlayStore, updatesSupported } from '../utils/inAppUpdate';
 
 export type UpdateStatus = 'idle' | 'checking' | 'uptodate' | 'available' | 'error';
 
@@ -18,7 +19,8 @@ interface UpdateState {
   check: (announce?: boolean) => Promise<void>;
   /** The banner may show (set by the launch check or the test button). */
   bannerEligible: boolean;
-  startUpdate: () => Promise<void>;
+  /** Opens the app's Play Store listing, where the update is installed. */
+  openStore: () => Promise<void>;
   dismissBanner: () => void;
 }
 
@@ -57,15 +59,6 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const startUpdate = useCallback(async () => {
-    try {
-      if (status !== 'available') await check();
-      await startImmediateUpdate();
-    } catch (e: any) {
-      setError(e?.message || 'Could not start the update.');
-    }
-  }, [status, check]);
-
   // Every time the app loads.
   useEffect(() => {
     check(true);
@@ -79,10 +72,10 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
       bannerDismissed: dismissedCode === availableVersionCode && availableVersionCode !== 0,
       check,
       bannerEligible,
-      startUpdate,
+      openStore: openPlayStore,
       dismissBanner: () => setDismissedCode(availableVersionCode),
     }),
-    [status, availableVersionCode, error, dismissedCode, check, bannerEligible, startUpdate],
+    [status, availableVersionCode, error, dismissedCode, check, bannerEligible],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

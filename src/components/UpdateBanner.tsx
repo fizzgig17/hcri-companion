@@ -2,8 +2,8 @@
 //
 // One banner, docked right under the DEV BUILD strip (or the status bar on
 // production builds), overlaying the app without moving it. Shown only when the launch check (or the test button) found a newer version
-// in Google Play; it slides open. "Update now" jumps to Settings > Update and
-// starts the update; the x hides it until the next launch.
+// in Google Play; it slides open. "Open Play Store" opens the app's Play Store
+// listing, where the update is installed; the x hides it until the next launch.
 
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, Text, TouchableOpacity, View, StyleSheet } from 'react-native';
@@ -11,7 +11,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { useBannerVisible } from '../contexts/UpdateContext';
 import { useUpdate } from '../contexts/UpdateContext';
-import { navigationRef } from '../navigationRef';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
 
 const BAR_H = 60;
@@ -21,7 +20,7 @@ const BANNER_BLUE = '#1d5fd1';
 export default function UpdateBanner() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const { dismissBanner } = useUpdate();
+  const { dismissBanner, openStore } = useUpdate();
   const visible = useBannerVisible();
   const open = useRef(new Animated.Value(0)).current;
 
@@ -51,20 +50,14 @@ export default function UpdateBanner() {
     closeText: { color: '#fff', fontSize: 26, fontWeight: '600', lineHeight: 28 },
   });
 
-  const updateNow = () => {
-    if (navigationRef.isReady()) {
-      navigationRef.navigate('Tabs', { screen: 'Settings', params: { autoUpdate: Date.now() } });
-    }
-  };
-
   return (
     <View style={styles.slot} pointerEvents="box-none">
     <Animated.View style={[styles.clip, { transform: [{ translateY }], opacity: visible ? 1 : 0 }]} pointerEvents={visible ? 'auto' : 'none'}>
       <View style={{ paddingTop: topPad }}>
         <View style={styles.bar} accessibilityRole="alert">
           <Text style={styles.text} numberOfLines={1}>A new version is available</Text>
-          <TouchableOpacity style={styles.action} onPress={updateNow} accessibilityLabel="Update now">
-            <Text style={styles.actionText}>Update now</Text>
+          <TouchableOpacity style={styles.action} onPress={openStore} accessibilityLabel="Open Play Store to update">
+            <Text style={styles.actionText}>Open Play Store</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.close} onPress={dismissBanner} accessibilityLabel="Dismiss">
             <Text style={styles.closeText}>×</Text>

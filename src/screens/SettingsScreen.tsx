@@ -79,7 +79,6 @@ export default function SettingsScreen({ navigation, route }: any) {
   // Settings / About sub-tabs -- About used to be a section at the very
   // bottom of this screen, a long scroll past every setting to reach.
   const update = useUpdate();
-  const autoUpdate = route?.params?.autoUpdate;
   const [settingsTab, setSettingsTab] = useState<'settings' | 'update' | 'about'>('settings');
   // Android Back: from Update/About return to the main Settings page first.
   useFocusEffect(
@@ -94,14 +93,6 @@ export default function SettingsScreen({ navigation, route }: any) {
       return () => sub.remove();
     }, [settingsTab]),
   );
-  // "Update now" on the banner lands here and starts the update.
-  React.useEffect(() => {
-    if (autoUpdate) {
-      setSettingsTab('update');
-      update.startUpdate();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoUpdate]);
   // Always open on Settings, never on whichever sub-tab was showing last:
   // this screen stays mounted while you're on other tabs, so reset when
   // leaving it, and when the Settings tab itself is tapped.
