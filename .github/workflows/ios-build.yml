@@ -1,0 +1,81 @@
+# .github/workflows/ios-build.yml
+#
+# Compiles the iOS app on a macOS runner for every push to `develop` and
+# `master` (and on demand). This is a BUILD CHECK only: it is unsigned
+# (CODE_SIGNING_ALLOWED=NO), so it produces no installable IPA -- but it
+# catches iOS-only compile/link/pod problems without needing a Mac every time.
+# Installing on a phone, TestFlight and App Store uploads need an Apple
+# Developer account and signing certificates, which are not set up here yet.
+#
+# Same build-time swaps as the Android workflows: develop builds talk to
+# dev.hcri.io, master builds to www.hcri.io, and the git commit id is stamped in.
+
+name: Build iOS (compile check)
+
+on:
+  push:
+    branches: [develop, master]
+  workflow_dispatch: {}
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ios:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Point build at the right hCRI.io server
+        run: |
+          if [ "${GITHUB_REF_NAME}" = "master" ]; then BASE="https://www.hcri.io"; else BASE="https://dev.hcri.io"; fi
+          echo "export const HCRI_API_BASE = '${BASE}';" > src/hcri/apiConfig.ts
+
+      - name: Stamp git commit id into the build
+        run: echo "export const GIT_COMMIT = '${GITHUB_SHA::7}';" > src/gitCommit.ts
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: ios/Pods
+          key: pods-${{ runner.os }}-${{ hashFiles('ios/Podfile', 'package-lock.json') }}
+
+      - name: Install CocoaPods
+        working-directory: ios
+        run: bundle exec pod install
+
+      - name: Build (unsigned, generic iOS device)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -workspace ios/hCRICompanion.xcworkspace \
+            -scheme hCRICompanion \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build 2>&1 | tee xcodebuild.log | tail -n 40
+
+      # `gh` in the authoring sandbox can't download logs, so surface the real
+      # compiler/linker errors as check-run annotations when a build fails.
+      - name: Annotate errors
+        if: failure()
+        run: |
+          grep -E "error:|fatal error:|ld: |\*\* BUILD FAILED|Undefined symbols" xcodebuild.log | head -n 20 | while IFS= read -r line; do
+            echo "::error::${line//%/%25}"
+          done

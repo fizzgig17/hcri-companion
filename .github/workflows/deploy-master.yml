@@ -41,6 +41,9 @@ permissions:
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
+    env:
+      # Only used to decide whether the Play upload step below runs at all.
+      PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
     steps:
       - uses: actions/checkout@v4
 
@@ -132,3 +135,28 @@ jobs:
           files: |
             hCRICompanion.apk
             hCRICompanion.aab
+
+      # Uploads the release-signed AAB to Google Play on every push to `master`.
+      # Skipped (not failed) until the PLAY_SERVICE_ACCOUNT_JSON secret exists.
+      #
+      # Set up once (see the README, "Publishing to Google Play"):
+      #   secret   PLAY_SERVICE_ACCOUNT_JSON -- the service account's JSON key
+      #   variable PLAY_TRACK (optional)      -- default "alpha", the standard closed-testing track;
+      #                                          use your custom closed track's name if you made one,
+      #                                          or "internal" / "production"
+      #   variable PLAY_RELEASE_STATUS (opt.) -- default "completed"; use "draft" while the store
+      #                                          listing is incomplete (the API only allows drafts then)
+      #
+      # Play rejects an upload whose versionCode isn't higher than every earlier one, so this step
+      # fails (visibly) if a master push forgot to bump versionCode in android/app/build.gradle.
+      # Release notes come from whatsnew/whatsnew-en-US (max 500 characters) -- update it each release.
+      - name: Upload AAB to Google Play
+        if: env.PLAY_SERVICE_ACCOUNT_JSON != ''
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.hcricompanion
+          releaseFiles: hCRICompanion.aab
+          track: ${{ vars.PLAY_TRACK || 'alpha' }}
+          status: ${{ vars.PLAY_RELEASE_STATUS || 'completed' }}
+          whatsNewDirectory: whatsnew
