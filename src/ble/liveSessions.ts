@@ -130,6 +130,7 @@ export function startLiveSpectrum(
 async function sendStopReliably(conn: MeterConnection, log: LogFn): Promise<void> {
   try {
     await conn.sendCommand(CMD_STOP_SAMPLING);
+    log('Stop (8C 25) handed to the Bluetooth stack', true);
   } catch (e: any) {
     log(`Stop failed: ${e?.message ?? e}`);
     return;
@@ -149,6 +150,9 @@ export interface FlickerReading {
   cycleMs: number;
   /** Total time the 400 samples span, in ms, if the meter's sample-rate setting could be read. */
   spanMs?: number;
+  /** The meter's sample-rate index (0-10) and range/gear index (0-3) when the run started, if it answered. */
+  sampleIdx?: number;
+  gear?: number;
   /** 400 raw waveform samples. */
   waveform: number[];
 }
@@ -195,11 +199,16 @@ async function request(
   log: LogFn
 ): Promise<MeterMessage | null> {
   for (let i = 0; i < tries && !isStopped(); i++) {
+    const tSend = Date.now();
     const waiting = waitForMessage(conn, sub, timeoutMs, accept, isStopped);
     await conn.sendCommand(cmd);
     const m = await waiting;
-    if (m) return m;
-    if (!isStopped()) log(`No reply to ${cmd.map((b) => b.toString(16).padStart(2, '0')).join(' ')} (try ${i + 1}/${tries})`);
+    const name = cmd.map((b) => b.toString(16).padStart(2, '0')).join(' ');
+    if (m) {
+      log(`reply to ${name} in ${Date.now() - tSend}ms (${m.body.length}B)`, true);
+      return m;
+    }
+    if (!isStopped()) log(`No reply to ${name} (try ${i + 1}/${tries}, waited ${Date.now() - tSend}ms; last notification of any kind ${conn.msSinceLastNotify()} ago)`);
   }
   return null;
 }
@@ -254,6 +263,92 @@ export async function writeFlickerSetting(
   return !!m;
 }
 
+/**
+ * Diagnostics: logs (verbose) whenever the app's own JavaScript thread was stalled for a while, by watching how
+ * late a 250ms timer fires. Tells "the app froze" apart from "the meter went quiet". Returns a stop function.
+ */
+function startLagMonitor(log: LogFn): () => void {
+  let last = Date.now();
+  const timer = setInterval(() => {
+    const now = Date.now();
+    const late = now - last - 250;
+    last = now;
+    if (late > 400) log(`App JS thread stalled ~${late}ms`, true);
+  }, 250);
+  return () => clearInterval(timer);
+}
+
+/**
+ * One flicker snapshot, for "capture flicker with each reading". Starts the meter's flicker mode, waits for a
+ * capture, reads the statistics and the waveform once, then stops. Never throws and is bounded to a few
+ * seconds: on any problem it logs and returns null so the normal reading is unaffected.
+ */
+export async function captureFlickerOnce(conn: MeterConnection, log: LogFn): Promise<FlickerReading | null> {
+  const never = () => false;
+  const t0 = Date.now();
+  let started = false;
+  try {
+    conn.resetReassemblyState();
+    let spanMs: number | undefined;
+    let sampleIdx: number | undefined;
+    let gear: number | undefined;
+    const rate = await request(conn, CMD_FLICKER_SAMPLE_RATE, 0x3d, 1000, 1, () => true, never, log);
+    const rateIdx = rate && rate.body.length >= 3 ? fromBcd(rate.body[2]) : -1;
+    if (rateIdx >= 0 && rateIdx < FLICKER_SPAN_MS.length) {
+      spanMs = FLICKER_SPAN_MS[rateIdx];
+      sampleIdx = rateIdx;
+    }
+    const gearReply = await request(conn, [0x8c, 0x36], 0x36, 800, 1, () => true, never, log);
+    if (gearReply && gearReply.body.length >= 3) gear = fromBcd(gearReply.body[2]);
+
+    started = true;
+    await conn.sendCommand(CMD_START_FLICKER_CONTINUOUS);
+    await sleep(200);
+    const readyDeadline = Date.now() + 6000;
+    let ready = false;
+    while (!ready && Date.now() < readyDeadline) {
+      const m = await request(conn, CMD_FLICKER_READY, 0x3b, 600, 1, () => true, never, log);
+      if (m && m.body[2] === 0x01) ready = true;
+      else await sleep(150);
+    }
+    if (!ready) {
+      log('Flicker capture: the meter never reported a capture ready -- skipped');
+      return null;
+    }
+    const stats = await request(conn, CMD_FLICKER_STATS, 0x3c, 1500, 2, (m) => m.body.length >= 18, never, log);
+    const wave = stats
+      ? await request(conn, CMD_FLICKER_WAVE, 0x3a, 2000, 2, (m) => m.body.length >= FLICKER_WAVE_SAMPLES * 2, never, log)
+      : null;
+    if (!stats || !wave) {
+      log(`Flicker capture: incomplete (stats ${stats ? 'ok' : 'missing'}, waveform ${wave ? 'ok' : 'missing'}) -- skipped`);
+      return null;
+    }
+    const waveform: number[] = [];
+    for (let i = 0; i < FLICKER_WAVE_SAMPLES; i++) waveform.push(wave.body[2 * i] | (wave.body[2 * i + 1] << 8));
+    const reading: FlickerReading = {
+      frequencyHz: readFloat32LE(stats.body, 2),
+      percentFlicker: readFloat32LE(stats.body, 6),
+      flickerIndex: readFloat32LE(stats.body, 10),
+      cycleMs: readFloat32LE(stats.body, 14),
+      spanMs,
+      sampleIdx,
+      gear,
+      waveform,
+    };
+    log(`Flicker capture OK in ${((Date.now() - t0) / 1000).toFixed(1)}s: ${reading.frequencyHz.toFixed(1)} Hz, ${reading.percentFlicker.toFixed(1)} %`);
+    return reading;
+  } catch (e: any) {
+    log(`Flicker capture failed: ${e?.message ?? e}`);
+    return null;
+  } finally {
+    if (started) {
+      // Leave the meter out of flicker mode, and let the stop settle before the next command.
+      await sendStopReliably(conn, log).catch(() => {});
+      await sleep(350);
+    }
+  }
+}
+
 /** Continuous flicker. onReading fires per refresh; onEnd fires exactly once. */
 export function startFlicker(
   conn: MeterConnection,
@@ -263,9 +358,13 @@ export function startFlicker(
 ): LiveSession {
   let stopped = false;
   let ended = false;
+  const stopLagMonitor = startLagMonitor(log);
+  conn.setCompactNotifyLog(true);
   const end = (err?: Error) => {
     if (ended) return;
     ended = true;
+    stopLagMonitor();
+    conn.setCompactNotifyLog(false);
     onEnd(err);
   };
   const isStopped = () => stopped;
@@ -284,6 +383,7 @@ export function startFlicker(
         // diagnostic only
       }
       // Sample-rate setting -> how much time the plotted waveform covers (lets the chart label its time axis).
+      let gearIdx: number | undefined;
       let spanMs: number | undefined;
       const rate = await request(conn, CMD_FLICKER_SAMPLE_RATE, 0x3d, 1500, 2, () => true, isStopped, log);
       const rateIdx = rate && rate.body.length >= 3 ? fromBcd(rate.body[2]) : -1;
@@ -293,6 +393,9 @@ export function startFlicker(
       } else {
         log('Flicker: could not read the sample rate; time axis will use sample numbers');
       }
+      // Range (gear) too, for the chart header. One quick try: it's display-only.
+      const gearReply = await request(conn, [0x8c, 0x36], 0x36, 800, 1, () => true, isStopped, log);
+      if (gearReply && gearReply.body.length >= 3) gearIdx = fromBcd(gearReply.body[2]);
       if (stopped) {
         end();
         return;
@@ -331,6 +434,7 @@ export function startFlicker(
           log(
             `Flicker: incomplete cycle after ${cycle} good cycles ${since()} (stats ${stats ? 'ok' : 'missing'} in ${tStats - tCycle}ms, waveform ${wave ? 'ok' : 'missing'}; link ${conn.isConnected() ? 'still up' : 'DOWN'})`
           );
+          log(`Flicker: link check after failure: ${await conn.diagnoseLink()}`, true);
           conn.resetReassemblyState();
           if (failures >= 3) throw new Error('The meter stopped answering flicker requests.');
           continue;
@@ -352,6 +456,8 @@ export function startFlicker(
           flickerIndex: readFloat32LE(stats.body, 10),
           cycleMs: readFloat32LE(stats.body, 14),
           spanMs,
+          sampleIdx: rateIdx >= 0 && rateIdx < FLICKER_SPAN_MS.length ? rateIdx : undefined,
+          gear: gearIdx,
           waveform,
         };
         if (!stopped) onReading(reading);

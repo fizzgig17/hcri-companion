@@ -103,16 +103,24 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
   // edges for chart paging, which swallowed the Android Back swipe whenever it began over a chart.
   // Back to the first page whenever resetKey changes (not on first mount).
   const firstKey = useRef(true);
+  const resetJustRan = useRef(false);
   useEffect(() => {
     if (firstKey.current) {
       firstKey.current = false;
       return;
     }
+    resetJustRan.current = true;
     setActiveIndex(0);
     (scrollRef.current as any)?.scrollTo({ x: 0, animated: false });
   }, [resetKey]);
   // Pages can come and go (Flicker only exists while a capable meter is connected): never point past the end.
   useEffect(() => {
+    // A reset in this same commit (e.g. Live starting while on the Flicker page, which also removes that page) already
+    // sent us to the first page; the stale activeIndex here must not clamp us to the last one instead.
+    if (resetJustRan.current) {
+      resetJustRan.current = false;
+      return;
+    }
     if (pages.length > 0 && activeIndex > pages.length - 1) {
       setActiveIndex(pages.length - 1);
       (scrollRef.current as any)?.scrollTo({ x: (pages.length - 1) * width, animated: false });

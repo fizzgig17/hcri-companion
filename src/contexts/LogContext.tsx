@@ -13,7 +13,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { loadVerboseLoggingPreference } from '../storage/preferences';
 
 interface LogContextValue {
-  /** Capped at the last 100 lines -- see appendLog below. */
+  /** Capped at the last 100 lines (3000 with Verbose logging on) -- see appendLog below. */
   log: string[];
   /** `verbose` lines (BLE hex dumps, raw result bodies) are dropped unless the Settings "Verbose logging" toggle is on -- see refreshVerboseLogging. */
   appendLog: (msg: string, verbose?: boolean) => void;
@@ -22,6 +22,11 @@ interface LogContextValue {
   /** Re-reads the Verbose Logging preference from storage -- call this on screen focus (same reasoning as cachedUsername/statIds elsewhere) so a toggle flipped in Settings takes effect without an app restart. */
   refreshVerboseLogging: () => void;
 }
+
+// Standard log keeps the last 100 lines; Verbose logging (BLE traffic, per-cycle timings) keeps far more,
+// since a freeze has to be seen together with the minutes of traffic leading up to it.
+const STANDARD_LOG_LINES = 100;
+const VERBOSE_LOG_LINES = 3000;
 
 const LogContext = createContext<LogContextValue | null>(null);
 
@@ -51,7 +56,10 @@ export function LogProvider({ children }: { children: React.ReactNode }) {
   // recreated; reading a ref lets this setting apply live without
   // appendLog needing to depend on it.
   const verboseLoggingRef = useRef(false);
-  const pendingRef = useRef<string[]>([]);
+  const pendingRef = useRef<{ ts: string; msg: string }[]>([]);
+  // The authoritative log lines (state below is a copy handed to the UI), plus the last line for collapsing repeats.
+  const logRef = useRef<string[]>([]);
+  const lastRef = useRef<{ msg: string; ts: string; count: number } | null>(null);
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refreshVerboseLogging = useCallback(() => {
@@ -90,19 +98,36 @@ export function LogProvider({ children }: { children: React.ReactNode }) {
     // Lines are buffered and flushed at most ~3x/second: every setLog re-renders everything that
     // reads the log, and at BLE wire frequency (Live polling) that made taps on Stop/Disconnect
     // get lost behind a wall of re-renders.
-    pendingRef.current.push(`${timestampPrefix()}  ${msg}`);
+    pendingRef.current.push({ ts: timestampPrefix(), msg });
     if (!flushTimerRef.current) {
       flushTimerRef.current = setTimeout(() => {
         flushTimerRef.current = null;
         const batch = pendingRef.current;
         pendingRef.current = [];
-        setLog((prev) => [...prev, ...batch].slice(-100));
+        const verboseOn = verboseLoggingRef.current;
+        const lines = logRef.current;
+        for (const { ts, msg: m } of batch) {
+          // Verbose only: a run of identical lines (e.g. 95 polls of "-> write (2B): 8c 05")
+          // collapses into one line, so polling can't push the useful lines out of the cap.
+          if (verboseOn && lastRef.current && lastRef.current.msg === m) {
+            lastRef.current.count += 1;
+            lines[lines.length - 1] = `${lastRef.current.ts}  ${m}  [x${lastRef.current.count}, last at ${ts.slice(6)}]`;
+            continue;
+          }
+          lastRef.current = { msg: m, ts, count: 1 };
+          lines.push(`${ts}  ${m}`);
+        }
+        const cap = verboseOn ? VERBOSE_LOG_LINES : STANDARD_LOG_LINES;
+        if (lines.length > cap) lines.splice(0, lines.length - cap);
+        setLog(lines.slice());
       }, 300);
     }
   }, []);
 
   const clearLog = useCallback(() => {
     pendingRef.current = [];
+    logRef.current = [];
+    lastRef.current = null;
     setLog([]);
   }, []);
 

@@ -14,20 +14,21 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MeterConnection } from '../ble/MeterConnection';
 import type { BatteryStatus } from '../ble/protocol';
 import { deviceSupportsLive, deviceSupportsFlicker } from '../ble/protocol';
-import { startLiveSpectrum, startFlicker, readFlickerSettings, writeFlickerSetting, type LiveSession, type FlickerReading } from '../ble/liveSessions';
+import { startLiveSpectrum, startFlicker, captureFlickerOnce, readFlickerSettings, writeFlickerSetting, type LiveSession, type FlickerReading } from '../ble/liveSessions';
 import type { FlickerSettingsApi } from '../components/FlickerSettingsModal';
+import type { FlickerUploadApi } from '../components/FlickerChart';
 import { initializeMeter, takeMeasurement, EMPTY_READING_ERROR } from '../ble/takeMeasurement';
 import { MeterResult } from '../ble/parseResult';
 import { analyzeSpectrum } from '../utils/spectralAnalysis';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { buildCsv, defaultLabel } from '../hcri/buildCsv';
-import { uploadToHcri } from '../hcri/uploadToHcri';
+import { uploadReadingToHcri, uploadFlickerToHcri } from '../hcri/uploadFlickerToHcri';
 import { getReportLink } from '../hcri/getReportLink';
 import { fetchSampleReading } from '../hcri/fetchSampleReading';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
-import { loadKeepAwakePreference, loadStayConnectedInBackgroundPreference } from '../storage/preferences';
+import { loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
-import { addReading, recordUpload } from '../storage/readingHistory';
+import { addReading, recordUpload, setReadingFlicker } from '../storage/readingHistory';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
 import { shareDebugLog } from '../utils/shareLog';
 import { shareSingleReadingCsv } from '../utils/shareCsv';
@@ -656,6 +657,20 @@ export default function HomeScreen({ navigation }: any) {
           r = await takeMeasurement(connRef.current, appendLog);
         }
       }
+      // Optional extra (Settings -> "Capture flicker with each reading", off by default): one flicker snapshot
+      // after the spectrum, saved with the reading. Failure never affects the reading itself.
+      // A new reading starts with a clean Flicker page (no leftover flicker from the previous light).
+      setFlickerReading(null);
+      setFlickerHistory([]);
+      setFlickerFromReading(false);
+      if (!r.source && deviceSupportsFlicker(r.deviceName) && (await loadFlickerWithReadingPreference().catch(() => false))) {
+        const f = await captureFlickerOnce(connRef.current, appendLog);
+        if (f) {
+          r = { ...r, flicker: f };
+          setFlickerReading(f);
+          setFlickerFromReading(true);
+        }
+      }
       if (!r.source) {
         // Meter's own numbers next to the spectrum-derived ones the app shows -- lets a
         // difference from the vendor app be traced to the meter or to the math.
@@ -727,11 +742,13 @@ export default function HomeScreen({ navigation }: any) {
   const [savingLive, setSavingLive] = useState(false);
   const [flickerReading, setFlickerReading] = useState<FlickerReading | null>(null);
   const [flickerFocus, setFlickerFocus] = useState(0);
+  const [flickerFromReading, setFlickerFromReading] = useState(false);
   const [flickerHistory, setFlickerHistory] = useState<{ f: number; p: number }[]>([]);
   // The pager only returns to the Spectrum page for a genuinely new reading, not for every Live refresh.
   const [pagerResetKey, setPagerResetKey] = useState<unknown>(null);
   useEffect(() => {
-    if (result !== liveLastRef.current) setPagerResetKey(result);
+    // Clearing the reading (a New flicker sample) must not bounce the pager off the Flicker page.
+    if (result && result !== liveLastRef.current) setPagerResetKey(result);
   }, [result]);
 
   const stopActiveMode = useCallback(async () => {
@@ -770,20 +787,50 @@ export default function HomeScreen({ navigation }: any) {
     );
   }, [mode, stopActiveMode, appendLog]);
 
-  const toggleFlicker = useCallback(async () => {
-    if (mode === 'flicker') {
-      await stopActiveMode();
-      return;
+  // Flicker samples. 'reading' = the sample belongs to the current reading (kept with it and in History);
+  // 'new' = an independent sample, which leaves the current reading behind. Both run the same stream and share Stop.
+  const [flickerTarget, setFlickerTarget] = useState<'reading' | 'new'>('new');
+  const flickerLatestRef = useRef<FlickerReading | null>(null);
+  const canSampleReading = !!result && !result.source && !!currentReadingId && !uploadSucceeded && !lastUploadedReport && status === 'connected' && (mode === 'idle' || mode === 'flicker');
+
+  const finishReadingSample = useCallback(() => {
+    const f = flickerLatestRef.current ?? result?.flicker ?? null;
+    if (!f) return;
+    setFlickerReading(f);
+    setFlickerFromReading(true);
+    if (flickerLatestRef.current) {
+      setResult((r) => (r ? { ...r, flicker: f } : r));
+      if (currentReadingId) setReadingFlicker(currentReadingId, f).catch((e: any) => appendLog(`Failed to save flicker to history: ${e.message}`));
     }
+  }, [result, currentReadingId, appendLog]);
+
+  const stopFlicker = useCallback(async () => {
+    if (mode !== 'flicker') return;
+    const wasReading = flickerTarget === 'reading';
+    await stopActiveMode();
+    if (wasReading) finishReadingSample();
+  }, [mode, flickerTarget, stopActiveMode, finishReadingSample]);
+
+  const startFlickerSample = useCallback(async (target: 'reading' | 'new') => {
     if (mode !== 'idle' || !connRef.current) return;
+    setFlickerTarget(target);
+    flickerLatestRef.current = null;
     setMode('flicker');
+    if (target === 'new') {
+      // An independent sample leaves the current reading behind (it's already in History): clear it and its flicker.
+      setResult(null);
+      setCurrentReadingId(null);
+      setUploadSucceeded(false);
+      setLastUploadedReport(null);
+    }
     setFlickerReading(null);
     setFlickerHistory([]);
-    setFlickerFocus((n) => n + 1);
+    setFlickerFromReading(false);
     sessionRef.current = startFlicker(
       connRef.current,
       appendLog,
       (r) => {
+        flickerLatestRef.current = r;
         setFlickerReading(r);
         setFlickerHistory((h) => [...h.slice(-39), { f: r.frequencyHz, p: r.percentFlicker }]);
       },
@@ -796,7 +843,7 @@ export default function HomeScreen({ navigation }: any) {
         }
       }
     );
-  }, [mode, stopActiveMode, appendLog]);
+  }, [mode, appendLog]);
 
   const saveLive = useCallback(async () => {
     const r = liveUnsaved;
@@ -816,6 +863,25 @@ export default function HomeScreen({ navigation }: any) {
       setSavingLive(false);
     }
   }, [liveUnsaved, savingLive, appendLog]);
+
+  const flickerUploadApi = useMemo<FlickerUploadApi>(
+    () => ({
+      defaultTitle: async () =>
+        `${deviceName ?? 'Meter'} flicker ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+      send: async (reading, title, notes) => {
+        const creds = await loadHcriCredentials();
+        if (!creds) return 'Add your hCRI.io username and API token in Settings first.';
+        const ok = await uploadFlickerToHcri(
+          reading,
+          { label: title || `${deviceName ?? 'Meter'} flicker`, model: deviceName ?? undefined, notes },
+          creds.token,
+          appendLog
+        );
+        return ok ? null : 'Upload failed. Check Logs for details (hCRI.io may not support flicker yet).';
+      },
+    }),
+    [deviceName, appendLog]
+  );
 
   const flickerSettingsApi = useMemo<FlickerSettingsApi>(
     () => ({
@@ -1101,7 +1167,7 @@ export default function HomeScreen({ navigation }: any) {
     // the field's genuinely empty, rather than silently ignoring a typed
     // title.
     const label = uploadTitle.trim() || defaultLabel(creds.username, result.deviceName);
-    const res = await uploadToHcri(csv, label, creds.token, appendLog);
+    const res = await uploadReadingToHcri(result, csv, label, creds.token, appendLog);
     // The raw server response (res.message -- hCRI.io's API returns JSON)
     // still goes to Logs for anyone actually debugging an upload either way.
     appendLog(res.message);
@@ -1317,8 +1383,8 @@ export default function HomeScreen({ navigation }: any) {
             scrollInputIntoView={scrollInputIntoView}
             pagerResetKey={pagerResetKey}
             flicker={
-              (status === 'connected' || status === 'uploading' || status === 'measuring') && deviceSupportsFlicker(deviceName)
-                ? { reading: flickerReading, running: mode === 'flicker', focusNonce: flickerFocus, history: flickerHistory, settings: flickerSettingsApi }
+              (status === 'connected' || status === 'uploading' || status === 'measuring') && deviceSupportsFlicker(deviceName) && mode !== 'live'
+                ? { reading: flickerReading, running: mode === 'flicker', focusNonce: flickerFocus, history: flickerHistory, settings: flickerSettingsApi, upload: flickerUploadApi, target: mode === 'flicker' ? flickerTarget : null, onStart: startFlickerSample, onStop: stopFlicker, canSampleReading, fromReading: flickerFromReading, redoLabel: result?.flicker ? 'Redo for reading' : 'Add to reading', readingNote: result ? (currentReadingId ? 'saved' : 'unsaved') : undefined }
                 : undefined
             }
           />
@@ -1362,10 +1428,10 @@ export default function HomeScreen({ navigation }: any) {
           onCopyLink={copyReportLink}
           onResetConnection={resetConnection}
           liveSupported={deviceSupportsLive(deviceName)}
-          flickerSupported={deviceSupportsFlicker(deviceName)}
+          flickerSupported={deviceSupportsFlicker(deviceName) && mode !== 'live'}
           activeMode={mode}
           onToggleLive={toggleLive}
-          onToggleFlicker={toggleFlicker}
+          onToggleFlicker={() => setFlickerFocus((n) => n + 1)}
           canSaveLive={!!liveUnsaved}
           savingLive={savingLive}
           onSaveLive={saveLive}

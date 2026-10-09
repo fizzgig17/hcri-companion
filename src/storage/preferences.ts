@@ -101,6 +101,18 @@ export async function saveTbCorrectionPreference(enabled: boolean): Promise<void
   await AsyncStorage.setItem(TB_CORRECTION_KEY, enabled ? 'true' : 'false');
 }
 
+// Default OFF -- an optional extra: after each standard reading also take a one-shot flicker capture
+// (adds a few seconds, and only meters that support flicker can do it). See HomeScreen.tsx's measure().
+const FLICKER_WITH_READING_KEY = 'hcri.io.pref.flickerWithReading';
+
+export async function loadFlickerWithReadingPreference(): Promise<boolean> {
+  return (await AsyncStorage.getItem(FLICKER_WITH_READING_KEY)) === 'true';
+}
+
+export async function saveFlickerWithReadingPreference(enabled: boolean): Promise<void> {
+  await AsyncStorage.setItem(FLICKER_WITH_READING_KEY, enabled ? 'true' : 'false');
+}
+
 // Defaults to 'system' -- a fresh install should follow the phone's own
 // light/dark setting rather than forcing dark (this app's original, only
 // look) on someone whose phone is set to light mode. Light and Dark are

@@ -10,7 +10,7 @@
 
 import React, { useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
-import PrimaryButton from '../../components/PrimaryButton';
+import Svg, { Path } from 'react-native-svg';
 import CollapsibleSection from '../../components/CollapsibleSection';
 import { useTheme } from '../../contexts/ThemeContext';
 import { MeterResult } from '../../ble/parseResult';
@@ -18,6 +18,9 @@ import { SpectralAnalysis } from '../../utils/spectralAnalysis';
 import { buildCsv, defaultLabel } from '../../hcri/buildCsv';
 import { HCRI_BRAND_HOST } from '../../hcri/buildTarget';
 import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
+
+const ICON_CLOUD = 'M16 16l-4-4-4 4M12 12v9M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3';
+const ICON_TRAY = 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12';
 
 // The core colorimetric numbers (CCT/Ra/Duv/Lux/Rf/R9/Rg), still worth
 // having right here rather than only on Main -- but as a compact, plain
@@ -133,7 +136,8 @@ export default function DataTab({
     },
 
     uploadRow: { flexDirection: 'row', alignItems: 'center' },
-    uploadButton: { flex: 1 },
+    iconButton: { flex: 1, marginTop: 8, paddingVertical: 10, alignItems: 'center', borderRadius: 10, borderWidth: 1, borderColor: colors.cardBorder, backgroundColor: colors.card },
+    iconButtonText: { fontSize: 12, fontWeight: '600', marginTop: 3 },
     // Replaces the old separate checkmark + bare-icon-button pair -- next
     // to each other, both unlabeled, they read as two things rather than
     // one ("why are there two icons?"). A single pill that's both the
@@ -259,13 +263,27 @@ export default function DataTab({
         </CollapsibleSection>
 
         <View style={styles.uploadRow}>
-          <PrimaryButton
-            title={`Upload to ${HCRI_BRAND_HOST}`}
+          <TouchableOpacity
             onPress={onUpload}
             disabled={uploading || !!result.sampleLabel}
-            variant="muted"
-            style={styles.uploadButton}
-          />
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={`Upload reading to ${HCRI_BRAND_HOST}`}
+            style={[styles.iconButton, (uploading || !!result.sampleLabel) && { opacity: 0.5 }]}
+          >
+            {uploading ? <ActivityIndicator size="small" color={colors.accent} /> : <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={colors.accent} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><Path d={ICON_CLOUD} /></Svg>}
+            <Text style={[styles.iconButtonText, { color: colors.accent }]} numberOfLines={1}>{uploading ? 'Uploading…' : 'Upload reading'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={onShareCsv}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Share CSV"
+            style={[styles.iconButton, { marginLeft: 8 }]}
+          >
+            <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={colors.text} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><Path d={ICON_TRAY} /></Svg>
+            <Text style={[styles.iconButtonText, { color: colors.text }]} numberOfLines={1}>Share CSV</Text>
+          </TouchableOpacity>
           {/* Same Copy Link pill MainTab shows -- it's both the success
               confirmation and the copy-link action, replacing the old
               separate checkmark + bare-icon pair. See MainTab.tsx's own
@@ -292,7 +310,6 @@ export default function DataTab({
             </View>
           )}
         </View>
-        <PrimaryButton title="Share CSV" onPress={onShareCsv} variant="muted" />
       </View>
 
       {/* Moved here from the Spectrum sub-page (SpectrumTab.tsx) 2026-10-04

@@ -171,3 +171,10 @@ export async function deleteManyReadings(ids: string[]): Promise<void> {
   const existing = await loadHistory();
   await saveAll(existing.filter((r) => !idSet.has(r.id)));
 }
+
+/** Replaces (or adds) the flicker capture stored with a saved reading -- used when the person redoes the flicker for the reading they just took. */
+export async function setReadingFlicker(id: string, flicker: NonNullable<MeterResult['flicker']>): Promise<void> {
+  const existing = await loadHistory();
+  const next = existing.map((r) => (r.id === id ? { ...r, result: { ...r.result, flicker } } : r));
+  await saveAll(next);
+}

@@ -14,20 +14,20 @@
 // user picks whichever is easiest for them in the moment.
 
 import { Share, Alert } from 'react-native';
+import RNFS from 'react-native-fs';
+import RNShare from 'react-native-share';
 
 const DEVELOPER_EMAIL = 'marc.getter@gmail.com';
 
-// Android's share intent (ACTION_SEND) can carry far more than a mailto:
-// URL ever could -- the real ceiling is the OS's ~1MB binder transaction
-// limit for the whole Intent, not anything share-sheet-specific. Some
-// individual targets (SMS in particular) cap much lower and will just
-// truncate or reject a huge message themselves, but that's on them to
-// handle, same as it would be for a photo or any other oversized share --
-// it's not something to pre-truncate down to a few thousand chars for
-// every target. 100k safely leaves enormous headroom under the binder
-// limit while comfortably fitting even a very large multi-reading debug
-// log with several hex dumps in it.
+// Only the text FALLBACK is capped now (see shareDebugLog): the normal path shares a .txt FILE, which has
+// no size limit (the share Intent carries just a content:// URI). Sending the log as message text hit
+// Android's ~1MB Binder limit and froze the app for minutes at ~300k characters, so the fallback stays at the
+// 100k that always worked, and keeps the END of the log (the most recent lines matter most).
 const MAX_BODY_CHARS = 100000;
+
+// Files written by a previous share, deleted at the START of the next one (not right after sharing: the
+// receiving app may still be reading it) -- same approach as shareCsv.ts.
+const pendingCleanup = new Set<string>();
 
 export async function shareDebugLog(log: string[], context?: { deviceName?: string }): Promise<void> {
   const header = [
@@ -39,6 +39,29 @@ export async function shareDebugLog(log: string[], context?: { deviceName?: stri
   ]
     .filter(Boolean)
     .join('\n');
+
+  // Preferred: share the whole log as a .txt file.
+  for (const stale of pendingCleanup) RNFS.unlink(stale).catch(() => {});
+  pendingCleanup.clear();
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const filename = `hCRICompanion_debug_log_${stamp}.txt`;
+  const path = `${RNFS.CachesDirectoryPath}/${filename}`;
+  try {
+    await RNFS.writeFile(path, header + log.join('\n'), 'utf8');
+    await RNShare.open({
+      url: `file://${path}`,
+      type: 'text/plain',
+      filename, // iOS-only hint
+      subject: 'hCRI Companion debug report',
+      failOnCancel: false,
+    });
+    pendingCleanup.add(path);
+    return;
+  } catch (e: any) {
+    RNFS.unlink(path).catch(() => {});
+    if (e?.message && /cancel/i.test(e.message)) return; // user dismissed the share sheet
+    // Anything else: fall through to sharing the (capped) text instead.
+  }
 
   let body = header + log.join('\n');
   if (body.length > MAX_BODY_CHARS) {

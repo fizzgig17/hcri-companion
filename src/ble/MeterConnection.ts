@@ -157,6 +157,16 @@ function advertisesTorchBearer(device: Device | null | undefined): boolean {
 }
 
 /** Space-separated hex, e.g. "8c 05 a0 0f 00 00 01" -- for wire-level traffic logging only, doesn't affect any parsing/control-flow decision. */
+/** Message plus the BLE stack's own error codes (Android status etc.), which say WHY a link dropped or an op failed. */
+function describeBleError(e: any): string {
+  if (!e) return '';
+  const parts = [e.message ?? String(e)];
+  const codes = ['errorCode', 'attErrorCode', 'androidErrorCode', 'iosErrorCode', 'reason']
+    .filter((k) => e[k] !== undefined && e[k] !== null)
+    .map((k) => `${k}=${e[k]}`);
+  return codes.length ? `${parts[0]} (${codes.join(', ')})` : parts[0];
+}
+
 function toHex(bytes: number[] | Uint8Array): string {
   return Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, '0'))
@@ -230,6 +240,11 @@ export class MeterConnection {
   // Reassembly for the fixed-size flicker waveform reply (8C 3A + 800 bytes), which has no length header.
   private collectingWave = false;
   private waveBuffer: number[] = [];
+
+  // Diagnostics only (verbose log): when the last notification of any kind arrived, and whether to shorten
+  // the hex of big notifications (set during Flicker, where every cycle is ~800 bytes of waveform).
+  private lastNotifyAt = 0;
+  private compactNotifyLog = false;
 
   private messageListeners: ((msg: MeterMessage) => void)[] = [];
 
@@ -441,8 +456,9 @@ export class MeterConnection {
     // no-op on iOS, which negotiates MTU automatically.
     try {
       connected = await connected.requestMTU(247);
+      this.log(`MTU ${connected.mtu}`, true);
     } catch (e) {
-      this.log(`requestMTU failed (continuing anyway): ${e}`);
+      this.log(`requestMTU failed (continuing anyway): ${describeBleError(e)}`);
     }
 
     let isTb = isTorchBearerName(connected.name) || isTorchBearerName(connected.localName);
@@ -479,7 +495,7 @@ export class MeterConnection {
     // previous connection attempt on this same MeterConnection instance.
     this.disconnectSubscription?.remove();
     this.disconnectSubscription = connected.onDisconnected((error) => {
-      this.log(`Meter disconnected${error ? `: ${error.message}` : ''}`);
+      this.log(`Meter disconnected${error ? `: ${describeBleError(error)}` : ''} (last notification ${this.msSinceLastNotify()} ago)`);
       this.device = null;
       this.characteristic = null;
       this.notifySubscription = null;
@@ -557,7 +573,7 @@ export class MeterConnection {
 
     this.disconnectSubscription?.remove();
     this.disconnectSubscription = connected.onDisconnected((error) => {
-      this.log(`Torch Bearer disconnected${error ? `: ${error.message}` : ''}`);
+      this.log(`Torch Bearer disconnected${error ? `: ${describeBleError(error)}` : ''}`);
       this.device = null;
       this.characteristic = null;
       this.tbSubs.forEach((x) => x.remove());
@@ -694,7 +710,7 @@ export class MeterConnection {
 
     this.notifySubscription = this.characteristic.monitor((error, char) => {
       if (error) {
-        this.log(`Notification error: ${error.message}`);
+        this.log(`Notification error: ${describeBleError(error)}`);
         return;
       }
       if (!char?.value) return;
@@ -711,7 +727,11 @@ export class MeterConnection {
       // logs can never show: whether the meter is replying AT ALL, and
       // with what actual bytes, independent of whatever this app's own
       // parsing thinks those bytes mean.
-      this.log(`<- notify [${this.characteristicUuid.slice(4, 8)}] (${arr.length}B): ${toHex(arr)}`, true);
+      const now = Date.now();
+      const gap = this.lastNotifyAt ? now - this.lastNotifyAt : -1;
+      this.lastNotifyAt = now;
+      const shown = this.compactNotifyLog && arr.length > 32 ? `${toHex(arr.slice(0, 16))} ...` : toHex(arr);
+      this.log(`<- notify [${this.characteristicUuid.slice(4, 8)}] (${arr.length}B, +${gap}ms): ${shown}`, true);
       this.handleNotification(arr);
     });
 
@@ -822,7 +842,48 @@ export class MeterConnection {
     // at all, that's a very different problem (and points somewhere very
     // different) than getting 8C 05 replies that just never stabilize.
     this.log(`-> write (${bytes.length}B): ${toHex(bytes)}`, true);
-    await this.characteristic.writeWithoutResponse(base64);
+    const t0 = Date.now();
+    try {
+      await this.characteristic.writeWithoutResponse(base64);
+    } catch (e: any) {
+      // Not verbose: a failed write is exactly the "app side stuck" evidence a freeze report needs.
+      this.log(`Write FAILED after ${Date.now() - t0}ms (${toHex(bytes)}): ${describeBleError(e)}`);
+      throw e;
+    }
+    const took = Date.now() - t0;
+    if (took > 100) this.log(`   (write ${toHex(bytes)} took ${took}ms to hand to the Bluetooth stack)`, true);
+  }
+
+  /** Diagnostics: how long since ANY notification arrived, e.g. "12.3s" ("never" if none yet). */
+  msSinceLastNotify(): string {
+    return this.lastNotifyAt ? `${((Date.now() - this.lastNotifyAt) / 1000).toFixed(1)}s` : 'never';
+  }
+
+  /** Diagnostics: shorten the hex of big notifications in the verbose log (Flicker waveforms). */
+  setCompactNotifyLog(on: boolean): void {
+    this.compactNotifyLog = on;
+  }
+
+  /**
+   * Diagnostics, called after a request goes unanswered: asks the Bluetooth stack whether it still thinks the
+   * link is up and what the signal is. Bounded to 2s and never throws. Answers "meter silent but link up" vs "stack stuck".
+   */
+  async diagnoseLink(): Promise<string> {
+    const dev = this.device;
+    if (!dev) return 'no device';
+    const withTimeout = <T,>(p: Promise<T>): Promise<T | 'timeout'> =>
+      Promise.race([p, new Promise<'timeout'>((r) => setTimeout(() => r('timeout'), 2000))]);
+    try {
+      const up = await withTimeout(dev.isConnected());
+      let rssi: string = 'n/a';
+      if (up === true) {
+        const r = await withTimeout(dev.readRSSI());
+        rssi = r === 'timeout' ? 'timeout' : String((r as Device).rssi);
+      }
+      return `stack says connected=${up}, rssi=${rssi}, last notification ${this.msSinceLastNotify()} ago`;
+    } catch (e: any) {
+      return `link check failed: ${describeBleError(e)}`;
+    }
   }
 
   /**

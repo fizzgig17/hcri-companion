@@ -34,7 +34,7 @@ import {
 } from '../storage/readingHistory';
 import { loadHcriCredentials } from '../storage/secureStorage';
 import { buildCsv } from '../hcri/buildCsv';
-import { uploadToHcri } from '../hcri/uploadToHcri';
+import { uploadReadingToHcri } from '../hcri/uploadFlickerToHcri';
 import { getReportLink } from '../hcri/getReportLink';
 import { shareSingleReadingCsv, shareAllReadingsCsv } from '../utils/shareCsv';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
@@ -136,7 +136,7 @@ export default function HistoryScreen({ navigation }: any) {
       setHistoryUploadingId(id);
       try {
         const csv = buildCsv(entry.result);
-        const res = await uploadToHcri(csv, label, creds.token, appendLog);
+        const res = await uploadReadingToHcri(entry.result, csv, label, creds.token, appendLog);
         appendLog(res.message);
         if (res.success && typeof res.reportId === 'number' && typeof res.isPublic === 'boolean') {
           await saveReportLink(id, res.reportId, res.isPublic);
@@ -191,7 +191,7 @@ export default function HistoryScreen({ navigation }: any) {
           setHistoryUploadingId(id);
           try {
             const csv = buildCsv(entry.result);
-            const res = await uploadToHcri(csv, entry.label, creds.token, appendLog);
+            const res = await uploadReadingToHcri(entry.result, csv, entry.label, creds.token, appendLog);
             appendLog(res.message);
             if (res.success) {
               okCount += 1;
