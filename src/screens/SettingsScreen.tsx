@@ -80,6 +80,7 @@ export default function SettingsScreen({ navigation, route }: any) {
   // bottom of this screen, a long scroll past every setting to reach.
   const update = useUpdate();
   const [settingsTab, setSettingsTab] = useState<'settings' | 'update' | 'about'>('settings');
+  const [draggingStat, setDraggingStat] = useState(false);
   // Android Back: from Update/About return to the main Settings page first.
   useFocusEffect(
     useCallback(() => {
@@ -501,16 +502,16 @@ export default function SettingsScreen({ navigation, route }: any) {
         />
       </View>
       {settingsTab === 'update' ? (
-        <ScrollView style={styles.scrollArea} contentContainerStyle={styles.contentContainer}>
+        <ScrollView style={styles.scrollArea} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat}>
           <VersionStamp />
           <UpdateTab />
         </ScrollView>
       ) : settingsTab === 'about' ? (
-        <ScrollView style={styles.scrollArea} contentContainerStyle={styles.contentContainer}>
+        <ScrollView style={styles.scrollArea} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat}>
           <AboutTab />
         </ScrollView>
       ) : (
-    <ScrollView style={styles.scrollArea} contentContainerStyle={styles.contentContainer}>
+    <ScrollView style={styles.scrollArea} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat}>
       {/* Which build you're looking at, at a glance -- came up more than
           once this session when testing against a build that was already
           a few fixes behind develop. See buildInfo.ts for how this stays
@@ -766,6 +767,7 @@ export default function SettingsScreen({ navigation, route }: any) {
           labelFor={(id) => STAT_METRIC_BY_ID[id]?.label ?? id}
           onReorder={handleReorder}
           onToggle={handleToggleStat}
+          onDragActiveChange={setDraggingStat}
         />
       </View>
     </ScrollView>

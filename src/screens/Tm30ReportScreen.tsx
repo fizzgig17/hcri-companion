@@ -13,7 +13,7 @@ import RNShare from 'react-native-share';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLog } from '../contexts/LogContext';
-import { buildTm30Html, Tm30Input } from '../utils/tm30Report';
+import { buildTm30Html, buildTm30PdfHtml, Tm30Input } from '../utils/tm30Report';
 import { withBackgroundDisconnectSuppressed } from '../ble/backgroundDisconnectGuard';
 
 export default function Tm30ReportScreen({ route }: any) {
@@ -38,7 +38,7 @@ export default function Tm30ReportScreen({ route }: any) {
     setSharing(true);
     try {
       const name = `TM-30_${(input.title || 'reading').replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 60)}`;
-      const pdf = await generatePDF({ html: built.html, fileName: name, width: 595, height: 842 });
+      const pdf = await generatePDF({ html: buildTm30PdfHtml(input), fileName: name, width: 595, height: 842 });
       const path = pdf.filePath;
       if (!path) throw new Error('No PDF file was produced.');
       appendLog(`TM-30 PDF created: ${path}`);
