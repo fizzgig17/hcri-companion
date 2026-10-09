@@ -50,6 +50,9 @@ const Tab = createBottomTabNavigator();
 function Tabs() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  // Some phones (e.g. Galaxy Z Fold) report a tiny/zero bottom inset yet have
+  // rounded corners or a gesture pill that clips the labels, so keep a floor.
+  const bottomPad = Math.max(insets.bottom, 10);
 
   return (
     <Tab.Navigator
@@ -57,9 +60,9 @@ function Tabs() {
         headerStyle: { backgroundColor: colors.card },
         headerTintColor: colors.text,
         // Compact bar: 40dp of content (icon + label) plus the gesture/nav inset below it.
-        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.cardBorder, height: 41 + insets.bottom, paddingTop: 2, paddingBottom: insets.bottom + 3 },
+        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.cardBorder, height: 41 + bottomPad, paddingTop: 2, paddingBottom: bottomPad + 3 },
         tabBarItemStyle: { paddingVertical: 0 },
-        tabBarLabelStyle: { fontSize: 10, marginTop: -2, marginBottom: 2 },
+        tabBarLabelStyle: { fontSize: 10, marginTop: -2, marginBottom: 2 }, tabBarAllowFontScaling: false,
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.muted,
       }}
