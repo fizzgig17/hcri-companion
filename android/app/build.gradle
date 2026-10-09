@@ -107,8 +107,8 @@ android {
         // Also update src/buildInfo.ts (APP_VERSION/BUILD_DATE) in the same
         // commit -- that's the JS-visible copy of this, shown at the top of
         // Settings. Gradle values here aren't reachable from JS directly.
-        versionCode 21
-        versionName "1.18"
+        versionCode 22
+        versionName "1.19"
     }
     signingConfigs {
         debug {
