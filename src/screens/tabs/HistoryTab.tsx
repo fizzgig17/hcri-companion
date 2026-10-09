@@ -298,7 +298,7 @@ function HistoryRow({
               exists to compute it from), which is why only CCT/Ra show up
               in this summary. */}
           <Text style={styles.rowSummaryInline}>
-            {analysis.cct.toFixed(0)}K · Ra {analysis.ra.toFixed(1)}
+            {analysis.cct.toFixed(0)}K · Ra {Math.round(analysis.ra)}
           </Text>
           {!!reading.result.flicker && (
             <View style={{ marginLeft: 6 }} accessibilityLabel="Includes a flicker reading">
