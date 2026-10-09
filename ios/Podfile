@@ -30,5 +30,17 @@ target 'hCRICompanion' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+
+    # Some pods still declare an iOS target below 15.0 (e.g. 11.0, 12.4, 13.0), which newer
+    # Xcode versions reject as an error. Raise any such pod to the app's own minimum.
+    min_target = 15.0
+    installer.pods_project.targets.each do |t|
+      t.build_configurations.each do |c|
+        current = c.build_settings['IPHONEOS_DEPLOYMENT_TARGET']
+        if current.nil? || current.to_f < min_target
+          c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = min_target.to_s
+        end
+      end
+    end
   end
 end
