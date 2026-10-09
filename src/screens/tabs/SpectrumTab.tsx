@@ -311,7 +311,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
                 label: 'Flicker',
                 info: {
                   title: 'Flicker',
-                  message: `Tap Flicker below to start measuring, and Stop to freeze the reading. Shows how fast (Hz) and how deeply (%) this light pulses, the flicker index, and the captured waveform. The waveform is scaled to its highest sample, so a steady light is a flat line near the top and a flickering one rises and falls. The risk tip uses the same bands as the vendor app.`,
+                  message: `Shows how fast (Hz) and how deeply (%) this light pulses, the flicker index, and the captured waveform. A steady light is a flat line near the top; a flickering one rises and falls. The risk tip uses the same bands as the vendor app.\n\nNew sample starts an independent flicker sample. It clears the current reading from Main (a reading that was saved stays in History) and can be shared or uploaded to hCRI.io on its own.\n\nAdd to reading / Redo for reading takes a sample that belongs to the current reading and is saved with it, then uploaded with it. It is available until that reading is uploaded.\n\nStop ends whichever sample is running. The bottom Flicker button only brings you to this page. Flicker is hidden while Live is running.`,
                 },
                 content: (
                   <View style={[styles.chromCard, fill && { height: cardH, marginBottom: 0 }]}>

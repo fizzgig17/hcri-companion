@@ -96,6 +96,26 @@ To learn more about React Native, take a look at the following resources:
 - [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
 - [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
 
+# Flicker
+
+On meters that support it (HPCS-330P class), the Flicker tab (the fourth chart page on Main) measures flicker frequency, percent flicker, flicker index, cycle time and the waveform. The bottom-bar **Flicker** button only takes you to that tab; it is hidden while a Live reading runs.
+
+There are two kinds of flicker sample, started from the buttons under the chart:
+
+- **New sample** starts an independent sample. It clears the current reading from Main (a reading that was saved stays in History). When stopped it can be **Shared** or **Uploaded** on its own to hCRI.io (title and notes popup; both are remembered between uploads). It is not added to History.
+- **Add to reading / Redo for reading** takes a sample that belongs to the current reading. It is saved with that reading (and in History) and uploaded together with it. It is only offered until the reading has been uploaded, since an uploaded report can't change. Flicker belonging to a reading has no Share/Upload of its own.
+
+**Stop** ends whichever sample is running. Settings -> "Capture flicker with each reading" (off by default) takes a one-shot flicker snapshot automatically after each reading. History marks readings that have flicker with a small waveform icon.
+
+## Uploading flicker to hCRI.io
+
+Flicker uses the hCRI.io API with the same personal token as report uploads:
+
+- With a reading: the report is uploaded first, then a flicker reading is posted to `POST /index.php/api/v1/flicker` with the returned `reportId`, so it appears in the report's flicker section.
+- On its own: the same endpoint without `reportId` (shows under Explore -> Flicker on hCRI.io).
+
+The flicker post is best-effort and never changes the outcome of the report upload.
+
 # License
 
 hCRI Companion is free software, © 2026 fizzgig, licensed under the GNU General Public License v3 or later, with an additional permission (GPL section 7) allowing distribution through app stores such as Apple's App Store. See [LICENSE](LICENSE) and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

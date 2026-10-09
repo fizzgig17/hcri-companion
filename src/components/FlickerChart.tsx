@@ -212,9 +212,10 @@ export default function FlickerChart({ reading, running, history, settings, uplo
   const showHelp = () =>
     Alert.alert(
       'Flicker readings',
-      'Live flicker: tap Start to measure continuously. The chart updates about every second. Pause stops the run and keeps the last reading on screen, which you can then Share or Upload to hCRI.io.\n\n' +
-        'Flicker with a reading: turn on "Capture flicker with each reading" in Settings and one flicker snapshot is taken right after each spectrum reading. It is saved with that reading and goes up to hCRI.io with it, so Share and Upload are not shown for it.\n\n' +
-        'The gear sets the meter’s flicker range and sample rate.'
+      'New sample: an independent flicker sample, measured continuously. It clears the current reading from Main (a saved reading stays in History). When you Stop, you can Share it or Upload it to hCRI.io on its own, with a title and notes.\n\n' +
+        'Add to reading / Redo for reading: a sample that belongs to the current reading. It is saved with that reading and uploaded with it, so it has no Share or Upload of its own. Available until the reading is uploaded.\n\n' +
+        'A flicker snapshot is also taken automatically with each reading if "Capture flicker with each reading" is on in Settings.\n\n' +
+        'Stop ends the running sample. The gear sets the meter’s flicker range and sample rate.'
     );
   const headRight = (
     <>

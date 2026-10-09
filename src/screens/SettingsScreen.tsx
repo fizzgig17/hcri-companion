@@ -740,7 +740,7 @@ export default function SettingsScreen({ navigation, route }: any) {
           <Text style={styles.toggleHint}>
             After each reading, also take a one-shot flicker capture (frequency, percent flicker, flicker index
             and waveform). Adds a few seconds per reading and only works on meters that support flicker. Saved
-            with the reading, shown on its Flicker page, and included in shared CSVs. Not uploaded to hCRI.io yet.
+            with the reading, shown on its Flicker page, included in shared CSVs, and uploaded with the reading to hCRI.io (attached to its report). Even when off, you can add a flicker sample to a reading from the Flicker tab before uploading it.
           </Text>
         </View>
         <Switch value={flickerWithReading} onValueChange={toggleFlickerWithReading} trackColor={{ true: colors.accent }} />
