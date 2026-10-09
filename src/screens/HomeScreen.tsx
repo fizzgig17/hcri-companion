@@ -19,6 +19,7 @@ import type { FlickerSettingsApi } from '../components/FlickerSettingsModal';
 import type { FlickerUploadApi } from '../components/FlickerChart';
 import { initializeMeter, takeMeasurement, EMPTY_READING_ERROR } from '../ble/takeMeasurement';
 import { MeterResult } from '../ble/parseResult';
+import { tm30InputFromReading } from '../utils/tm30Report';
 import { analyzeSpectrum } from '../utils/spectralAnalysis';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { buildCsv, defaultLabel } from '../hcri/buildCsv';
@@ -1434,6 +1435,12 @@ export default function HomeScreen({ navigation }: any) {
           onToggleFlicker={() => setFlickerFocus((n) => n + 1)}
           canSaveLive={!!liveUnsaved}
           savingLive={savingLive}
+          onShowTm30={() => {
+            if (!result || !analysis) return;
+            navigation.navigate('Tm30Report', {
+              input: tm30InputFromReading(result, analysis, result.sampleLabel || uploadTitle.trim() || 'Current reading', Date.now()),
+            });
+          }}
           onSaveLive={saveLive}
         />
       )}

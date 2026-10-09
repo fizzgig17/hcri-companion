@@ -38,6 +38,8 @@ import { uploadReadingToHcri } from '../hcri/uploadFlickerToHcri';
 import { getReportLink } from '../hcri/getReportLink';
 import { shareSingleReadingCsv, shareAllReadingsCsv } from '../utils/shareCsv';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
+import { tm30InputFromReading } from '../utils/tm30Report';
+import { analyzeSpectrum } from '../utils/spectralAnalysis';
 
 export default function HistoryScreen({ navigation }: any) {
   const { colors } = useTheme();
@@ -341,6 +343,14 @@ export default function HistoryScreen({ navigation }: any) {
           bulkUploading={historyBulkUploading}
           onCopyLink={copyReportLinkFromHistory}
           onOpenReport={openReportFromHistory}
+          onOpenTm30={(reading) => {
+            try {
+              const analysis = reading.analysis ?? analyzeSpectrum(reading.result.spectrum);
+              navigation.navigate('Tm30Report', { input: tm30InputFromReading(reading.result, analysis, reading.label, reading.savedAt) });
+            } catch (e: any) {
+              Alert.alert('Could not open the TM-30 report', String(e?.message ?? e));
+            }
+          }}
           copyingLinkId={copyingLinkId}
         />
       </ScrollView>

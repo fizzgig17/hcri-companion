@@ -17,7 +17,7 @@
 // is simpler and more reliable than measuring real on-screen layouts, and
 // sidesteps needing a virtualized list to support reordering at all.
 
-import React, { useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { View, Text, TouchableOpacity, PanResponder, PanResponderInstance, Animated, StyleSheet } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -51,6 +51,11 @@ export default function DraggableStatList({ order, enabled, labelFor, onReorder,
   // a finger is actually moving.
   const liveOrderRef = useRef<string[]>(order);
   const draggingIdRef = useRef<string | null>(null);
+  // Where the dragged row's top was when the finger went down. The gesture's dy is measured from
+  // that moment, so the row's position must be grantTop + dy -- NOT recomputed from its current
+  // index, which changes mid-drag as rows swap (that double-counted the movement and made the row
+  // jump ahead of the finger).
+  const grantTopRef = useRef(0);
 
   // Pick up a reordered/changed `order` prop from the parent (e.g. once
   // loadStatDisplayPrefs() resolves on mount) -- but never while a drag
@@ -65,6 +70,19 @@ export default function DraggableStatList({ order, enabled, labelFor, onReorder,
       topsRef.current.set(id, new Animated.Value(order.indexOf(id) * ROW_HEIGHT));
     }
   }
+
+  // When the parent changes `order` while nothing is being dragged (Reset to Default, or the saved
+  // order loading in), move every row to its new slot -- the Animated.Values above are created
+  // once per id, so without this the rows stayed where they were and Reset looked like it did nothing.
+  const orderKey = order.join('|');
+  useEffect(() => {
+    if (draggingIdRef.current !== null) return;
+    order.forEach((id, index) => {
+      const top = topsRef.current.get(id);
+      if (top) Animated.timing(top, { toValue: index * ROW_HEIGHT, duration: 150, useNativeDriver: false }).start();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderKey]);
 
   function animateToLivePositions(exceptId: string | null) {
     liveOrderRef.current.forEach((id, index) => {
@@ -88,14 +106,18 @@ export default function DraggableStatList({ order, enabled, labelFor, onReorder,
   function makePanResponder(id: string): PanResponderInstance {
     return PanResponder.create({
       onStartShouldSetPanResponder: () => true,
+      // Once a row is grabbed, keep the gesture: otherwise the Settings ScrollView takes it over
+      // mid-drag and the drag ends early.
+      onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
         draggingIdRef.current = id;
+        grantTopRef.current = liveOrderRef.current.indexOf(id) * ROW_HEIGHT;
       },
       onPanResponderMove: (_evt, gesture) => {
         const startIndex = liveOrderRef.current.indexOf(id);
         const top = topsRef.current.get(id);
         if (!top || startIndex === -1) return;
-        const rawTop = startIndex * ROW_HEIGHT + gesture.dy;
+        const rawTop = Math.max(0, Math.min((liveOrderRef.current.length - 1) * ROW_HEIGHT, grantTopRef.current + gesture.dy));
         top.setValue(rawTop);
 
         const hoverIndex = Math.max(0, Math.min(liveOrderRef.current.length - 1, Math.round(rawTop / ROW_HEIGHT)));

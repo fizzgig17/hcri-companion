@@ -70,6 +70,8 @@ interface Props {
   copyingLinkId: string | null;
   /** Opens the uploaded report on hCRI.io in the browser; `tm30` opens it with the TM-30 report showing. Same guard as onCopyLink: only called for a row that has a reportId. */
   onOpenReport: (reading: SavedReading, tm30: boolean) => void;
+  /** Opens the in-app TM-30 report, generated on the phone from the stored spectrum (works for readings that were never uploaded). */
+  onOpenTm30: (reading: SavedReading) => void;
 }
 
 function formatSavedAt(ms: number): string {
@@ -110,6 +112,7 @@ function HistoryRow({
   onCopyLink,
   copyingLink,
   onOpenReport,
+  onOpenTm30,
 }: {
   reading: SavedReading;
   uploading: boolean;
@@ -124,6 +127,8 @@ function HistoryRow({
   onCopyLink: (reading: SavedReading) => void;
   copyingLink: boolean;
   onOpenReport: (reading: SavedReading, tm30: boolean) => void;
+  /** Opens the in-app TM-30 report, generated on the phone from the stored spectrum (works for readings that were never uploaded). */
+  onOpenTm30: (reading: SavedReading) => void;
 }) {
   const { colors } = useTheme();
   // Title editing works like the Main tab's: tap the title, edit it in a
@@ -369,37 +374,37 @@ function HistoryRow({
         </View>
       </Modal>
 
-      {/* Only once this reading actually has a stored report to point at
-          (readingHistory.ts's reportId/reportIsPublic, set by whichever
-          upload -- Main, Data, or right here -- most recently succeeded
-          for it) -- never shown for a reading that's never been uploaded. */}
-      {!selectMode && typeof reading.reportId === 'number' && (
+      {/* Copy / Report only exist once this reading has a stored report on
+          hCRI.io (readingHistory.ts's reportId/reportIsPublic, set by whichever
+          upload most recently succeeded for it). TM-30 is built on the phone
+          from the stored spectrum, so it's there for every reading. */}
+      {!selectMode && (
         <View style={styles.linkRow}>
-          <TouchableOpacity
-            onPress={() => onCopyLink(reading)}
-            disabled={copyingLink}
-            style={[styles.copyLinkPill, styles.linkPill]}
-          >
-            {copyingLink ? (
-              <ActivityIndicator size="small" color={colors.accent} style={styles.copyLinkSpinner} />
-            ) : (
-              <Text style={styles.copyLinkIcon}>🔗</Text>
-            )}
-            <Text style={styles.copyLinkLabel}>{copyingLink ? 'Working…' : 'Copy'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => onOpenReport(reading, false)}
-            disabled={copyingLink}
-            style={[styles.copyLinkPill, styles.linkPill]}
-          >
-            <Text style={styles.copyLinkIcon}>↗</Text>
-            <Text style={styles.copyLinkLabel}>Report</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => onOpenReport(reading, true)}
-            disabled={copyingLink}
-            style={[styles.copyLinkPill, styles.linkPill]}
-          >
+          {typeof reading.reportId === 'number' && (
+            <>
+              <TouchableOpacity
+                onPress={() => onCopyLink(reading)}
+                disabled={copyingLink}
+                style={[styles.copyLinkPill, styles.linkPill]}
+              >
+                {copyingLink ? (
+                  <ActivityIndicator size="small" color={colors.accent} style={styles.copyLinkSpinner} />
+                ) : (
+                  <Text style={styles.copyLinkIcon}>🔗</Text>
+                )}
+                <Text style={styles.copyLinkLabel}>{copyingLink ? 'Working…' : 'Copy'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => onOpenReport(reading, false)}
+                disabled={copyingLink}
+                style={[styles.copyLinkPill, styles.linkPill]}
+              >
+                <Text style={styles.copyLinkIcon}>↗</Text>
+                <Text style={styles.copyLinkLabel}>Report</Text>
+              </TouchableOpacity>
+            </>
+          )}
+          <TouchableOpacity onPress={() => onOpenTm30(reading)} style={[styles.copyLinkPill, styles.linkPill]}>
             <Text style={styles.copyLinkIcon}>◐</Text>
             <Text style={styles.copyLinkLabel}>TM-30</Text>
           </TouchableOpacity>
@@ -456,6 +461,7 @@ export default function HistoryTab({
   onCopyLink,
   copyingLinkId,
   onOpenReport,
+  onOpenTm30,
 }: Props) {
   const { colors } = useTheme();
   const [selectMode, setSelectMode] = useState(false);
@@ -723,6 +729,7 @@ export default function HistoryTab({
           onCopyLink={onCopyLink}
           copyingLink={copyingLinkId === r.id}
           onOpenReport={onOpenReport}
+          onOpenTm30={onOpenTm30}
         />
       ))}
 
@@ -749,6 +756,7 @@ export default function HistoryTab({
                 onCopyLink={onCopyLink}
                 copyingLink={copyingLinkId === r.id}
                 onOpenReport={onOpenReport}
+          onOpenTm30={onOpenTm30}
               />
             ))}
           </View>
