@@ -8,3 +8,9 @@
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
 # Add any project specific keep options here:
+
+# react-native-html-to-pdf (TM-30 PDF) bundles pdfbox-android, which optionally references
+# a JPEG2000 decoder we don't ship. Without these R8 fails the release build.
+-dontwarn com.gemalto.jp2.**
+-dontwarn com.tom_roush.pdfbox.**
+-keep class com.tom_roush.pdfbox.** { *; }
