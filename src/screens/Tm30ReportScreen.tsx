@@ -41,7 +41,7 @@ export default function Tm30ReportScreen({ route }: any) {
       const pdf = await generatePDF({ html: buildTm30PdfHtml(input), fileName: name, width: 595, height: 842 });
       const path = pdf.filePath;
       if (!path) throw new Error('No PDF file was produced.');
-      appendLog(`TM-30 PDF created: ${path}`);
+      appendLog(`TM-30 PDF created: ${path} (${pdf.numberOfPages ?? '?'} page(s))`);
       await withBackgroundDisconnectSuppressed(async () => {
         await RNShare.open({ url: path.startsWith('file://') ? path : `file://${path}`, type: 'application/pdf', filename: `${name}.pdf` });
       });

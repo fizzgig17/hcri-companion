@@ -405,8 +405,9 @@ export function buildTm30PdfHtml(input: Tm30Input): string {
 <style>
   @page{margin:0}
   *{box-sizing:border-box}
-  html{font-size:calc(100vw / 59.5)}
-  html,body{margin:0;padding:0;background:#fff;color:${INK};font-family:Helvetica,Arial,sans-serif;overflow:hidden}
+  /* max(): the PDF renderer's off-screen web view can report a 0-wide viewport, which would collapse every rem to 0 and print a blank page. */
+  html{font-size:10px;font-size:max(4px, calc(100vw / 59.5))}
+  html,body{margin:0;padding:0;background:#fff;color:${INK};font-family:Helvetica,Arial,sans-serif}
   .pg{position:relative;width:59.5rem;height:84rem;overflow:hidden}
   .bar{background:#0c1424;height:4.5rem;padding:0 2.3rem;display:flex;align-items:center;justify-content:space-between}
   .bar .a{color:#c8e6ff;font-size:1.5rem;font-weight:700}
