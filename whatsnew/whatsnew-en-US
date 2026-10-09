@@ -1,1 +1,1 @@
-Layout fix for the Galaxy Z Fold 8 Ultra: the bottom tab labels and action-bar labels are no longer cut off at the bottom of the screen.
+Update checks are more reliable: the app now re-checks Google Play whenever you return to it, and Settings > Update shows what Play reported (version codes).
