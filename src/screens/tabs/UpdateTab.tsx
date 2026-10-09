@@ -43,7 +43,7 @@ function DevBuildCard() {
 
 export default function UpdateTab() {
   const { colors } = useTheme();
-  const { status, error, check, openStore } = useUpdate();
+  const { status, error, detail, check, openStore } = useUpdate();
   const styles = StyleSheet.create({
     card: { backgroundColor: colors.card, borderRadius: 12, borderWidth: 1, borderColor: colors.cardBorder, padding: 16 },
     title: { color: colors.text, fontSize: 16, fontWeight: '700' },
@@ -76,6 +76,7 @@ export default function UpdateTab() {
         {status === 'checking' && <ActivityIndicator size="small" color={colors.muted} style={{ marginRight: 8 }} />}
         <Text style={[styles.status, { marginTop: 0 }]}>{message}</Text>
       </View>
+      {!!detail && status !== 'error' && <Text style={styles.note}>{detail}</Text>}
       {status === 'error' && (
         <Text style={styles.note}>
           {notFromPlay

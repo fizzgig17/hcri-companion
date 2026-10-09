@@ -12,6 +12,10 @@ export interface UpdateInfo {
   available: boolean;
   /** Play's versionCode for the newer build (0 if none). */
   versionCode: number;
+  /** Play's raw answer: 0 unknown, 1 not available, 2 available, 3 update in progress. */
+  availability: number;
+  /** versionCode of the installed app, as the OS reports it. */
+  installedVersionCode: number;
 }
 
 const native: {
