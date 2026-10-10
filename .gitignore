@@ -73,3 +73,7 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Per-machine settings (see ios/Config/Local.xcconfig.example, src/hcri/apiConfig.local.ts.example)
+ios/Config/Local.xcconfig
+src/hcri/apiConfig.local.ts

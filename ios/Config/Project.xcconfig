@@ -1,0 +1,4 @@
+// Project-wide build settings (checked in). Settings that belong to one machine -- your Apple team -- go in
+// Local.xcconfig next to this file, which git ignores (copy Local.xcconfig.example to start). The line below
+// is optional: with no Local.xcconfig the build simply has no team set, as before.
+#include? "Local.xcconfig"
