@@ -1,1 +1,1 @@
-New: the app suggests the LED (brand, model, CCT) from the spectrum and the reading title, and you can add or edit LED details yourself on Main, History and Data. The in-app TM-30 report PDF now matches the hCRI.io report page.
+Fixed: the LED details window is no longer covered by the keyboard on Android. Also new in 1.21: LED suggestions and details on Main, History and Data, and a TM-30 PDF that matches hCRI.io.
