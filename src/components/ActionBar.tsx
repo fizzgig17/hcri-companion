@@ -75,6 +75,8 @@ interface Props {
   /** Live (continuous spectrum) and Flicker: each button only shows when the connected meter supports it. */
   liveSupported: boolean;
   flickerSupported: boolean;
+  /** A test reading whose report has flicker: the Flicker button shows (view only) even with no meter connected. */
+  sampleHasFlicker?: boolean;
   /** Which long-running mode is active right now (the other button is disabled while one runs). */
   activeMode: 'idle' | 'live' | 'flicker';
   onToggleLive: () => void;
@@ -224,7 +226,7 @@ export default function ActionBar(p: Props) {
               accent={p.activeMode === 'live'}
             />
           )}
-          {connected && p.flickerSupported && (
+          {((connected && p.flickerSupported) || (p.isSample && p.sampleHasFlicker)) && (
             <SideButton
               icon="flicker"
               label="Flicker"

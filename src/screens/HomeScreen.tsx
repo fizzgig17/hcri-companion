@@ -27,7 +27,7 @@ import { uploadReadingToHcri, uploadFlickerToHcri } from '../hcri/uploadFlickerT
 import { getReportLink } from '../hcri/getReportLink';
 import { fetchSampleReading } from '../hcri/fetchSampleReading';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
-import { loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference } from '../storage/preferences';
+import { loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference, loadTestReportIdPreference } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
 import { addReading, loadHistory, recordUpload, setReadingFlicker, updateReadingLed } from '../storage/readingHistory';
 import { fetchLedSuggestion, LedDetails, LedSuggestion } from '../hcri/ledApi';
@@ -706,12 +706,15 @@ export default function HomeScreen({ navigation }: any) {
     if (loadingTestReading) return;
     setLoadingTestReading(true);
     try {
-      const sample = await fetchSampleReading();
+      const wanted = parseInt(await loadTestReportIdPreference().catch(() => ''), 10);
+      const sample = await fetchSampleReading(IS_DEV_BUILD && wanted > 0 ? wanted : undefined);
       setResult(sample);
+      setFlickerReading(sample.flicker ?? null);
+      setFlickerFromReading(!!sample.flicker);
       setUploadSucceeded(false);
       setLastUploadedReport(null);
       setCurrentReadingId(null);
-      appendLog(`Loaded test reading from hCRI.io: ${sample.sampleLabel}`);
+      appendLog(`Loaded test reading from hCRI.io: ${sample.sampleLabel}${sample.flicker ? ' (with flicker)' : ''}`);
     } catch (e: any) {
       appendLog(`Test reading failed: ${e.message}`);
       Alert.alert('Could not load a test reading', e.message ?? 'Check your connection and try again.');
@@ -1492,7 +1495,10 @@ export default function HomeScreen({ navigation }: any) {
             flicker={
               (status === 'connected' || status === 'uploading' || status === 'measuring') && deviceSupportsFlicker(deviceName) && mode !== 'live'
                 ? { reading: flickerReading, running: mode === 'flicker', focusNonce: flickerFocus, history: flickerHistory, settings: flickerSettingsApi, upload: flickerUploadApi, target: mode === 'flicker' ? flickerTarget : null, onStart: startFlickerSample, onStop: stopFlicker, canSampleReading, fromReading: flickerFromReading, redoLabel: result?.flicker ? 'Redo for reading' : 'Add to reading', readingNote: result ? (currentReadingId ? 'saved' : 'unsaved') : undefined }
-                : undefined
+                : result?.sampleLabel && result.flicker
+                  // A test reading whose report has flicker: show its first capture, view only (no meter needed).
+                  ? { reading: result.flicker, running: false, focusNonce: flickerFocus, history: [], fromReading: true }
+                  : undefined
             }
           />
       </View>
@@ -1543,6 +1549,7 @@ export default function HomeScreen({ navigation }: any) {
           onCancelConnect={cancelConnect}
           liveSupported={deviceSupportsLive(deviceName)}
           flickerSupported={deviceSupportsFlicker(deviceName) && mode !== 'live'}
+          sampleHasFlicker={!!(result?.sampleLabel && result.flicker)}
           activeMode={mode}
           onToggleLive={toggleLive}
           onToggleFlicker={() => setFlickerFocus((n) => n + 1)}
