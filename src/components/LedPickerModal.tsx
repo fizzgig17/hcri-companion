@@ -4,7 +4,7 @@
 // hCRI.io lists underneath; anything typed that isn't in the lists is sent to hCRI.io for review.
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, KeyboardAvoidingView, Platform, Keyboard, useWindowDimensions } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { LedLists } from '../hcri/ledLists';
 import { LedDetails } from '../hcri/ledApi';
@@ -57,6 +57,16 @@ export default function LedPickerModal({ visible, lists, initial, onSave, onCanc
   const [brand, setBrand] = useState('');
   const [model, setModel] = useState('');
   const [cct, setCct] = useState('');
+  // Android doesn't resize a Modal for the keyboard, so track its height ourselves and shrink the sheet to what is left.
+  const [kb, setKb] = useState(0);
+  const { height: winH } = useWindowDimensions();
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const show = Keyboard.addListener('keyboardDidShow', (e) => setKb(e.endCoordinates?.height ?? 0));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKb(0));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+  useEffect(() => { if (!visible) setKb(0); }, [visible]);
 
   useEffect(() => {
     if (visible) {
@@ -75,8 +85,8 @@ export default function LedPickerModal({ visible, lists, initial, onSave, onCanc
   const can = !!(brand.trim() || model.trim() || cct.trim());
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.backdrop}>
-        <View style={[styles.sheet, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.backdrop, kb > 0 && { paddingBottom: 20 + kb }]}>
+        <View style={[styles.sheet, { backgroundColor: colors.card, borderColor: colors.cardBorder }, kb > 0 && { maxHeight: Math.max(220, winH - kb - 60) }]}>
           <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600', marginBottom: 12 }}>LED details</Text>
           <ScrollView keyboardShouldPersistTaps="handled">
             <Field label="LED brand" value={brand} onChange={setBrand} options={lists.brands} placeholder="e.g. Nichia" />
