@@ -42,12 +42,16 @@ export default function Tm30ReportScreen({ route }: any) {
       const path = pdf.filePath;
       if (!path) throw new Error('No PDF file was produced.');
       appendLog(`TM-30 PDF created: ${path} (${pdf.numberOfPages ?? '?'} page(s))`);
+      appendLog('TM-30 PDF: opening the share sheet…');
       await withBackgroundDisconnectSuppressed(async () => {
         await RNShare.open({ url: path.startsWith('file://') ? path : `file://${path}`, type: 'application/pdf', filename: `${name}.pdf` });
       });
+      appendLog('TM-30 PDF: share sheet closed.');
     } catch (e: any) {
       // The share sheet being dismissed rejects with a message containing "User did not share".
-      if (!String(e?.message ?? e).includes('did not share')) {
+      if (String(e?.message ?? e).includes('did not share')) {
+        appendLog('TM-30 PDF: share cancelled.');
+      } else {
         appendLog(`TM-30 PDF failed: ${e?.message ?? e}`);
         Alert.alert('Could not create the PDF', String(e?.message ?? e));
       }
