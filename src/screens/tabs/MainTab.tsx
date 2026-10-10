@@ -288,6 +288,9 @@ export default function MainTab({
       position: 'relative',
       marginTop: 'auto',
       height: 56,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingRight: 6,
     },
     // In normal flow (not absolutely positioned) so a default title that wraps
     // onto 2+ lines makes the box grow; the empty TextInput is laid over it.
@@ -297,9 +300,8 @@ export default function MainTab({
       color: colors.muted,
       fontSize: 13,
     },
-    ledPill: {
-      position: 'absolute', right: 6, top: 0, bottom: 0, justifyContent: 'center',
-    },
+    // In the same row as the title (not floated over it), so the title wraps before the pill instead of running under it.
+    ledPill: { flexShrink: 0, marginLeft: 6, justifyContent: 'center' },
     ledPillInner: {
       borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 12, paddingHorizontal: 9, paddingVertical: 4, backgroundColor: colors.card,
     },
@@ -483,7 +485,7 @@ export default function MainTab({
             accessibilityLabel="Upload title. Tap to edit."
           >
             <Text
-              style={[styles.titleInputOverlay, uploadTitle.length > 0 && styles.titleTextSet, !result?.sampleLabel && onLedEdit ? { paddingRight: 92 } : null]}
+              style={[styles.titleInputOverlay, { flex: 1 }, uploadTitle.length > 0 && styles.titleTextSet, !result?.sampleLabel && onLedEdit ? { paddingRight: 4 } : null]}
               numberOfLines={2}
               ellipsizeMode="tail"
             >

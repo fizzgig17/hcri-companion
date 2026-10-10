@@ -3,10 +3,11 @@
 // hCRI.io username + API token entry, backed by secureStorage (Keystore/
 // Keychain), not plaintext -- unlike the ESP32 firmware's NVS storage.
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { ScrollView, View, Text, TextInput, Switch, TouchableOpacity, StyleSheet, Alert, Modal, Linking } from 'react-native';
+import { ScrollView, View, Text, TextInput, Switch, TouchableOpacity, StyleSheet, Alert, Modal, Linking, useWindowDimensions } from 'react-native';
+import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
 import PrimaryButton from '../components/PrimaryButton';
@@ -140,6 +141,9 @@ export default function SettingsScreen({ navigation, route }: any) {
   const [genEmail, setGenEmail] = useState('');
   const [genPassword, setGenPassword] = useState('');
   const [genTokenName, setGenTokenName] = useState(DEFAULT_GENERATED_TOKEN_NAME);
+  const tokenScrollRef = useRef<ScrollView>(null);
+  const kbHeight = useKeyboardHeight(true);
+  const { height: winH } = useWindowDimensions();
   const [genBusy, setGenBusy] = useState(false);
 
   useEffect(() => {
@@ -596,8 +600,9 @@ export default function SettingsScreen({ navigation, route }: any) {
           via the backdrop/Cancel just closes the overlay without creating
           anything, same as leaving the fields above blank. */}
       <Modal visible={tokenModalVisible} transparent animationType="fade" onRequestClose={closeTokenModal}>
-        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={closeTokenModal}>
-          <TouchableOpacity style={styles.modalSheet} activeOpacity={1} onPress={() => {}}>
+        <TouchableOpacity style={[styles.modalBackdrop, kbHeight > 0 && { paddingBottom: 16 + kbHeight }]} activeOpacity={1} onPress={closeTokenModal}>
+          <TouchableOpacity style={[styles.modalSheet, { maxHeight: Math.max(240, winH - kbHeight - 56) }]} activeOpacity={1} onPress={() => {}}>
+           <ScrollView ref={tokenScrollRef} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} bounces={false}>
             <Text style={styles.modalTitle}>Generate API Token</Text>
             <Text style={styles.modalSubtitle}>
               Sign in with your hCRI.io username and password to create a new API token. Your password is
@@ -635,6 +640,7 @@ export default function SettingsScreen({ navigation, route }: any) {
               style={styles.input}
               value={genTokenName}
               onChangeText={setGenTokenName}
+              onFocus={() => setTimeout(() => tokenScrollRef.current?.scrollToEnd({ animated: true }), 120)}
               editable={!genBusy}
               placeholder={DEFAULT_GENERATED_TOKEN_NAME}
               placeholderTextColor={colors.mutedFaint}
@@ -651,6 +657,7 @@ export default function SettingsScreen({ navigation, route }: any) {
             <TouchableOpacity style={styles.modalCancel} onPress={closeTokenModal} disabled={genBusy}>
               <Text style={styles.modalCancelText}>Cancel</Text>
             </TouchableOpacity>
+           </ScrollView>
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
