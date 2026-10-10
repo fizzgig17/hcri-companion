@@ -10,23 +10,23 @@ import { MeterResult } from '../ble/parseResult';
 const BASE = `${HCRI_API_BASE}/index.php/api/v1`;
 
 export interface LedDetails { brand?: string; model?: string; cct?: string }
-export interface LedSuggestion { brand: string; model: string; cct: string | null }
+export interface LedSuggestion { brand: string; model: string; cct: string | null; source?: 'spectrum' | 'title' }
 
-/** Returns the clear winner for this spectrum, or null (no match / offline / error). */
-export async function fetchLedSuggestion(spectrum: MeterResult['spectrum'], token: string): Promise<LedSuggestion | null> {
-  if (!token || !spectrum?.length) return null;
+/** Returns the clear winner for this spectrum (the reading's title, if given, helps break near-ties), null (answered: no clear match), or undefined (couldn't ask: offline / error). */
+export async function fetchLedSuggestion(spectrum: MeterResult['spectrum'], token: string, title?: string): Promise<LedSuggestion | null | undefined> {
+  if (!token || !spectrum?.length) return undefined;
   try {
     const res = await fetch(`${BASE}/led_suggest`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ wls: spectrum.map((p) => p.nm), vals: spectrum.map((p) => p.value) }),
+      body: JSON.stringify({ wls: spectrum.map((p) => p.nm), vals: spectrum.map((p) => p.value), title: title?.trim() || undefined }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) return undefined;
     const j = await res.json();
     const s = j?.suggestion;
-    return s && s.brand && s.model ? { brand: s.brand, model: s.model, cct: s.cct ?? null } : null;
+    return s && s.brand && s.model ? { brand: s.brand, model: s.model, cct: s.cct ?? null, source: s.source === 'title' ? 'title' : 'spectrum' } : null;
   } catch {
-    return null;
+    return undefined;
   }
 }
 

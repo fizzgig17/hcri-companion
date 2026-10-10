@@ -265,22 +265,29 @@ export default function HomeScreen({ navigation }: any) {
     return () => { live = false; };
   }, []);
 
-  // Ask hCRI.io what LED this spectrum looks like whenever a new real reading is saved.
+  // Ask hCRI.io what LED this spectrum looks like whenever a new real reading is saved, and again when the
+  // person gives it a title (the title can name the LED, which settles near-ties).
+  const ledCardClosedRef = useRef(false);
   useEffect(() => {
     setLedSuggestion(null);
+    ledCardClosedRef.current = false;
+  }, [currentReadingId]);
+  useEffect(() => {
     const id = currentReadingId;
     const r = resultRef.current;
     if (!id || !r || r.sampleLabel) return;
     let live = true;
-    (async () => {
+    // Debounced so typing/saving a title doesn't fire a request per change.
+    const t = setTimeout(async () => {
       const creds = await loadHcriCredentials();
       if (!creds?.token) return;
-      const s = await fetchLedSuggestion(r.spectrum, creds.token);
+      const s = await fetchLedSuggestion(r.spectrum, creds.token, uploadTitle);
+      if (!live || s === undefined) return;
       await updateReadingLed(id, { ledSuggestion: s ?? 'none' }).catch(() => {});
-      if (live && s) setLedSuggestion(s);
-    })();
-    return () => { live = false; };
-  }, [currentReadingId]);
+      if (s && !ledCardClosedRef.current) setLedSuggestion(s);
+    }, 400);
+    return () => { live = false; clearTimeout(t); };
+  }, [currentReadingId, uploadTitle]);
 
   const confirmLed = useCallback(async (d: LedDetails) => {
     const id = currentReadingId;
@@ -1429,7 +1436,7 @@ export default function HomeScreen({ navigation }: any) {
             ledPickerOpen={ledPickerOpen}
             onLedYes={() => ledSuggestion && confirmLed({ brand: ledSuggestion.brand, model: ledSuggestion.model, cct: ledSuggestion.cct ?? undefined })}
             onLedOther={() => setLedPickerOpen(true)}
-            onLedClose={() => setLedSuggestion(null)}
+            onLedClose={() => { ledCardClosedRef.current = true; setLedSuggestion(null); }}
             onLedPickerCancel={() => setLedPickerOpen(false)}
             onLedPickerSave={confirmLed}
             scrollInputIntoView={scrollInputIntoView}

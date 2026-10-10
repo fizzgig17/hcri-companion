@@ -104,7 +104,7 @@ export default function HistoryScreen({ navigation }: any) {
       if (!creds?.token) return;
       for (const r of todo) {
         if (!live) return;
-        const s = await fetchLedSuggestion(r.result.spectrum, creds.token);
+        const s = await fetchLedSuggestion(r.result.spectrum, creds.token, r.label);
         // Network failure and "no match" look the same here; only remember an answer when we got one.
         if (s) await patchLed(r.id, { ledSuggestion: s }).catch(() => {});
       }
