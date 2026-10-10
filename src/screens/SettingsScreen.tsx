@@ -8,7 +8,7 @@ import { BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScrollView, View, Text, TextInput, Switch, TouchableOpacity, StyleSheet, Alert, Modal, Linking, useWindowDimensions } from 'react-native';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
 import PrimaryButton from '../components/PrimaryButton';
 import DraggableStatList from '../components/DraggableStatList';
@@ -144,6 +144,8 @@ export default function SettingsScreen({ navigation, route }: any) {
   const tokenScrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const kbHeight = useKeyboardHeight(true);
   const { height: winH } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const kbUp = kbHeight > 0;
   const [genBusy, setGenBusy] = useState(false);
 
   useEffect(() => {
@@ -600,18 +602,20 @@ export default function SettingsScreen({ navigation, route }: any) {
           via the backdrop/Cancel just closes the overlay without creating
           anything, same as leaving the fields above blank. */}
       <Modal visible={tokenModalVisible} transparent animationType="fade" onRequestClose={closeTokenModal}>
-        <TouchableOpacity style={[styles.modalBackdrop, kbHeight > 0 && { paddingBottom: 16 + kbHeight }]} activeOpacity={1} onPress={closeTokenModal}>
-          <TouchableOpacity style={[styles.modalSheet, { maxHeight: Math.max(240, winH - kbHeight - 56) }]} activeOpacity={1} onPress={() => {}}>
+        <TouchableOpacity style={[styles.modalBackdrop, { paddingTop: insets.top + 12, paddingBottom: kbUp ? 10 + kbHeight : insets.bottom + 12 }]} activeOpacity={1} onPress={closeTokenModal}>
+          <TouchableOpacity style={[styles.modalSheet, { maxHeight: Math.max(200, winH - kbHeight - insets.top - (kbUp ? 0 : insets.bottom) - 24 - (kbUp ? 10 : 12)), padding: 14 }]} activeOpacity={1} onPress={() => {}}>
            <ScrollView ref={tokenScrollRef} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} bounces={false}>
             <Text style={styles.modalTitle}>Generate API Token</Text>
-            <Text style={styles.modalSubtitle}>
-              Sign in with your hCRI.io username and password to create a new API token. Your password is
-              used once to sign in and is never stored.
-            </Text>
+            {!kbUp && (
+              <Text style={styles.modalSubtitle}>
+                Sign in with your hCRI.io username and password to create a new API token. Your password is
+                used once to sign in and is never stored.
+              </Text>
+            )}
 
-            <Text style={styles.modalLabel}>hCRI.io Username or Email</Text>
+            <Text style={[styles.modalLabel, { marginTop: 8, marginBottom: 4 }]}>hCRI.io Username or Email</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { padding: 9 }]}
               value={genEmail}
               onChangeText={setGenEmail}
               autoCapitalize="none"
@@ -620,9 +624,9 @@ export default function SettingsScreen({ navigation, route }: any) {
               placeholderTextColor={colors.mutedFaint}
             />
 
-            <Text style={styles.modalLabel}>Password</Text>
+            <Text style={[styles.modalLabel, { marginTop: 8, marginBottom: 4 }]}>Password</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { padding: 9 }]}
               value={genPassword}
               onChangeText={setGenPassword}
               autoCapitalize="none"
@@ -635,9 +639,9 @@ export default function SettingsScreen({ navigation, route }: any) {
               <Text style={styles.forgotPasswordText}>Forgot password?</Text>
             </TouchableOpacity>
 
-            <Text style={styles.modalLabel}>Token Name</Text>
+            <Text style={[styles.modalLabel, { marginTop: 8, marginBottom: 4 }]}>Token Name</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { padding: 9 }]}
               value={genTokenName}
               onChangeText={setGenTokenName}
               onFocus={() => setTimeout(() => tokenScrollRef.current?.scrollToEnd({ animated: true }), 120)}
@@ -646,7 +650,7 @@ export default function SettingsScreen({ navigation, route }: any) {
               placeholderTextColor={colors.mutedFaint}
             />
 
-            <View style={styles.saveButtonWrap}>
+            <View style={[styles.saveButtonWrap, { marginTop: 12 }]}>
               <PrimaryButton
                 title={genBusy ? 'Generating…' : 'Generate & Save'}
                 onPress={generateToken}
@@ -654,7 +658,7 @@ export default function SettingsScreen({ navigation, route }: any) {
                 style={styles.noTopMargin}
               />
             </View>
-            <TouchableOpacity style={styles.modalCancel} onPress={closeTokenModal} disabled={genBusy}>
+            <TouchableOpacity style={[styles.modalCancel, { paddingVertical: 8 }]} onPress={closeTokenModal} disabled={genBusy}>
               <Text style={styles.modalCancelText}>Cancel</Text>
             </TouchableOpacity>
            </ScrollView>
