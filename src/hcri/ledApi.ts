@@ -10,7 +10,7 @@ import { MeterResult } from '../ble/parseResult';
 const BASE = `${HCRI_API_BASE}/index.php/api/v1`;
 
 export interface LedDetails { brand?: string; model?: string; cct?: string }
-export interface LedSuggestion { brand: string; model: string; cct: string | null; source?: 'spectrum' | 'title' }
+export interface LedSuggestion { brand: string; model: string; cct: string | null; source?: 'spectrum' | 'title' | 'cct' }
 
 /** Returns the clear winner for this spectrum (the reading's title, if given, helps break near-ties), null (answered: no clear match), or undefined (couldn't ask: offline / error). */
 export async function fetchLedSuggestion(spectrum: MeterResult['spectrum'], token: string, title?: string): Promise<LedSuggestion | null | undefined> {
@@ -24,7 +24,10 @@ export async function fetchLedSuggestion(spectrum: MeterResult['spectrum'], toke
     if (!res.ok) return undefined;
     const j = await res.json();
     const s = j?.suggestion;
-    return s && s.brand && s.model ? { brand: s.brand, model: s.model, cct: s.cct ?? null, source: s.source === 'title' ? 'title' : 'spectrum' } : null;
+    if (s && s.brand && s.model) return { brand: s.brand, model: s.model, cct: s.cct ?? null, source: s.source === 'title' ? 'title' : 'spectrum' };
+    // No model-level match: the nominal CCT read from the curve is still worth offering (right ~9 times in 10).
+    if (typeof j?.cctGuess === 'string' && j.cctGuess) return { brand: '', model: '', cct: j.cctGuess, source: 'cct' };
+    return null;
   } catch {
     return undefined;
   }

@@ -35,7 +35,7 @@ export default function LedSuggestionCard({ suggestion, onYes, onOther, onClose,
     >
       <View style={styles.top}>
         <View style={{ flex: 1 }}>
-          <Text style={{ color: colors.muted, fontSize: 11 }}>Looks like</Text>
+          <Text style={{ color: colors.muted, fontSize: 11 }}>{suggestion.source === 'cct' ? 'No LED match yet · the curve reads as' : suggestion.source === 'title' ? 'Title and curve suggest' : 'Looks like'}</Text>
           <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }} numberOfLines={2}>{ledText(suggestion)}</Text>
         </View>
         <TouchableOpacity onPress={onClose} hitSlop={10} accessibilityLabel="Dismiss LED suggestion">
