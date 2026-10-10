@@ -209,7 +209,8 @@ function HistoryRow({
     checkboxMark: { color: colors.text, fontSize: 13, fontWeight: '700' },
     selectRowBody: { flex: 1 },
     rowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-    rowHeaderLeft: { flexDirection: 'row', alignItems: 'baseline', flexShrink: 1, flexWrap: 'wrap', marginRight: 12 },
+    // flex: 1 gives the text a definite width (iOS under-measures a shrinking wrapped row and lets the text run into the icons); paddingRight is the gap.
+    rowHeaderLeft: { flex: 1, flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', paddingRight: 14 },
     rowMeta: { color: colors.muted, fontSize: 11, fontFamily: 'monospace' },
     rowSummaryInline: { color: colors.text, fontSize: 11, fontWeight: '600', marginLeft: 8 },
     rowHeaderButtons: { flexDirection: 'row', alignItems: 'center', flexShrink: 0 },
