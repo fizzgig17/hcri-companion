@@ -353,8 +353,11 @@ function HistoryRow({
       </TouchableOpacity>
 
       {ledsOfReading(reading).length ? (
-        <TouchableOpacity onPress={() => onLedPick(reading)} disabled={selectMode} style={{ marginTop: 4 }} accessibilityLabel="LED details. Tap to change.">
-          <Text style={{ color: colors.muted, fontSize: 12 }}>💡 {ledsLine(ledsOfReading(reading))}</Text>
+        <TouchableOpacity onPress={() => onLedPick(reading)} disabled={selectMode} style={{ marginTop: 4 }} accessibilityRole="button" accessibilityLabel="LED details. Tap to edit.">
+          <Text style={{ color: colors.muted, fontSize: 12 }}>
+            💡 {ledsLine(ledsOfReading(reading))}
+            {!selectMode && <Text style={{ color: colors.accent, fontWeight: '600' }}>{'   ✎ Edit'}</Text>}
+          </Text>
         </TouchableOpacity>
       ) : !selectMode && !reading.ledDismissed && reading.ledSuggestion && reading.ledSuggestion !== 'none' ? (
         <View style={{ marginTop: 6 }}>

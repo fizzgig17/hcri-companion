@@ -29,9 +29,9 @@ import { fetchSampleReading } from '../hcri/fetchSampleReading';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
 import { loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
-import { addReading, recordUpload, setReadingFlicker, updateReadingLed } from '../storage/readingHistory';
+import { addReading, loadHistory, recordUpload, setReadingFlicker, updateReadingLed } from '../storage/readingHistory';
 import { fetchLedSuggestion, LedDetails, LedSuggestion } from '../hcri/ledApi';
-import { ledPatch } from '../hcri/leds';
+import { ledPatch, hasLed } from '../hcri/leds';
 import { syncLedForReading } from '../hcri/ledSync';
 import { EMPTY_LED_LISTS, getCachedLedLists, LedLists, refreshLedLists } from '../hcri/ledLists';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
@@ -298,7 +298,7 @@ export default function HomeScreen({ navigation }: any) {
     setLedPickerOpen(false);
     if (!id) return;
     setCurrentLeds(d);
-    await updateReadingLed(id, { ...ledPatch(d), ledSynced: false, ledDismissed: false }).catch(() => {});
+    await updateReadingLed(id, { ...ledPatch(d), ledSynced: false, ledDismissed: !d.some(hasLed), ledCleared: !d.some(hasLed) }).catch(() => {});
     syncLedForReading(id);
   }, [currentReadingId]);
 
@@ -1244,6 +1244,12 @@ export default function HomeScreen({ navigation }: any) {
       return;
     }
 
+    // If this reading was uploaded before, update that report instead of creating a duplicate.
+    let replaceId: number | undefined = lastUploadedReport?.id;
+    if (!replaceId && currentReadingId) {
+      try { replaceId = (await loadHistory()).find((r) => r.id === currentReadingId)?.reportId; } catch { /* upload as new */ }
+    }
+
     setStatus('uploading');
     // Clears any checkmark (and copy-link icon) left over from a previous
     // attempt on this same reading while this one is in flight, rather
@@ -1256,7 +1262,7 @@ export default function HomeScreen({ navigation }: any) {
     // the field's genuinely empty, rather than silently ignoring a typed
     // title.
     const label = uploadTitle.trim() || defaultLabel(creds.username, result.deviceName);
-    const res = await uploadReadingToHcri(result, csv, label, creds.token, appendLog);
+    const res = await uploadReadingToHcri(result, csv, label, creds.token, appendLog, replaceId);
     // The raw server response (res.message -- hCRI.io's API returns JSON)
     // still goes to Logs for anyone actually debugging an upload either way.
     appendLog(res.message);
@@ -1297,7 +1303,7 @@ export default function HomeScreen({ navigation }: any) {
       Alert.alert('Upload failed', `Could not upload "${label}". Check Logs for details.`);
     }
     setStatus('connected');
-  }, [result, navigation, appendLog, uploadTitle, currentReadingId, blockSampleAction]);
+  }, [result, navigation, appendLog, uploadTitle, currentReadingId, blockSampleAction, lastUploadedReport]);
 
   // Resolves the current lastUploadedReport into a link (see
   // getReportLink.ts) and puts it on the clipboard. Needs its own fresh

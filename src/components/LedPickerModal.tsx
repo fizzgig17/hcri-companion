@@ -109,7 +109,10 @@ export default function LedPickerModal({ visible, lists, initial, onSave, onCanc
     return [...mine, ...lists.models.filter((m) => !mine.includes(m))];
   };
 
-  const can = rows.some(hasLed);
+  // Saving with every LED removed is allowed when the reading had LEDs: it clears them.
+  const hadLeds = (initial ?? []).some(hasLed);
+  const anyLed = rows.some(hasLed);
+  const can = anyLed || hadLeds;
   const last = rows[rows.length - 1];
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
@@ -154,8 +157,8 @@ export default function LedPickerModal({ visible, lists, initial, onSave, onCanc
                             <Text style={{ color: colors.accent, fontSize: 12, fontWeight: '600' }}>Done</Text>
                           </TouchableOpacity>
                         )}
-                        <TouchableOpacity onPress={() => removeAt(i)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel={rows.length > 1 ? `Remove LED ${i + 1}` : 'Clear LED'}>
-                          <Text style={{ color: colors.muted, fontSize: 12 }}>{rows.length > 1 ? 'Remove' : 'Clear'}</Text>
+                        <TouchableOpacity onPress={() => removeAt(i)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel={rows.length > 1 ? `Remove LED ${i + 1}` : 'Remove LED'}>
+                          <Text style={{ color: colors.muted, fontSize: 12 }}>Remove</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -174,6 +177,9 @@ export default function LedPickerModal({ visible, lists, initial, onSave, onCanc
             >
               <Text style={{ color: colors.accent, fontSize: 13, fontWeight: '600' }}>+ Add another LED</Text>
             </TouchableOpacity>
+            {!anyLed && hadLeds ? (
+              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 6 }}>Save to remove the LED details from this reading.</Text>
+            ) : null}
             <Text style={{ color: colors.mutedFaint, fontSize: 11 }}>Values that aren’t in the list yet are sent to hCRI.io for review.</Text>
           </ScrollView>
           <View style={styles.row}>

@@ -45,7 +45,7 @@ import LedPickerModal from '../components/LedPickerModal';
 import { EMPTY_LED_LISTS, getCachedLedLists, LedLists, refreshLedLists } from '../hcri/ledLists';
 import { fetchLedSuggestion, LedDetails } from '../hcri/ledApi';
 import { syncLedForReading } from '../hcri/ledSync';
-import { ledPatch, ledsOfReading } from '../hcri/leds';
+import { ledPatch, ledsOfReading, hasLed } from '../hcri/leds';
 
 export default function HistoryScreen({ navigation }: any) {
   const { colors } = useTheme();
@@ -90,7 +90,7 @@ export default function HistoryScreen({ navigation }: any) {
   }, []);
   const confirmLed = useCallback(async (id: string, d: LedDetails[]) => {
     setLedPickFor(null);
-    await patchLed(id, { ...ledPatch(d), ledSynced: false, ledDismissed: false }).catch(() => {});
+    await patchLed(id, { ...ledPatch(d), ledSynced: false, ledDismissed: !d.some(hasLed), ledCleared: !d.some(hasLed) }).catch(() => {});
     const ok = await syncLedForReading(id);
     if (ok) setHistory((prev) => prev.map((r) => (r.id === id ? { ...r, ledSynced: true } : r)));
   }, [patchLed]);
@@ -185,14 +185,14 @@ export default function HistoryScreen({ navigation }: any) {
       setHistoryUploadingId(id);
       try {
         const csv = buildCsv(entry.result);
-        const res = await uploadReadingToHcri(entry.result, csv, label, creds.token, appendLog);
+        const res = await uploadReadingToHcri(entry.result, csv, label, creds.token, appendLog, entry.reportId);
         appendLog(res.message);
         if (res.success && typeof res.reportId === 'number' && typeof res.isPublic === 'boolean') {
           await saveReportLink(id, res.reportId, res.isPublic);
         }
         Alert.alert(
-          res.success ? 'Uploaded' : 'Upload failed',
-          res.success ? `Uploaded "${label}".` : `Could not upload "${label}". Check Logs for details.`
+          res.success ? (res.replaced ? 'Updated' : 'Uploaded') : 'Upload failed',
+          res.success ? (res.replaced ? `Updated "${label}" on hCRI.io.` : `Uploaded "${label}".`) : `Could not upload "${label}". Check Logs for details.`
         );
       } finally {
         setHistoryUploadingId(null);
@@ -240,7 +240,7 @@ export default function HistoryScreen({ navigation }: any) {
           setHistoryUploadingId(id);
           try {
             const csv = buildCsv(entry.result);
-            const res = await uploadReadingToHcri(entry.result, csv, entry.label, creds.token, appendLog);
+            const res = await uploadReadingToHcri(entry.result, csv, entry.label, creds.token, appendLog, entry.reportId);
             appendLog(res.message);
             if (res.success) {
               okCount += 1;

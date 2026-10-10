@@ -81,6 +81,8 @@ export interface SavedReading {
   ledSuggestion?: { brand: string; model: string; cct: string | null } | 'none';
   /** True when `led` was saved to the report on hCRI.io (or there is no report yet and it still needs sending). */
   ledSynced?: boolean;
+  /** True when the person removed all LED details, so the removal still has to be sent to the report on hCRI.io. */
+  ledCleared?: boolean;
 }
 
 function makeId(): string {
@@ -192,7 +194,7 @@ export async function setReadingFlicker(id: string, flicker: NonNullable<MeterRe
 /** Patches LED-related fields of one reading (confirm / dismiss / cache a suggestion / mark synced). */
 export async function updateReadingLed(
   id: string,
-  patch: Partial<Pick<SavedReading, 'led' | 'leds' | 'ledDismissed' | 'ledSuggestion' | 'ledSynced'>>
+  patch: Partial<Pick<SavedReading, 'led' | 'leds' | 'ledDismissed' | 'ledSuggestion' | 'ledSynced' | 'ledCleared'>>
 ): Promise<void> {
   const existing = await loadHistory();
   await saveAll(existing.map((r) => (r.id === id ? { ...r, ...patch } : r)));
