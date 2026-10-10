@@ -395,7 +395,7 @@ export default function HistoryScreen({ navigation }: any) {
           onOpenTm30={(reading) => {
             try {
               const analysis = reading.analysis ?? analyzeSpectrum(reading.result.spectrum);
-              navigation.navigate('Tm30Report', { input: tm30InputFromReading(reading.result, analysis, reading.label, reading.savedAt) });
+              navigation.navigate('Tm30Report', { input: tm30InputFromReading(reading.result, analysis, reading.label, reading.savedAt, reading.led) });
             } catch (e: any) {
               Alert.alert('Could not open the TM-30 report', String(e?.message ?? e));
             }

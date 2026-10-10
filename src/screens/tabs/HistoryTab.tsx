@@ -362,6 +362,10 @@ function HistoryRow({
             onClose={() => onLedDismiss(reading.id)}
           />
         </View>
+      ) : !selectMode && !reading.result.sampleLabel ? (
+        <TouchableOpacity onPress={() => onLedPick(reading)} style={{ marginTop: 4 }} accessibilityRole="button" accessibilityLabel="Add LED details to this reading">
+          <Text style={{ color: colors.accent, fontSize: 12 }}>💡 Add LED details</Text>
+        </TouchableOpacity>
       ) : null}
 
       <Modal

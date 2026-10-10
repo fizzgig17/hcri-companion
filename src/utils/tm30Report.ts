@@ -15,6 +15,7 @@ import { CMF10_Y } from '../hcri/cesData';
 import { APP_VERSION } from '../buildInfo';
 import type { MeterResult } from '../ble/parseResult';
 import type { SpectralAnalysis } from './spectralAnalysis';
+import { buildAnnexSvg } from './tm30AnnexSvg';
 
 export interface Tm30Input {
   /** Reading title (History label). */
@@ -30,12 +31,15 @@ export interface Tm30Input {
   y: number;
   ra: number;
   r9: number;
+  /** LED the person confirmed for this reading (shown in the strip under the header). */
+  led?: { brand?: string; model?: string; cct?: string };
 }
 
 /** Report input for a reading: the spectrum plus the app's own analysis values. */
-export function tm30InputFromReading(result: MeterResult, analysis: SpectralAnalysis, title: string, takenAt?: number): Tm30Input {
+export function tm30InputFromReading(result: MeterResult, analysis: SpectralAnalysis, title: string, takenAt?: number, led?: Tm30Input['led']): Tm30Input {
   return {
     title,
+    led,
     takenAt,
     deviceName: result.sampleLabel ? undefined : result.deviceName,
     spectrum: result.spectrum,
@@ -375,96 +379,21 @@ ${notes ? `<h2>Notes</h2><div class="note">${esc(notes)}</div>` : ''}
  * the xy / CRI boxes). Every size is in rem with 1rem = 1/59.5 of the page width, so the page keeps
  * its A4 proportions whatever width the PDF renderer lays the HTML out at.
  */
+/** PDF page size (CSS px = PDF points) -- the same proportions as the website's TM-30 report (825 x 1070). */
+export const TM30_PDF_PAGE = { width: 595, height: 772 };
+
+/**
+ * The shared PDF: the hCRI.io TM-30 report page (see tm30AnnexSvg.ts), drawn as one fixed-size SVG so nothing
+ * depends on viewport units (a 0-wide print viewport printed a blank page on iOS before).
+ */
 export function buildTm30PdfHtml(input: Tm30Input): string {
-  const pts = input.spectrum.filter((p) => isFinite(p.nm) && isFinite(p.value));
-  if (pts.length < 2) throw new Error('This reading has no spectrum, so a TM-30 report can’t be generated.');
-  const spd = interpolateSpd5nm(pts.map((p) => p.nm), pts.map((p) => Math.max(0, p.value)));
-  const d = calcTm30(spd, input.cct);
-
-  const absMax = (a: number[]) => a.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
-  const csMax = Math.max(0.1, Math.ceil(absMax(d.rcsBins) / 0.05 - 1e-9) * 0.05);
-  const hsMax = Math.max(5, Math.ceil(absMax(d.rhsBins) / 5 - 1e-9) * 5);
-  const csPct = Math.round(csMax * 100);
-  const hsTxt = `${hsMax}°`;
-  const rfColor = d.rf >= 85 ? '#28823c' : d.rf >= 70 ? '#b47814' : '#a02828';
-  const rgColor = Math.abs(d.rg - 100) <= 8 ? '#28823c' : '#b47814';
-  const date = new Date(input.takenAt ?? Date.now());
-  const dateStr = `${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}/${date.getFullYear()}`;
-  const gen = new Date();
-  const genStr = `${gen.getFullYear()}-${String(gen.getMonth() + 1).padStart(2, '0')}-${String(gen.getDate()).padStart(2, '0')} ${String(gen.getHours()).padStart(2, '0')}:${String(gen.getMinutes()).padStart(2, '0')}`;
-  const notes = (input.notes ?? '').trim();
-  const duvTxt = `${input.duv >= 0 ? '+' : ''}${input.duv.toFixed(4)}`;
-
-  const tile = (label: string, value: string) =>
-    `<div class="tile"><div class="tl">${esc(label)}</div><div class="tv">${esc(value)}</div></div>`;
-  const bins = (t: string, m: 'chroma' | 'hue' | 'fidelity', data: number[], mx: number, yl: [string, string, string]) =>
-    binChart(t, m, data, mx, yl, 300, 84, 54);
-
+  const svg = buildAnnexSvg(
+    { ...input, generatedBy: `Generated on-device by hCRI Companion v${APP_VERSION}  ·  IES TM-30-18` },
+    TM30_PDF_PAGE.width,
+    TM30_PDF_PAGE.height
+  );
   return `<!doctype html><html><head><meta charset="utf-8">
-<meta name="viewport" content="width=595, initial-scale=1">
-<style>
-  @page{margin:0}
-  *{box-sizing:border-box}
-  /* Fixed A4 page at 595 x 840 CSS px (1rem = 10px). Deliberately NOT viewport-relative: the PDF renderer's off-screen web view can report a 0 or phone-sized width, which printed a blank page. */
-  html{font-size:10px}
-  html,body{margin:0;padding:0;background:#fff;color:${INK};font-family:Helvetica,Arial,sans-serif}
-  .pg{position:relative;width:59.5rem;height:84rem;overflow:hidden}
-  .bar{background:#0c1424;height:4.5rem;padding:0 2.3rem;display:flex;align-items:center;justify-content:space-between}
-  .bar .a{color:#c8e6ff;font-size:1.5rem;font-weight:700}
-  .bar .b{color:#7fb0cf;font-size:1.1rem;max-width:24rem;text-align:right;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-  .in{padding:0 2.3rem}
-  .chips{display:flex;gap:.4rem;margin-top:1rem}
-  .chip{flex:1;background:#e6eef8;border:1px solid #b4c8dc;padding:.35rem .6rem;font-size:1.1rem;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-  .chip b{display:block;font-size:.8rem;letter-spacing:.04em;color:#3c648c;text-transform:uppercase}
-  .sh{background:#e0ecf8;color:#143c6e;font-size:1.1rem;font-weight:700;padding:.45rem .7rem;margin-bottom:.4rem}
-  .row{display:flex;gap:1rem}
-  .col{width:27rem}
-  .vcg{position:relative;height:20.6rem}
-  .rfn{position:absolute;top:0;font-size:3rem;font-weight:800;line-height:1}
-  .rfl{position:absolute;top:3.3rem;font-size:1.1rem;color:#3c5a78}
-  .tiles{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
-  .tile{background:#ebf2fc;border:1px solid #bed2e6;padding:.6rem .8rem;height:6.3rem}
-  .tile .tl{font-size:.9rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#32588c}
-  .tile .tv{font-size:1.9rem;font-weight:700;margin-top:.6rem}
-  .box{border:1px solid #aac3dc;padding:.5rem .8rem;font-size:1.15rem;line-height:1.5}
-  .foot{position:absolute;left:0;right:0;bottom:.9rem;text-align:center;color:#a0a0a0;font-size:.9rem;line-height:1.5;font-style:italic}
-</style></head><body><div class="pg">
-<div class="bar"><div class="a">IES TM-30-18 Color Rendition Report</div><div class="b">${esc(input.title || 'Reading')}</div></div>
-<div class="in">
-  <div class="chips">
-    <div class="chip"><b>Source</b>${esc(input.title || '-')}</div>
-    ${input.deviceName ? `<div class="chip" style="flex:.6"><b>Meter</b>${esc(input.deviceName)}</div>` : ''}
-    <div class="chip" style="flex:.4"><b>Date</b>${dateStr}</div>
-  </div>
-  <div class="row" style="margin-top:1rem">
-    <div class="col"><div class="sh">Spectral Power Distribution</div>${spdChart(input, 300, 226)}</div>
-    <div class="col" style="padding-top:.2rem">
-      ${bins('LOCAL CHROMA SHIFT (Rcs,hj)', 'chroma', d.rcsBins, csMax, [`+${csPct}%`, '0%', `-${csPct}%`])}
-      ${bins('LOCAL HUE SHIFT (Rhs,hj)', 'hue', d.rhsBins, hsMax, [`+${hsTxt}`, '0', `-${hsTxt}`])}
-      ${bins('LOCAL COLOR FIDELITY (Rf,hj)', 'fidelity', d.rfBins, 100, ['100', '50', '0'])}
-    </div>
-  </div>
-  <div class="sh" style="margin-top:1rem">Color Vector Graphic (CVG)</div>
-  <div class="row">
-    <div class="col vcg">
-      <div class="rfn" style="left:0;color:${rfColor}">${d.rf}</div><div class="rfl" style="left:0">Rf</div>
-      <div class="rfn" style="right:0;color:${rgColor}">${d.rg}</div><div class="rfl" style="right:0">Rg</div>
-      <div style="width:20.4rem;margin:0 auto">${cvgWheel(d, '100%')}</div>
-    </div>
-    <div class="col"><div class="tiles">
-      ${tile('CIE x', input.x.toFixed(4))}${tile('Duv', duvTxt)}
-      ${tile('CIE y', input.y.toFixed(4))}${tile('Ra (CRI)', String(Math.round(input.ra)))}
-      ${tile('CCT', `${Math.round(input.cct)} K`)}${tile('R9', String(Math.round(input.r9)))}
-    </div></div>
-  </div>
-  <div class="sh" style="margin-top:.9rem">Color Sample Fidelity, Rf,CES</div>
-  ${cesChart(d, 96, 60)}
-  <div class="row" style="margin-top:.8rem">
-    <div style="width:26rem;font-size:1.15rem;line-height:1.4;overflow:hidden;max-height:4.6rem"><b style="color:#1e3250">Notes:</b> ${esc(notes || '-')}</div>
-    <div class="box" style="width:12.5rem"><b>x</b> &nbsp; ${input.x.toFixed(4)}<br><b>y</b> &nbsp; ${input.y.toFixed(4)}</div>
-    <div class="box" style="width:14rem"><b style="color:#1e3250">CIE 13.3-1995 (CRI)</b><br>Ra &nbsp; <b>${Math.round(input.ra)}</b> &nbsp;&nbsp; R9 &nbsp; <b>${Math.round(input.r9)}</b></div>
-  </div>
-</div>
-<div class="foot">Generated ${genStr} on-device by hCRI Companion v${esc(APP_VERSION)} · Colors are for visual orientation purposes only.</div>
-</div></body></html>`;
+<meta name="viewport" content="width=${TM30_PDF_PAGE.width}, initial-scale=1">
+<style>@page{margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fafbfc;width:${TM30_PDF_PAGE.width}px;height:${TM30_PDF_PAGE.height}px;overflow:hidden}</style>
+</head><body>${svg}</body></html>`;
 }
