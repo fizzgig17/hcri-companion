@@ -440,6 +440,7 @@ export class MeterConnection {
         } catch {
           // nothing to cancel
         }
+        if (String(e?.message ?? '').startsWith('The Torch Bearer bridge is on')) break;   // not a flaky connect: nothing is plugged in, a retry won't change that
         if (attempt < 2) await new Promise<void>((r) => setTimeout(() => r(), 700));
       }
     }
@@ -523,6 +524,23 @@ export class MeterConnection {
     if (!cmd || !res || !sta) {
       await connected.cancelConnection().catch(() => {});
       throw new Error('This Torch Bearer is missing its expected Bluetooth service -- is the bridge firmware up to date?');
+    }
+    // A bridge with no spectrometer plugged into it still answers Bluetooth. Its status reads state 3 until the
+    // spectrometer connects, so refuse the connection instead of showing "Connected" for a meter that isn't there.
+    // (Older bridge firmware always reads 0 here, so it connects as before.)
+    try {
+      const first = await sta.read();
+      if (first?.value) {
+        const st = new Uint8Array(Buffer.from(first.value, 'base64'));
+        this.log(`Torch Bearer status on connect: state ${st[0]}`, true);
+        if (st[0] === TB_STATE_ERROR) {
+          await connected.cancelConnection().catch(() => {});
+          throw new Error('The Torch Bearer bridge is on, but no spectrometer is plugged into it. Plug the spectrometer in, then connect again.');
+        }
+      }
+    } catch (e: any) {
+      if (e instanceof Error && e.message.startsWith('The Torch Bearer bridge is on')) throw e;
+      this.log(`Could not read the bridge status (continuing): ${describeBleError(e)}`);
     }
     this.tbMode = true;
     this.device = connected;
