@@ -33,8 +33,10 @@ import { SpectralAnalysis } from '../../utils/spectralAnalysis';
 import LedSuggestionCard from '../../components/LedSuggestionCard';
 import LedPickerModal from '../../components/LedPickerModal';
 import { LedDetails, LedSuggestion } from '../../hcri/ledApi';
+import { hasLed } from '../../hcri/leds';
 import { LedLists } from '../../hcri/ledLists';
 import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
+import HintPressable from '../../components/HintPressable';
 import { EMPTY_METER_RESULT, EMPTY_SPECTRAL_ANALYSIS } from '../../utils/placeholderReading';
 
 // Title field (56) + its top margin (8), always subtracted so the charts are
@@ -52,7 +54,7 @@ interface Props {
   /** LED suggestion card (floats over the lower part of the chart; never resizes it or covers the action bar). */
   ledSuggestion?: LedSuggestion | null;
   /** LED details already confirmed for the current reading (shown on the LED pill in the title box). */
-  ledCurrent?: LedDetails | null;
+  ledCurrent?: LedDetails[] | null;
   /** Opens the LED picker for the current reading (the pill in the title box). */
   onLedEdit?: () => void;
   ledLists?: LedLists;
@@ -61,7 +63,7 @@ interface Props {
   onLedOther?: () => void;
   onLedClose?: () => void;
   onLedPickerCancel?: () => void;
-  onLedPickerSave?: (d: LedDetails) => void;
+  onLedPickerSave?: (d: LedDetails[]) => void;
   status: Status;
   isBusy: boolean;
   result: MeterResult | null;
@@ -121,6 +123,8 @@ interface Props {
    * Home's own header (dropped along with the rest of that header -- see
    * HomeScreen.tsx), so this is the one place it's still visible at all. */
   connectedDeviceName?: string | null;
+  /** What the connect sequence is doing right now ("Scanning for meter…"); shown instead of plain "Connecting…". */
+  connectStage?: string | null;
   /** Meter battery level from 8C C3, or null/undefined until the meter has answered (then nothing is shown). */
   battery?: BatteryStatus | null;
   /** Upload title/label -- the SAME state DataTab's own Upload Title field
@@ -173,6 +177,7 @@ export default function MainTab({
   onCopyLink,
   statIds,
   connectedDeviceName,
+  connectStage,
   connectedDeviceId,
   battery,
   uploadTitle,
@@ -365,10 +370,10 @@ export default function MainTab({
         {connectedDeviceName ? (
           <>
             <Text style={[styles.deviceNameText, { flexShrink: 1 }]} numberOfLines={1}>{connectedDeviceName}</Text>
-            <Text style={[styles.statusText, { flexShrink: 0 }]} numberOfLines={1}> · {statusLabels[status]}</Text>
+            <Text style={[styles.statusText, { flexShrink: 0 }]} numberOfLines={1}> · {connectStage || statusLabels[status]}</Text>
           </>
         ) : (
-          <Text style={styles.statusText} numberOfLines={1}>{statusLabels[status]}</Text>
+          <Text style={styles.statusText} numberOfLines={1}>{connectStage || statusLabels[status]}</Text>
         )}
         {isBusy && <ActivityIndicator size="small" color={colors.muted} style={{ marginLeft: 8 }} />}
         {/* Meter battery (8C C3). Only while a meter is connected and has
@@ -376,7 +381,7 @@ export default function MainTab({
             vendor app warns at), green otherwise. A bolt means the meter
             reports it's charging. */}
         {battery && status !== 'disconnected' && (
-          <View style={styles.batteryWrap} accessibilityLabel={`Meter battery ${battery.percent} percent${battery.charging ? ', charging' : ''}`}>
+          <HintPressable hint={`Meter battery ${battery.percent}%${battery.charging ? ', charging' : ''}`} activeOpacity={1} style={styles.batteryWrap} accessibilityLabel={`Meter battery ${battery.percent} percent${battery.charging ? ', charging' : ''}`}>
             <View style={[styles.batteryBody, { borderColor: battery.percent <= 20 ? colors.danger : colors.accent }]}>
               <View
                 style={{
@@ -392,7 +397,7 @@ export default function MainTab({
               {battery.charging ? '⚡' : ''}
               {battery.percent}%
             </Text>
-          </View>
+          </HintPressable>
         )}
         {/* Only shows up when the meter currently connected was one of
             SEVERAL matches the last scan found -- lets you reopen that same
@@ -466,7 +471,7 @@ export default function MainTab({
           <LedPickerModal
             visible={!!ledPickerOpen}
             lists={ledLists}
-            initial={ledCurrent ?? (ledSuggestion ? { brand: ledSuggestion.brand, model: ledSuggestion.model, cct: ledSuggestion.cct ?? undefined } : undefined)}
+            initial={ledCurrent ?? (ledSuggestion ? [{ brand: ledSuggestion.brand, model: ledSuggestion.model, cct: ledSuggestion.cct ?? undefined }] : undefined)}
             onSave={onLedPickerSave}
             onCancel={onLedPickerCancel}
           />
@@ -494,8 +499,8 @@ export default function MainTab({
             {!result?.sampleLabel && onLedEdit && (
               <TouchableOpacity style={styles.ledPill} onPress={onLedEdit} accessibilityRole="button" accessibilityLabel="LED details for this reading">
                 <View style={styles.ledPillInner}>
-                  <Text style={{ color: ledCurrent && (ledCurrent.brand || ledCurrent.model || ledCurrent.cct) ? colors.accent : colors.muted, fontSize: 12, fontWeight: '600' }}>
-                    {ledCurrent && (ledCurrent.brand || ledCurrent.model || ledCurrent.cct) ? '💡 LED ✓' : '💡 Add LED'}
+                  <Text style={{ color: ledCurrent && ledCurrent.some(hasLed) ? colors.accent : colors.muted, fontSize: 12, fontWeight: '600' }}>
+                    {ledCurrent && ledCurrent.filter(hasLed).length > 1 ? `💡 ${ledCurrent.filter(hasLed).length} LEDs ✓` : ledCurrent && ledCurrent.some(hasLed) ? '💡 LED ✓' : '💡 Add LED'}
                   </Text>
                 </View>
               </TouchableOpacity>

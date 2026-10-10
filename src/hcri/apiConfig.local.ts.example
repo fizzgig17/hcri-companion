@@ -1,0 +1,3 @@
+// Copy to apiConfig.local.ts (same folder) to point THIS machine's builds at the dev site. apiConfig.local.ts is not
+// tracked by git. Delete it (or leave it out) and the build talks to the production site, as shipped.
+export const HCRI_API_BASE = 'https://dev.hcri.io';

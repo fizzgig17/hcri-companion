@@ -1,0 +1,3 @@
+// Copy this file to Local.xcconfig (same folder) and put your own value in. Local.xcconfig is not tracked by git,
+// so Xcode and `git pull` never fight over it.
+DEVELOPMENT_TEAM = XXXXXXXXXX

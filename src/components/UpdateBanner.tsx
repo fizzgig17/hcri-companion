@@ -7,6 +7,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, Text, TouchableOpacity, View, StyleSheet } from 'react-native';
+import HintPressable from './HintPressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { useBannerVisible } from '../contexts/UpdateContext';
@@ -59,9 +60,9 @@ export default function UpdateBanner() {
           <TouchableOpacity style={styles.action} onPress={openStore} accessibilityLabel="Open Play Store to update">
             <Text style={styles.actionText}>Open Play Store</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.close} onPress={dismissBanner} accessibilityLabel="Dismiss">
+          <HintPressable hint="Dismiss" style={styles.close} onPress={dismissBanner} accessibilityLabel="Dismiss">
             <Text style={styles.closeText}>×</Text>
-          </TouchableOpacity>
+          </HintPressable>
         </View>
       </View>
     </Animated.View>

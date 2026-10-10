@@ -59,10 +59,13 @@ export async function uploadReadingToHcri(
   csv: string,
   label: string,
   token: string,
-  log?: (msg: string) => void
+  log?: (msg: string) => void,
+  /** The reading's existing report id, if it was uploaded before: that report is updated in place. */
+  replaceId?: number
 ): Promise<UploadResult> {
-  const res = await uploadToHcri(csv, label, token, log);
-  if (res.success && result.flicker && typeof res.reportId === 'number') {
+  const res = await uploadToHcri(csv, label, token, log, replaceId);
+  // A replaced report already has this reading's flicker attached from the first upload.
+  if (res.success && !res.replaced && result.flicker && typeof res.reportId === 'number') {
     await uploadFlickerToHcri(
       result.flicker,
       { reportId: res.reportId, label, model: result.deviceName },

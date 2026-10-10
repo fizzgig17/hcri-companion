@@ -12,7 +12,7 @@
 // token. The result is flagged `sampleLabel` so HomeScreen never saves it
 // to History or lets it be uploaded back as if it were a real reading.
 
-import { MeterResult } from '../ble/parseResult';
+import { FlickerCapture, MeterResult } from '../ble/parseResult';
 import { HCRI_API_BASE } from './apiConfig';
 
 const API = `${HCRI_API_BASE}/index.php/api/explore`;
@@ -37,8 +37,50 @@ async function getJson(url: string): Promise<any> {
   }
 }
 
-/** Loads one random public report's spectrum as a MeterResult. Throws a user-presentable Error on any failure. */
-export async function fetchSampleReading(): Promise<MeterResult> {
+const REPORTS_API = `${HCRI_API_BASE}/index.php/api/reports`;
+
+/** The report's first flicker reading (oldest), if it has one. Best effort: any problem just means no flicker page. */
+async function fetchFirstFlicker(reportId: number): Promise<FlickerCapture | undefined> {
+  try {
+    const data = await getJson(`${REPORTS_API}/${reportId}/flicker`);
+    const list: any[] = Array.isArray(data?.readings) ? data.readings : [];
+    for (const f of list) {
+      const wave: number[] = Array.isArray(f?.waveform) ? f.waveform.map(Number).filter((n: number) => Number.isFinite(n)) : [];
+      if (wave.length < 10) continue;
+      const num = (v: any) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+      return {
+        frequencyHz: num(f.frequencyHz),
+        percentFlicker: num(f.percentFlicker),
+        flickerIndex: num(f.flickerIndex),
+        cycleMs: num(f.cycleMs),
+        ...(typeof f.spanMs === 'number' ? { spanMs: f.spanMs } : {}),
+        waveform: wave,
+      };
+    }
+  } catch {
+    // no flicker for this one
+  }
+  return undefined;
+}
+
+/**
+ * Loads a public report's spectrum as a MeterResult: report `reportId` if given (developer setting), else a random one.
+ * If the report has flicker readings, the first one comes along as `flicker`. Throws a user-presentable Error on failure.
+ */
+export async function fetchSampleReading(reportId?: number): Promise<MeterResult> {
+  if (reportId && reportId > 0) {
+    let detail: any;
+    try {
+      detail = await getJson(`${API}/${reportId}`);
+    } catch (e: any) {
+      throw new Error(`Report ${reportId} couldn't be loaded (${e?.message ?? 'error'}). Only public reports can be used as a test reading.`);
+    }
+    const sample = sampleFromDetail(detail, { id: reportId });
+    if (!sample) throw new Error(`Report ${reportId} has no spectrum data.`);
+    const flicker = await fetchFirstFlicker(reportId);
+    return flicker ? { ...sample, flicker } : sample;
+  }
+
   // First page tells us how many pages exist; reuse it if that's the page we land on.
   const first = await getJson(`${API}?perPage=${PER_PAGE}&page=1`);
   const pages = Math.max(1, Math.min(Number(first?.pages) || 1, MAX_PAGES));
@@ -52,31 +94,38 @@ export async function fetchSampleReading(): Promise<MeterResult> {
   for (let attempt = 0; attempt < 4 && pool.length > 0; attempt++) {
     const report = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
     const detail = await getJson(`${API}/${report.id}`);
-    const wls: number[] = detail?.wls ?? [];
-    const vals: number[] = detail?.vals ?? [];
-    if (wls.length < 10 || wls.length !== vals.length) continue;
-    const label: string = String(detail?.label || report.label || `Report ${report.id}`);
-    return {
-      deviceName: `Sample: ${label}`,
-      firmwareVersion: 0,
-      cct: 0,
-      ra: 0,
-      lux: null,
-      par: 0,
-      peakSignal: 0,
-      darkSignal: 0,
-      integrationTimeMs: 0,
-      compensateLevel: 0,
-      x: 0,
-      y: 0,
-      duv: 0,
-      rIndices: Array(15).fill(0),
-      tm30Rf: null,
-      tm30Rg: null,
-      timestampOnDevice: String(detail?.createdAt ?? ''),
-      spectrum: wls.map((nm, i) => ({ nm: Number(nm), value: Number(vals[i]) })),
-      sampleLabel: label,
-    };
+    const sample = sampleFromDetail(detail, report);
+    if (!sample) continue;
+    const flicker = await fetchFirstFlicker(report.id);
+    return flicker ? { ...sample, flicker } : sample;
   }
   throw new Error('Could not find a public report with spectrum data. Try again.');
+}
+
+function sampleFromDetail(detail: any, report: { id: number; label?: string }): MeterResult | null {
+  const wls: number[] = detail?.wls ?? [];
+  const vals: number[] = detail?.vals ?? [];
+  if (wls.length < 10 || wls.length !== vals.length) return null;
+  const label: string = String(detail?.label || report.label || `Report ${report.id}`);
+  return {
+    deviceName: `Sample: ${label}`,
+    firmwareVersion: 0,
+    cct: 0,
+    ra: 0,
+    lux: null,
+    par: 0,
+    peakSignal: 0,
+    darkSignal: 0,
+    integrationTimeMs: 0,
+    compensateLevel: 0,
+    x: 0,
+    y: 0,
+    duv: 0,
+    rIndices: Array(15).fill(0),
+    tm30Rf: null,
+    tm30Rg: null,
+    timestampOnDevice: String(detail?.createdAt ?? ''),
+    spectrum: wls.map((nm, i) => ({ nm: Number(nm), value: Number(vals[i]) })),
+    sampleLabel: label,
+  };
 }

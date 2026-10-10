@@ -11,6 +11,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Animated, TouchableOpacity, Share, Alert, StyleSheet, Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import HintPressable from './HintPressable';
 import Svg, { Line, Polyline, Polygon, Circle, Path, Text as SvgText } from 'react-native-svg';
 import { flickerRisk, type FlickerReading } from '../ble/liveSessions';
 import { FLICKER_RATE_LABELS, FLICKER_GEAR_LABELS } from '../ble/protocol';
@@ -219,13 +220,13 @@ export default function FlickerChart({ reading, running, history, settings, uplo
     );
   const headRight = (
     <>
-      <TouchableOpacity style={styles.iconPill} onPress={showHelp} accessibilityLabel="About flicker readings" hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
+      <HintPressable hint="About flicker readings" style={styles.iconPill} onPress={showHelp} accessibilityLabel="About flicker readings" hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
         <HeaderIcon d={ICON_HELP} color={LINE} size={16} />
-      </TouchableOpacity>
+      </HintPressable>
       {settings && (
-        <TouchableOpacity style={styles.iconPill} onPress={() => setShowSettings(true)} accessibilityLabel="Flicker settings" hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
+        <HintPressable hint="Flicker settings" style={styles.iconPill} onPress={() => setShowSettings(true)} accessibilityLabel="Flicker settings" hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
           <HeaderIcon d={ICON_GEAR} color={LINE} size={16} />
-        </TouchableOpacity>
+        </HintPressable>
       )}
     </>
   );
@@ -464,13 +465,13 @@ export default function FlickerChart({ reading, running, history, settings, uplo
           <>
             {zoom > 1 && (
               <>
-                <TouchableOpacity style={styles.pill} onPress={() => pan(-1)}><Text style={styles.pillTxt} allowFontScaling={false}>◀</Text></TouchableOpacity>
-                <TouchableOpacity style={styles.pill} onPress={() => pan(1)}><Text style={styles.pillTxt} allowFontScaling={false}>▶</Text></TouchableOpacity>
+                <HintPressable hint="Pan left" style={styles.pill} onPress={() => pan(-1)}><Text style={styles.pillTxt} allowFontScaling={false}>◀</Text></HintPressable>
+                <HintPressable hint="Pan right" style={styles.pill} onPress={() => pan(1)}><Text style={styles.pillTxt} allowFontScaling={false}>▶</Text></HintPressable>
               </>
             )}
-            <TouchableOpacity style={[styles.pill, zoom > 1 && styles.pillOn]} onPress={() => setZoomLevel(zoom === 1 ? 2 : zoom === 2 ? 4 : zoom === 4 ? 8 : 1)}>
+            <HintPressable hint="Zoom (tap to cycle)" style={[styles.pill, zoom > 1 && styles.pillOn]} onPress={() => setZoomLevel(zoom === 1 ? 2 : zoom === 2 ? 4 : zoom === 4 ? 8 : 1)}>
               <Text style={[styles.pillTxt, zoom > 1 && styles.pillTxtOn]} allowFontScaling={false}>{zoom}×</Text>
-            </TouchableOpacity>
+            </HintPressable>
           </>
         )}
         {headRight}

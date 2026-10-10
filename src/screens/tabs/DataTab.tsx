@@ -20,6 +20,7 @@ import { HCRI_BRAND_HOST } from '../../hcri/buildTarget';
 import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
 import LedPickerModal from '../../components/LedPickerModal';
 import { LedDetails } from '../../hcri/ledApi';
+import { hasLed } from '../../hcri/leds';
 import { LedLists } from '../../hcri/ledLists';
 
 const ICON_CLOUD = 'M16 16l-4-4-4 4M12 12v9M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3';
@@ -70,12 +71,12 @@ interface Props {
    * HomeScreen.tsx's own comment on this. Same prop MainTab takes. */
   scrollInputIntoView: (inputRef: React.RefObject<any>) => void;
   /** LED details confirmed for this reading (brand / model / CCT), if any. */
-  ledCurrent?: LedDetails | null;
+  ledCurrent?: LedDetails[] | null;
   /** Opens the LED picker; undefined until the reading is saved to History. */
   onLedEdit?: () => void;
   ledLists?: LedLists | null;
   ledPickerOpen?: boolean;
-  onLedPickerSave?: (d: LedDetails) => void;
+  onLedPickerSave?: (d: LedDetails[]) => void;
   onLedPickerCancel?: () => void;
 }
 
@@ -278,15 +279,20 @@ export default function DataTab({
             <Text style={styles.fieldLabel}>LED</Text>
             {onLedEdit && (
               <TouchableOpacity onPress={onLedEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel="Edit LED details">
-                <Text style={styles.ledEdit}>{ledCurrent && (ledCurrent.brand || ledCurrent.model || ledCurrent.cct) ? 'Edit' : '💡 Add LED details'}</Text>
+                <Text style={styles.ledEdit}>{ledCurrent && ledCurrent.some(hasLed) ? 'Edit' : '💡 Add LED details'}</Text>
               </TouchableOpacity>
             )}
           </View>
-          {ledCurrent && (ledCurrent.brand || ledCurrent.model || ledCurrent.cct) ? (
+          {ledCurrent && ledCurrent.some(hasLed) ? (
             <>
-              <View style={styles.row}><Text style={styles.rowLabel}>Brand</Text><Text style={styles.rowValue}>{ledCurrent.brand || '—'}</Text></View>
-              <View style={styles.row}><Text style={styles.rowLabel}>Model</Text><Text style={styles.rowValue}>{ledCurrent.model || '—'}</Text></View>
-              <View style={styles.row}><Text style={styles.rowLabel}>CCT</Text><Text style={styles.rowValue}>{ledCurrent.cct || '—'}</Text></View>
+              {ledCurrent.filter(hasLed).map((l, i, all) => (
+                <View key={i} style={all.length > 1 && i > 0 ? { marginTop: 8 } : undefined}>
+                  {all.length > 1 && <Text style={styles.fieldLabel}>LED {i + 1}</Text>}
+                  <View style={styles.row}><Text style={styles.rowLabel}>Brand</Text><Text style={styles.rowValue}>{l.brand || '—'}</Text></View>
+                  <View style={styles.row}><Text style={styles.rowLabel}>Model</Text><Text style={styles.rowValue}>{l.model || '—'}</Text></View>
+                  <View style={styles.row}><Text style={styles.rowLabel}>CCT</Text><Text style={styles.rowValue}>{l.cct || '—'}</Text></View>
+                </View>
+              ))}
             </>
           ) : (
             <Text style={styles.ledNone}>{onLedEdit ? 'No LED details yet.' : 'LED details can be added once the reading is saved.'}</Text>

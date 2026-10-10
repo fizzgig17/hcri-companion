@@ -23,13 +23,17 @@ export interface UploadResult {
    * already succeeded either way). */
   reportId?: number;
   isPublic?: boolean;
+  /** True when the server overwrote the report named by replaceId instead of creating a new one. */
+  replaced?: boolean;
 }
 
 export async function uploadToHcri(
   csv: string,
   label: string,
   token: string,
-  log?: (msg: string) => void
+  log?: (msg: string) => void,
+  /** Id of this reading's existing hCRI.io report: the server overwrites it instead of creating a duplicate. */
+  replaceId?: number
 ): Promise<UploadResult> {
   // Deliberately logs the server + endpoint + label + a masked form of the
   // key actually used -- never `csv` (that's the full wavelength/value
@@ -38,7 +42,7 @@ export async function uploadToHcri(
   // answerable from the Logs tab without reproducing/guessing it, while
   // keeping the log itself small enough to be useful (and shareable via
   // shareDebugLog) rather than dominated by spectral data dumps.
-  log?.(`POST ${HCRI_UPLOAD_URL} label="${label}" key=${maskSecret(token)}`);
+  log?.(`POST ${HCRI_UPLOAD_URL} label="${label}"${replaceId ? ` replaceId=${replaceId}` : ''} key=${maskSecret(token)}`);
 
   const form = new FormData();
   // React Native's FormData accepts this Blob-like shape for file fields.
@@ -48,6 +52,7 @@ export async function uploadToHcri(
     type: 'text/csv',
   } as any);
   form.append('label', label);
+  if (replaceId) form.append('replaceId', String(replaceId));
 
   const response = await fetch(HCRI_UPLOAD_URL, {
     method: 'POST',
@@ -69,13 +74,15 @@ export async function uploadToHcri(
   // never the upload's own success/message result.
   let reportId: number | undefined;
   let isPublic: boolean | undefined;
+  let replaced: boolean | undefined;
   try {
     const parsed = JSON.parse(text);
     if (typeof parsed.id === 'number') reportId = parsed.id;
     if (typeof parsed.isPublic === 'boolean') isPublic = parsed.isPublic;
+    if (typeof parsed.replaced === 'boolean') replaced = parsed.replaced;
   } catch {
     // Not JSON, or not the shape expected -- leave both undefined.
   }
 
-  return { success: true, message: text || 'Uploaded', reportId, isPublic };
+  return { success: true, message: text || 'Uploaded', reportId, isPublic, replaced };
 }

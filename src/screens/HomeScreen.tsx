@@ -27,10 +27,11 @@ import { uploadReadingToHcri, uploadFlickerToHcri } from '../hcri/uploadFlickerT
 import { getReportLink } from '../hcri/getReportLink';
 import { fetchSampleReading } from '../hcri/fetchSampleReading';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
-import { loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference } from '../storage/preferences';
+import { loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference, loadTestReportIdPreference } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
-import { addReading, recordUpload, setReadingFlicker, updateReadingLed } from '../storage/readingHistory';
+import { addReading, loadHistory, recordUpload, setReadingFlicker, updateReadingLed } from '../storage/readingHistory';
 import { fetchLedSuggestion, LedDetails, LedSuggestion } from '../hcri/ledApi';
+import { ledPatch, hasLed } from '../hcri/leds';
 import { syncLedForReading } from '../hcri/ledSync';
 import { EMPTY_LED_LISTS, getCachedLedLists, LedLists, refreshLedLists } from '../hcri/ledLists';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
@@ -143,7 +144,7 @@ export default function HomeScreen({ navigation }: any) {
   // (currentReadingId changes) or by the card's own close button; History keeps offering it until approved.
   const [ledSuggestion, setLedSuggestion] = useState<LedSuggestion | null>(null);
   const [ledPickerOpen, setLedPickerOpen] = useState(false);
-  const [currentLed, setCurrentLed] = useState<LedDetails | null>(null);
+  const [currentLeds, setCurrentLeds] = useState<LedDetails[]>([]);
   const [ledLists, setLedLists] = useState<LedLists>(EMPTY_LED_LISTS);
   // True while the copy-link button's own request (getReportLink, for a
   // private report only -- a public one resolves with no request) is in
@@ -271,7 +272,7 @@ export default function HomeScreen({ navigation }: any) {
   const ledCardClosedRef = useRef(false);
   useEffect(() => {
     setLedSuggestion(null);
-    setCurrentLed(null);
+    setCurrentLeds([]);
     ledCardClosedRef.current = false;
   }, [currentReadingId]);
   useEffect(() => {
@@ -291,13 +292,13 @@ export default function HomeScreen({ navigation }: any) {
     return () => { live = false; clearTimeout(t); };
   }, [currentReadingId, uploadTitle]);
 
-  const confirmLed = useCallback(async (d: LedDetails) => {
+  const confirmLed = useCallback(async (d: LedDetails[]) => {
     const id = currentReadingId;
     setLedSuggestion(null);
     setLedPickerOpen(false);
     if (!id) return;
-    setCurrentLed(d);
-    await updateReadingLed(id, { led: d, ledSynced: false, ledDismissed: false }).catch(() => {});
+    setCurrentLeds(d);
+    await updateReadingLed(id, { ...ledPatch(d), ledSynced: false, ledDismissed: !d.some(hasLed), ledCleared: !d.some(hasLed) }).catch(() => {});
     syncLedForReading(id);
   }, [currentReadingId]);
 
@@ -431,8 +432,14 @@ export default function HomeScreen({ navigation }: any) {
    * is the very first connect of the session with nothing recorded yet),
    * this still falls back to the normal picker rather than guessing.
    */
+  // Which connect attempt is current (Cancel bumps it) and what it is doing, for the status line.
+  const connectRunRef = useRef(0);
+  const [connectStage, setConnectStage] = useState<string | null>(null);
   const connect = useCallback(
     async (opts?: { preferLastDeviceOnMultiple?: boolean; promptIfBluetoothOff?: boolean }) => {
+      const run = ++connectRunRef.current;          // a Cancel bumps this, so a stale run stops touching state
+      const stale = () => run !== connectRunRef.current;
+      setConnectStage('Starting Bluetooth…');
       // Clear a test reading in the same batch as the status change, so it
       // never gets a rendered frame beside the "Connecting…" button.
       if (resultRef.current?.sampleLabel) {
@@ -463,12 +470,16 @@ export default function HomeScreen({ navigation }: any) {
         // this is needed -- it's what used to require a power cycle after
         // reloading the app with the meter still connected). Cheap/harmless
         // when there's nothing stale to clear.
+        conn.beginConnect();
         await conn.resetStaleConnection();
+        if (stale()) return;
         // The "stop early once the last-used meter is heard" shortcut is only for the
         // silent foreground reconnect. A launch or a Connect tap listens for the full
         // window so a second meter in range is always seen and offered in the list.
         const lastIdForScan = opts?.preferLastDeviceOnMultiple ? await loadLastDeviceId().catch(() => null) : null;
+        setConnectStage('Scanning for meter…');
         const candidates = await conn.scanForKnownMeters(CONNECT_SCAN_WINDOW_MS, { preferDeviceId: lastIdForScan });
+        if (stale()) return;
 
         if (candidates.length === 0) {
           setMultiMeterCandidates(null);
@@ -477,8 +488,12 @@ export default function HomeScreen({ navigation }: any) {
 
         if (candidates.length === 1) {
           setMultiMeterCandidates(null);
+          setConnectStage('Connecting to meter…');
           await conn.connectToDevice(candidates[0].id);
+          if (stale()) { conn.disconnect().catch(() => {}); return; }
+          setConnectStage('Setting up meter…');
           await initializeMeter(conn);
+          if (stale()) { conn.disconnect().catch(() => {}); return; }
           setDeviceName(conn.getDeviceName());
           setStatus('connected');
           return;
@@ -493,8 +508,12 @@ export default function HomeScreen({ navigation }: any) {
         const lastId = opts?.preferLastDeviceOnMultiple ? await loadLastDeviceId().catch(() => null) : null;
         const lastMatch = lastId ? candidates.find((d) => d.id === lastId) : undefined;
         if (lastMatch) {
+          setConnectStage('Connecting to meter…');
           await conn.connectToDevice(lastMatch.id);
+          if (stale()) { conn.disconnect().catch(() => {}); return; }
+          setConnectStage('Setting up meter…');
           await initializeMeter(conn);
+          if (stale()) { conn.disconnect().catch(() => {}); return; }
           setDeviceName(conn.getDeviceName());
           setStatus('connected');
           return;
@@ -507,6 +526,7 @@ export default function HomeScreen({ navigation }: any) {
         setDevicePickerVisible(true);
         setStatus('disconnected');
       } catch (e: any) {
+        if (stale()) return;   // cancelled: the Cancel handler already reset the status
         appendLog(`Connect failed: ${e.message}`);
         setStatus('disconnected');
       }
@@ -514,13 +534,25 @@ export default function HomeScreen({ navigation }: any) {
     [appendLog, getConnection, showBluetoothOffAlert]
   );
 
+  /** The Cancel tap while "Connecting…": stop the scan/connect and go back to Not Connected right away. */
+  const cancelConnect = useCallback(() => {
+    connectRunRef.current++;
+    getConnection().abortConnect();
+    setConnectStage(null);
+    setStatus('disconnected');
+  }, [getConnection]);
+
   /** Called when the person taps a device in the picker overlay -- whether it just opened from connect()'s own scan, or was reopened later via the "switch meter" icon while already connected to a different one of the same candidates. */
   const selectDeviceFromPicker = useCallback(
     async (deviceId: string) => {
+      const run = ++connectRunRef.current;
+      const stale = () => run !== connectRunRef.current;
       setDevicePickerVisible(false);
       setStatus('connecting');
+      setConnectStage('Connecting to meter…');
       try {
         const conn = getConnection();
+        conn.beginConnect();
         if (conn.isConnected() && conn.getDeviceId() === deviceId) {
           setStatus('connected'); // already on this one -- nothing to do
           return;
@@ -532,10 +564,14 @@ export default function HomeScreen({ navigation }: any) {
           await conn.disconnect();
         }
         await conn.connectToDevice(deviceId);
+        if (stale()) { conn.disconnect().catch(() => {}); return; }
+        setConnectStage('Setting up meter…');
         await initializeMeter(conn);
+        if (stale()) { conn.disconnect().catch(() => {}); return; }
         setDeviceName(conn.getDeviceName());
         setStatus('connected');
       } catch (e: any) {
+        if (stale()) return;
         appendLog(`Connect failed: ${e.message}`);
         setStatus('disconnected');
       }
@@ -670,12 +706,15 @@ export default function HomeScreen({ navigation }: any) {
     if (loadingTestReading) return;
     setLoadingTestReading(true);
     try {
-      const sample = await fetchSampleReading();
+      const wanted = parseInt(await loadTestReportIdPreference().catch(() => ''), 10);
+      const sample = await fetchSampleReading(IS_DEV_BUILD && wanted > 0 ? wanted : undefined);
       setResult(sample);
+      setFlickerReading(sample.flicker ?? null);
+      setFlickerFromReading(!!sample.flicker);
       setUploadSucceeded(false);
       setLastUploadedReport(null);
       setCurrentReadingId(null);
-      appendLog(`Loaded test reading from hCRI.io: ${sample.sampleLabel}`);
+      appendLog(`Loaded test reading from hCRI.io: ${sample.sampleLabel}${sample.flicker ? ' (with flicker)' : ''}`);
     } catch (e: any) {
       appendLog(`Test reading failed: ${e.message}`);
       Alert.alert('Could not load a test reading', e.message ?? 'Check your connection and try again.');
@@ -1208,6 +1247,12 @@ export default function HomeScreen({ navigation }: any) {
       return;
     }
 
+    // If this reading was uploaded before, update that report instead of creating a duplicate.
+    let replaceId: number | undefined = lastUploadedReport?.id;
+    if (!replaceId && currentReadingId) {
+      try { replaceId = (await loadHistory()).find((r) => r.id === currentReadingId)?.reportId; } catch { /* upload as new */ }
+    }
+
     setStatus('uploading');
     // Clears any checkmark (and copy-link icon) left over from a previous
     // attempt on this same reading while this one is in flight, rather
@@ -1220,7 +1265,7 @@ export default function HomeScreen({ navigation }: any) {
     // the field's genuinely empty, rather than silently ignoring a typed
     // title.
     const label = uploadTitle.trim() || defaultLabel(creds.username, result.deviceName);
-    const res = await uploadReadingToHcri(result, csv, label, creds.token, appendLog);
+    const res = await uploadReadingToHcri(result, csv, label, creds.token, appendLog, replaceId);
     // The raw server response (res.message -- hCRI.io's API returns JSON)
     // still goes to Logs for anyone actually debugging an upload either way.
     appendLog(res.message);
@@ -1261,7 +1306,7 @@ export default function HomeScreen({ navigation }: any) {
       Alert.alert('Upload failed', `Could not upload "${label}". Check Logs for details.`);
     }
     setStatus('connected');
-  }, [result, navigation, appendLog, uploadTitle, currentReadingId, blockSampleAction]);
+  }, [result, navigation, appendLog, uploadTitle, currentReadingId, blockSampleAction, lastUploadedReport]);
 
   // Resolves the current lastUploadedReport into a link (see
   // getReportLink.ts) and puts it on the clipboard. Needs its own fresh
@@ -1407,6 +1452,7 @@ export default function HomeScreen({ navigation }: any) {
       <View style={styles.mainArea}>
           <MainTab
             status={status}
+            connectStage={status === 'connecting' ? connectStage : null}
             isBusy={isBusy}
             result={result}
             analysis={analysis}
@@ -1435,11 +1481,11 @@ export default function HomeScreen({ navigation }: any) {
             onUploadTitleChange={setUploadTitle}
             cachedUsername={cachedUsername}
             ledSuggestion={ledSuggestion}
-            ledCurrent={currentLed}
+            ledCurrent={currentLeds.length ? currentLeds : null}
             onLedEdit={currentReadingId ? () => setLedPickerOpen(true) : undefined}
             ledLists={ledLists}
             ledPickerOpen={ledPickerOpen}
-            onLedYes={() => ledSuggestion && confirmLed({ brand: ledSuggestion.brand, model: ledSuggestion.model, cct: ledSuggestion.cct ?? undefined })}
+            onLedYes={() => ledSuggestion && confirmLed([{ brand: ledSuggestion.brand, model: ledSuggestion.model, cct: ledSuggestion.cct ?? undefined }])}
             onLedOther={() => setLedPickerOpen(true)}
             onLedClose={() => { ledCardClosedRef.current = true; setLedSuggestion(null); }}
             onLedPickerCancel={() => setLedPickerOpen(false)}
@@ -1449,7 +1495,10 @@ export default function HomeScreen({ navigation }: any) {
             flicker={
               (status === 'connected' || status === 'uploading' || status === 'measuring') && deviceSupportsFlicker(deviceName) && mode !== 'live'
                 ? { reading: flickerReading, running: mode === 'flicker', focusNonce: flickerFocus, history: flickerHistory, settings: flickerSettingsApi, upload: flickerUploadApi, target: mode === 'flicker' ? flickerTarget : null, onStart: startFlickerSample, onStop: stopFlicker, canSampleReading, fromReading: flickerFromReading, redoLabel: result?.flicker ? 'Redo for reading' : 'Add to reading', readingNote: result ? (currentReadingId ? 'saved' : 'unsaved') : undefined }
-                : undefined
+                : result?.sampleLabel && result.flicker
+                  // A test reading whose report has flicker: show its first capture, view only (no meter needed).
+                  ? { reading: result.flicker, running: false, focusNonce: flickerFocus, history: [], fromReading: true }
+                  : undefined
             }
           />
       </View>
@@ -1470,7 +1519,7 @@ export default function HomeScreen({ navigation }: any) {
             onUploadTitleChange={setUploadTitle}
             onShareCsv={shareCurrentCsv}
             cachedUsername={cachedUsername}
-            ledCurrent={currentLed}
+            ledCurrent={currentLeds.length ? currentLeds : null}
             onLedEdit={currentReadingId ? () => setLedPickerOpen(true) : undefined}
             ledLists={ledLists}
             ledPickerOpen={ledPickerOpen}
@@ -1497,8 +1546,10 @@ export default function HomeScreen({ navigation }: any) {
           copyingLink={copyingLink}
           onCopyLink={copyReportLink}
           onResetConnection={resetConnection}
+          onCancelConnect={cancelConnect}
           liveSupported={deviceSupportsLive(deviceName)}
           flickerSupported={deviceSupportsFlicker(deviceName) && mode !== 'live'}
+          sampleHasFlicker={!!(result?.sampleLabel && result.flicker)}
           activeMode={mode}
           onToggleLive={toggleLive}
           onToggleFlicker={() => setFlickerFocus((n) => n + 1)}
@@ -1507,7 +1558,7 @@ export default function HomeScreen({ navigation }: any) {
           onShowTm30={() => {
             if (!result || !analysis) return;
             navigation.navigate('Tm30Report', {
-              input: tm30InputFromReading(result, analysis, result.sampleLabel || uploadTitle.trim() || 'Current reading', Date.now(), currentLed ?? undefined),
+              input: tm30InputFromReading(result, analysis, result.sampleLabel || uploadTitle.trim() || 'Current reading', Date.now(), currentLeds[0] ?? undefined, currentLeds),
             });
           }}
           onSaveLive={saveLive}

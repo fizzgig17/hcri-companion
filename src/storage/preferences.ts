@@ -62,6 +62,20 @@ export async function saveVerboseLoggingPreference(enabled: boolean): Promise<vo
   await AsyncStorage.setItem(VERBOSE_LOGGING_KEY, enabled ? 'true' : 'false');
 }
 
+// Developer builds only (Settings -> Test report number): which public hCRI.io report "Show a test reading" loads.
+// Empty = a random one.
+const TEST_REPORT_ID_KEY = 'hcri.io.pref.testReportId';
+
+export async function loadTestReportIdPreference(): Promise<string> {
+  return (await AsyncStorage.getItem(TEST_REPORT_ID_KEY)) ?? '';
+}
+
+export async function saveTestReportIdPreference(value: string): Promise<void> {
+  const digits = value.replace(/\D/g, '');
+  if (digits) await AsyncStorage.setItem(TEST_REPORT_ID_KEY, digits);
+  else await AsyncStorage.removeItem(TEST_REPORT_ID_KEY);
+}
+
 // Default ON ("stay connected") -- a backgrounded app (switching briefly
 // to check something else, a screen lock, an incoming call) used to always
 // drop the BLE link, which meant a full re-scan/re-handshake on every

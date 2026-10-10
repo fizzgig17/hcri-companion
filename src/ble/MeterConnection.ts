@@ -257,6 +257,9 @@ export class MeterConnection {
   // Torch Bearer (ESP32 bridge) mode -- see torchBearer.ts. Set only when the
   // connected device's name says so; every HPCS code path ignores these.
   private cancelActiveScan: (() => void) | null = null;
+  // Cancel support: the id of a connect in flight, and a flag so the retry loop doesn't try again after a cancel.
+  private connectingId: string | null = null;
+  private abortRequested = false;
   private tbMode = false;
   private tbSubs: Subscription[] = [];
   private tbReassembler = new TbReassembler();
@@ -390,6 +393,22 @@ export class MeterConnection {
     return devices;
   }
 
+  /** Call at the start of every connect flow: forgets any earlier cancel. */
+  beginConnect(): void {
+    this.abortRequested = false;
+  }
+
+  /** Cancels a connect in progress: ends the scan, drops a half-open link, and stops the retry. Safe to call at any time. */
+  abortConnect(): void {
+    this.abortRequested = true;
+    this.log('Connect cancelled.');
+    this.stopScan();
+    try { this.manager.stopDeviceScan(); } catch { /* none running */ }
+    const id = this.connectingId;
+    if (id) this.manager.cancelDeviceConnection(id).catch(() => {});
+    this.disconnect().catch(() => {});
+  }
+
   /** Ends a scan started by scanForKnownMeters() early (it then resolves with whatever it had heard so far). No-op when none is running. */
   stopScan(): void {
     this.cancelActiveScan?.();
@@ -430,17 +449,22 @@ export class MeterConnection {
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         this.log(attempt === 1 ? `Connecting to ${deviceId}...` : `Connecting to ${deviceId} (retry)...`);
+        this.connectingId = deviceId;
         const device = await this.manager.connectToDevice(deviceId, { timeout: 10000 });
         return await this.finishConnecting(device);
       } catch (e: any) {
         lastErr = e;
+        if (this.abortRequested) break;   // cancelled by the person: no retry
         this.log(`Connect attempt ${attempt} failed: ${e?.message ?? e}`);
         try {
           await this.manager.cancelDeviceConnection(deviceId);
         } catch {
           // nothing to cancel
         }
+        if (String(e?.message ?? '').startsWith('The Torch Bearer bridge is on')) break;   // not a flaky connect: nothing is plugged in, a retry won't change that
         if (attempt < 2) await new Promise<void>((r) => setTimeout(() => r(), 700));
+      } finally {
+        this.connectingId = null;
       }
     }
     throw lastErr;
@@ -523,6 +547,23 @@ export class MeterConnection {
     if (!cmd || !res || !sta) {
       await connected.cancelConnection().catch(() => {});
       throw new Error('This Torch Bearer is missing its expected Bluetooth service -- is the bridge firmware up to date?');
+    }
+    // A bridge with no spectrometer plugged into it still answers Bluetooth. Its status reads state 3 until the
+    // spectrometer connects, so refuse the connection instead of showing "Connected" for a meter that isn't there.
+    // (Older bridge firmware always reads 0 here, so it connects as before.)
+    try {
+      const first = await sta.read();
+      if (first?.value) {
+        const st = new Uint8Array(Buffer.from(first.value, 'base64'));
+        this.log(`Torch Bearer status on connect: state ${st[0]}`, true);
+        if (st[0] === TB_STATE_ERROR) {
+          await connected.cancelConnection().catch(() => {});
+          throw new Error('The Torch Bearer bridge is on, but no spectrometer is plugged into it. Plug the spectrometer in, then connect again.');
+        }
+      }
+    } catch (e: any) {
+      if (e instanceof Error && e.message.startsWith('The Torch Bearer bridge is on')) throw e;
+      this.log(`Could not read the bridge status (continuing): ${describeBleError(e)}`);
     }
     this.tbMode = true;
     this.device = connected;

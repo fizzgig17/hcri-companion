@@ -9,7 +9,17 @@
 // `npx react-native run-android` (nobody's touched this file) matches what
 // `master` ships.
 
-export const HCRI_API_BASE = 'https://www.hcri.io';
+// Optional per-machine override (untracked, see apiConfig.local.ts.example), e.g. to point a local iOS
+// build at dev.hcri.io. CI workflows overwrite this whole file, so they are unaffected.
+let base = 'https://www.hcri.io';
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const local = require('./apiConfig.local');
+  if (local && typeof local.HCRI_API_BASE === 'string' && local.HCRI_API_BASE) base = local.HCRI_API_BASE;
+} catch {
+  // no local override: use production
+}
+export const HCRI_API_BASE: string = base;
 
 // IS_DEV_BUILD, derived from the line above, deliberately does NOT live in
 // this file -- deploy-dev.yml/deploy-master.yml each replace this file's

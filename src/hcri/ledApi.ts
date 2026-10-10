@@ -33,13 +33,21 @@ export async function fetchLedSuggestion(spectrum: MeterResult['spectrum'], toke
   }
 }
 
-/** Saves LED details on an uploaded report. Returns true if the server accepted it. */
-export async function saveLedDetails(reportId: number, d: LedDetails, token: string): Promise<boolean> {
+/**
+ * Saves the LEDs on an uploaded report. Sends the whole list (`leds`, each with brand / led / cct so every LED keeps its own
+ * values) and also the first LED as the older flat brand / model / cct, which a server that predates LED lists still reads.
+ * Returns true if the server accepted it.
+ */
+export async function saveLedDetails(reportId: number, leds: LedDetails[], token: string): Promise<boolean> {
   try {
+    const first = leds[0] ?? {};
     const res = await fetch(`${BASE}/reports/${reportId}/led`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(d),
+      body: JSON.stringify({
+        leds: leds.map((l) => ({ brand: l.brand ?? '', led: l.model ?? '', cct: l.cct ?? '' })),
+        brand: first.brand ?? '', model: first.model ?? '', cct: first.cct ?? '',
+      }),
     });
     return res.ok;
   } catch {

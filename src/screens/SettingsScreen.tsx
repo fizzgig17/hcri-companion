@@ -9,7 +9,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { ScrollView, View, Text, TextInput, Switch, TouchableOpacity, StyleSheet, Alert, Modal, Linking, useWindowDimensions } from 'react-native';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { IS_DEV_BUILD } from '../hcri/buildTarget';
+import { IS_DEV_BUILD, HCRI_API_HOST } from '../hcri/buildTarget';
 import PrimaryButton from '../components/PrimaryButton';
 import DraggableStatList from '../components/DraggableStatList';
 import {
@@ -41,6 +41,8 @@ import {
   saveHapticResultsPreference,
   saveKeepAwakePreference,
   loadVerboseLoggingPreference,
+  loadTestReportIdPreference,
+  saveTestReportIdPreference,
   saveVerboseLoggingPreference,
   loadStayConnectedInBackgroundPreference,
   saveStayConnectedInBackgroundPreference,
@@ -126,6 +128,7 @@ export default function SettingsScreen({ navigation, route }: any) {
   // dumps and full raw-result-body dump, not the ordinary connect/measure
   // milestones and errors, which always show regardless of this setting).
   const [verboseLogging, setVerboseLogging] = useState(false);
+  const [testReportId, setTestReportId] = useState('');
   const [tbCorrection, setTbCorrection] = useState(true);
   const [flickerWithReading, setFlickerWithReading] = useState(false);
   // Which measurements show on the Main tab's result card, and in what
@@ -166,6 +169,7 @@ export default function SettingsScreen({ navigation, route }: any) {
     loadHapticResultsPreference().then(setHapticResults);
     loadStayConnectedInBackgroundPreference().then(setStayConnectedInBackground);
     loadVerboseLoggingPreference().then(setVerboseLogging);
+    loadTestReportIdPreference().then(setTestReportId);
     loadTbCorrectionPreference().then(setTbCorrection);
     loadFlickerWithReadingPreference().then(setFlickerWithReading);
     loadStatDisplayPrefs().then(setStatPrefs);
@@ -560,6 +564,10 @@ export default function SettingsScreen({ navigation, route }: any) {
             value={username}
             onChangeText={setUsername}
             autoCapitalize="none"
+            autoCorrect={false}
+            textContentType="username"
+            autoComplete="username"
+            importantForAutofill="yes"
             placeholder="username"
             placeholderTextColor={colors.mutedFaint}
           />
@@ -570,6 +578,10 @@ export default function SettingsScreen({ navigation, route }: any) {
             value={token}
             onChangeText={setToken}
             autoCapitalize="none"
+            autoCorrect={false}
+            textContentType="password"
+            autoComplete="password"
+            importantForAutofill="yes"
             secureTextEntry
             placeholder="hcri_..."
             placeholderTextColor={colors.mutedFaint}
@@ -619,6 +631,11 @@ export default function SettingsScreen({ navigation, route }: any) {
               value={genEmail}
               onChangeText={setGenEmail}
               autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              textContentType="username"
+              autoComplete="username"
+              importantForAutofill="yes"
               editable={!genBusy}
               placeholder="username or email"
               placeholderTextColor={colors.mutedFaint}
@@ -630,6 +647,10 @@ export default function SettingsScreen({ navigation, route }: any) {
               value={genPassword}
               onChangeText={setGenPassword}
               autoCapitalize="none"
+              autoCorrect={false}
+              textContentType="password"
+              autoComplete="current-password"
+              importantForAutofill="yes"
               secureTextEntry
               editable={!genBusy}
               placeholder="password"
@@ -760,6 +781,29 @@ export default function SettingsScreen({ navigation, route }: any) {
         </View>
         <Switch value={verboseLogging} onValueChange={toggleVerboseLogging} trackColor={{ true: colors.accent }} />
       </View>
+
+      {IS_DEV_BUILD && (
+        <View style={{ marginBottom: 16 }}>
+          <Text style={styles.toggleLabel}>Test report number (developer)</Text>
+          <Text style={[styles.toggleHint, { marginBottom: 8 }]}>
+            “Show a test reading” loads this public report from {HCRI_API_HOST} instead of a random one, including its
+            first flicker reading if it has one. Leave blank for a random report.
+          </Text>
+          <TextInput
+            style={styles.input}
+            value={testReportId}
+            onChangeText={(v) => {
+              const digits = v.replace(/\D/g, '');
+              setTestReportId(digits);
+              saveTestReportIdPreference(digits).catch(() => {});
+            }}
+            keyboardType="number-pad"
+            placeholder="e.g. 1234 (blank = random)"
+            placeholderTextColor={colors.mutedFaint}
+            accessibilityLabel="Test report number"
+          />
+        </View>
+      )}
 
       <View style={styles.statsSection}>
         <View style={styles.statsHeaderRow}>

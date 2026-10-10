@@ -18,7 +18,8 @@
 // sidesteps needing a virtualized list to support reordering at all.
 
 import React, { useEffect, useMemo, useRef } from 'react';
-import { View, Text, TouchableOpacity, PanResponder, PanResponderInstance, Animated, StyleSheet } from 'react-native';
+import { View, Text, PanResponder, PanResponderInstance, Animated, StyleSheet } from 'react-native';
+import HintPressable from './HintPressable';
 import { useTheme } from '../contexts/ThemeContext';
 
 const ROW_HEIGHT = 50;
@@ -193,13 +194,15 @@ export default function DraggableStatList({ order, enabled, labelFor, onReorder,
             <View {...pan.panHandlers} style={styles.handle} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Text style={styles.handleGlyph}>⠿</Text>
             </View>
-            <TouchableOpacity
+            <HintPressable
+              hint="Show or hide this stat"
               style={[styles.checkbox, isEnabled && styles.checkboxChecked]}
               onPress={() => onToggle(id)}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityLabel="Show or hide this stat"
             >
               {isEnabled && <Text style={styles.checkmark}>✓</Text>}
-            </TouchableOpacity>
+            </HintPressable>
             <Text style={[styles.rowLabel, !isEnabled && styles.rowLabelDisabled]}>{labelFor(id)}</Text>
           </Animated.View>
         );
