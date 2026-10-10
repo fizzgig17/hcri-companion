@@ -73,6 +73,8 @@ export interface SavedReading {
   reportIsPublic?: boolean;
   /** LED details the person confirmed (or picked via "Other") for this reading. */
   led?: { brand?: string; model?: string; cct?: string };
+  /** Every LED on this reading (a light can have several, each with its own brand/model/CCT). `led` is the first of these. */
+  leds?: { brand?: string; model?: string; cct?: string }[];
   /** True once the person dismissed the LED suggestion for this reading (never ask again). */
   ledDismissed?: boolean;
   /** Suggestion fetched from hCRI.io, cached so History doesn't re-request it. `none` = asked, no clear match. */
@@ -190,7 +192,7 @@ export async function setReadingFlicker(id: string, flicker: NonNullable<MeterRe
 /** Patches LED-related fields of one reading (confirm / dismiss / cache a suggestion / mark synced). */
 export async function updateReadingLed(
   id: string,
-  patch: Partial<Pick<SavedReading, 'led' | 'ledDismissed' | 'ledSuggestion' | 'ledSynced'>>
+  patch: Partial<Pick<SavedReading, 'led' | 'leds' | 'ledDismissed' | 'ledSuggestion' | 'ledSynced'>>
 ): Promise<void> {
   const existing = await loadHistory();
   await saveAll(existing.map((r) => (r.id === id ? { ...r, ...patch } : r)));

@@ -6,14 +6,16 @@
 import { loadHistory, updateReadingLed } from '../storage/readingHistory';
 import { loadHcriCredentials } from '../storage/secureStorage';
 import { saveLedDetails } from './ledApi';
+import { ledsOfReading } from './leds';
 
 export async function syncLedForReading(id: string): Promise<boolean> {
   try {
     const r = (await loadHistory()).find((x) => x.id === id);
-    if (!r?.led || !r.reportId || r.ledSynced) return false;
+    const leds = ledsOfReading(r);
+    if (!r || !leds.length || !r.reportId || r.ledSynced) return false;
     const creds = await loadHcriCredentials();
     if (!creds?.token) return false;
-    const ok = await saveLedDetails(r.reportId, r.led, creds.token);
+    const ok = await saveLedDetails(r.reportId, leds, creds.token);
     if (ok) await updateReadingLed(id, { ledSynced: true });
     return ok;
   } catch {

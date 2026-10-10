@@ -31,6 +31,7 @@ import { loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadF
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
 import { addReading, recordUpload, setReadingFlicker, updateReadingLed } from '../storage/readingHistory';
 import { fetchLedSuggestion, LedDetails, LedSuggestion } from '../hcri/ledApi';
+import { ledPatch } from '../hcri/leds';
 import { syncLedForReading } from '../hcri/ledSync';
 import { EMPTY_LED_LISTS, getCachedLedLists, LedLists, refreshLedLists } from '../hcri/ledLists';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
@@ -143,7 +144,7 @@ export default function HomeScreen({ navigation }: any) {
   // (currentReadingId changes) or by the card's own close button; History keeps offering it until approved.
   const [ledSuggestion, setLedSuggestion] = useState<LedSuggestion | null>(null);
   const [ledPickerOpen, setLedPickerOpen] = useState(false);
-  const [currentLed, setCurrentLed] = useState<LedDetails | null>(null);
+  const [currentLeds, setCurrentLeds] = useState<LedDetails[]>([]);
   const [ledLists, setLedLists] = useState<LedLists>(EMPTY_LED_LISTS);
   // True while the copy-link button's own request (getReportLink, for a
   // private report only -- a public one resolves with no request) is in
@@ -271,7 +272,7 @@ export default function HomeScreen({ navigation }: any) {
   const ledCardClosedRef = useRef(false);
   useEffect(() => {
     setLedSuggestion(null);
-    setCurrentLed(null);
+    setCurrentLeds([]);
     ledCardClosedRef.current = false;
   }, [currentReadingId]);
   useEffect(() => {
@@ -291,13 +292,13 @@ export default function HomeScreen({ navigation }: any) {
     return () => { live = false; clearTimeout(t); };
   }, [currentReadingId, uploadTitle]);
 
-  const confirmLed = useCallback(async (d: LedDetails) => {
+  const confirmLed = useCallback(async (d: LedDetails[]) => {
     const id = currentReadingId;
     setLedSuggestion(null);
     setLedPickerOpen(false);
     if (!id) return;
-    setCurrentLed(d);
-    await updateReadingLed(id, { led: d, ledSynced: false, ledDismissed: false }).catch(() => {});
+    setCurrentLeds(d);
+    await updateReadingLed(id, { ...ledPatch(d), ledSynced: false, ledDismissed: false }).catch(() => {});
     syncLedForReading(id);
   }, [currentReadingId]);
 
@@ -1471,11 +1472,11 @@ export default function HomeScreen({ navigation }: any) {
             onUploadTitleChange={setUploadTitle}
             cachedUsername={cachedUsername}
             ledSuggestion={ledSuggestion}
-            ledCurrent={currentLed}
+            ledCurrent={currentLeds.length ? currentLeds : null}
             onLedEdit={currentReadingId ? () => setLedPickerOpen(true) : undefined}
             ledLists={ledLists}
             ledPickerOpen={ledPickerOpen}
-            onLedYes={() => ledSuggestion && confirmLed({ brand: ledSuggestion.brand, model: ledSuggestion.model, cct: ledSuggestion.cct ?? undefined })}
+            onLedYes={() => ledSuggestion && confirmLed([{ brand: ledSuggestion.brand, model: ledSuggestion.model, cct: ledSuggestion.cct ?? undefined }])}
             onLedOther={() => setLedPickerOpen(true)}
             onLedClose={() => { ledCardClosedRef.current = true; setLedSuggestion(null); }}
             onLedPickerCancel={() => setLedPickerOpen(false)}
@@ -1506,7 +1507,7 @@ export default function HomeScreen({ navigation }: any) {
             onUploadTitleChange={setUploadTitle}
             onShareCsv={shareCurrentCsv}
             cachedUsername={cachedUsername}
-            ledCurrent={currentLed}
+            ledCurrent={currentLeds.length ? currentLeds : null}
             onLedEdit={currentReadingId ? () => setLedPickerOpen(true) : undefined}
             ledLists={ledLists}
             ledPickerOpen={ledPickerOpen}
@@ -1544,7 +1545,7 @@ export default function HomeScreen({ navigation }: any) {
           onShowTm30={() => {
             if (!result || !analysis) return;
             navigation.navigate('Tm30Report', {
-              input: tm30InputFromReading(result, analysis, result.sampleLabel || uploadTitle.trim() || 'Current reading', Date.now(), currentLed ?? undefined),
+              input: tm30InputFromReading(result, analysis, result.sampleLabel || uploadTitle.trim() || 'Current reading', Date.now(), currentLeds[0] ?? undefined, currentLeds),
             });
           }}
           onSaveLive={saveLive}

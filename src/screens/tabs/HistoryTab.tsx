@@ -42,7 +42,8 @@ function ActionIcon({ d, color, size = 22 }: { d: string; color: string; size?: 
   );
 }
 import { analyzeSpectrum } from '../../utils/spectralAnalysis';
-import LedSuggestionCard, { ledText } from '../../components/LedSuggestionCard';
+import LedSuggestionCard from '../../components/LedSuggestionCard';
+import { ledsLine, ledsOfReading } from '../../hcri/leds';
 
 interface Props {
   history: SavedReading[];
@@ -351,9 +352,9 @@ function HistoryRow({
         <Text style={{ color: colors.text, fontSize: 13 }}>{reading.label}</Text>
       </TouchableOpacity>
 
-      {reading.led ? (
+      {ledsOfReading(reading).length ? (
         <TouchableOpacity onPress={() => onLedPick(reading)} disabled={selectMode} style={{ marginTop: 4 }} accessibilityLabel="LED details. Tap to change.">
-          <Text style={{ color: colors.muted, fontSize: 12 }}>💡 {ledText({ brand: reading.led.brand, model: reading.led.model, cct: reading.led.cct })}</Text>
+          <Text style={{ color: colors.muted, fontSize: 12 }}>💡 {ledsLine(ledsOfReading(reading))}</Text>
         </TouchableOpacity>
       ) : !selectMode && !reading.ledDismissed && reading.ledSuggestion && reading.ledSuggestion !== 'none' ? (
         <View style={{ marginTop: 6 }}>

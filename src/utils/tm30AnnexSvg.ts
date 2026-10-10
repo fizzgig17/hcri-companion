@@ -23,6 +23,8 @@ export interface AnnexInput {
   r9: number;
   /** LED the person confirmed for this reading (fills the LED / CCT boxes in the strip under the header). */
   led?: { brand?: string; model?: string; cct?: string };
+  /** Every LED when there is more than one (the strip then lists each, separated by " / "). */
+  leds?: { brand?: string; model?: string; cct?: string }[];
   /** Footer, right side. */
   generatedBy?: string;
 }
@@ -115,9 +117,11 @@ export function buildAnnexSvg(input: AnnexInput, widthPx: number, heightPx: numb
   o.push(rect(0, 52, ANNEX_W, 34, '#f0f4f8'));
   o.push(line(0, 86, ANNEX_W, 86, COL.border, 0.5));
   const cols: [string, string][] = [['SOURCE', input.title || '—']];
-  const ledName = [input.led?.brand, input.led?.model].filter(Boolean).join(' ');
+  const ledList = input.leds && input.leds.length ? input.leds : input.led ? [input.led] : [];
+  const ledName = ledList.map((l) => [l.brand, l.model].filter(Boolean).join(' ')).filter(Boolean).join(' / ');
   if (ledName) cols.push(['LED', ledName]);
-  if (input.led?.cct) cols.push(['CCT', `${String(input.led.cct).replace(/\s*k$/i, '')}K`]);
+  const cctText = ledList.map((l) => (l.cct ? `${String(l.cct).replace(/\s*k$/i, '')}K` : '')).filter(Boolean).join(' / ');
+  if (cctText) cols.push(['CCT', cctText]);
   const colW = ANNEX_W / cols.length;
   cols.forEach(([k, v], i) => {
     const x = i * colW + 16;

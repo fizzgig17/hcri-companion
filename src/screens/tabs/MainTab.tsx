@@ -33,6 +33,7 @@ import { SpectralAnalysis } from '../../utils/spectralAnalysis';
 import LedSuggestionCard from '../../components/LedSuggestionCard';
 import LedPickerModal from '../../components/LedPickerModal';
 import { LedDetails, LedSuggestion } from '../../hcri/ledApi';
+import { hasLed } from '../../hcri/leds';
 import { LedLists } from '../../hcri/ledLists';
 import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
 import HintPressable from '../../components/HintPressable';
@@ -53,7 +54,7 @@ interface Props {
   /** LED suggestion card (floats over the lower part of the chart; never resizes it or covers the action bar). */
   ledSuggestion?: LedSuggestion | null;
   /** LED details already confirmed for the current reading (shown on the LED pill in the title box). */
-  ledCurrent?: LedDetails | null;
+  ledCurrent?: LedDetails[] | null;
   /** Opens the LED picker for the current reading (the pill in the title box). */
   onLedEdit?: () => void;
   ledLists?: LedLists;
@@ -62,7 +63,7 @@ interface Props {
   onLedOther?: () => void;
   onLedClose?: () => void;
   onLedPickerCancel?: () => void;
-  onLedPickerSave?: (d: LedDetails) => void;
+  onLedPickerSave?: (d: LedDetails[]) => void;
   status: Status;
   isBusy: boolean;
   result: MeterResult | null;
@@ -470,7 +471,7 @@ export default function MainTab({
           <LedPickerModal
             visible={!!ledPickerOpen}
             lists={ledLists}
-            initial={ledCurrent ?? (ledSuggestion ? { brand: ledSuggestion.brand, model: ledSuggestion.model, cct: ledSuggestion.cct ?? undefined } : undefined)}
+            initial={ledCurrent ?? (ledSuggestion ? [{ brand: ledSuggestion.brand, model: ledSuggestion.model, cct: ledSuggestion.cct ?? undefined }] : undefined)}
             onSave={onLedPickerSave}
             onCancel={onLedPickerCancel}
           />
@@ -498,8 +499,8 @@ export default function MainTab({
             {!result?.sampleLabel && onLedEdit && (
               <TouchableOpacity style={styles.ledPill} onPress={onLedEdit} accessibilityRole="button" accessibilityLabel="LED details for this reading">
                 <View style={styles.ledPillInner}>
-                  <Text style={{ color: ledCurrent && (ledCurrent.brand || ledCurrent.model || ledCurrent.cct) ? colors.accent : colors.muted, fontSize: 12, fontWeight: '600' }}>
-                    {ledCurrent && (ledCurrent.brand || ledCurrent.model || ledCurrent.cct) ? '💡 LED ✓' : '💡 Add LED'}
+                  <Text style={{ color: ledCurrent && ledCurrent.some(hasLed) ? colors.accent : colors.muted, fontSize: 12, fontWeight: '600' }}>
+                    {ledCurrent && ledCurrent.filter(hasLed).length > 1 ? `💡 ${ledCurrent.filter(hasLed).length} LEDs ✓` : ledCurrent && ledCurrent.some(hasLed) ? '💡 LED ✓' : '💡 Add LED'}
                   </Text>
                 </View>
               </TouchableOpacity>

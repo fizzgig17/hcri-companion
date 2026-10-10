@@ -33,13 +33,15 @@ export interface Tm30Input {
   r9: number;
   /** LED the person confirmed for this reading (shown in the strip under the header). */
   led?: { brand?: string; model?: string; cct?: string };
+  leds?: { brand?: string; model?: string; cct?: string }[];
 }
 
 /** Report input for a reading: the spectrum plus the app's own analysis values. */
-export function tm30InputFromReading(result: MeterResult, analysis: SpectralAnalysis, title: string, takenAt?: number, led?: Tm30Input['led']): Tm30Input {
+export function tm30InputFromReading(result: MeterResult, analysis: SpectralAnalysis, title: string, takenAt?: number, led?: Tm30Input['led'], leds?: Tm30Input['leds']): Tm30Input {
   return {
     title,
     led,
+    leds,
     takenAt,
     deviceName: result.sampleLabel ? undefined : result.deviceName,
     spectrum: result.spectrum,

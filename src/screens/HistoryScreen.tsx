@@ -45,6 +45,7 @@ import LedPickerModal from '../components/LedPickerModal';
 import { EMPTY_LED_LISTS, getCachedLedLists, LedLists, refreshLedLists } from '../hcri/ledLists';
 import { fetchLedSuggestion, LedDetails } from '../hcri/ledApi';
 import { syncLedForReading } from '../hcri/ledSync';
+import { ledPatch, ledsOfReading } from '../hcri/leds';
 
 export default function HistoryScreen({ navigation }: any) {
   const { colors } = useTheme();
@@ -87,9 +88,9 @@ export default function HistoryScreen({ navigation }: any) {
     setHistory((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
     return updateReadingLed(id, patch);
   }, []);
-  const confirmLed = useCallback(async (id: string, d: LedDetails) => {
+  const confirmLed = useCallback(async (id: string, d: LedDetails[]) => {
     setLedPickFor(null);
-    await patchLed(id, { led: d, ledSynced: false, ledDismissed: false }).catch(() => {});
+    await patchLed(id, { ...ledPatch(d), ledSynced: false, ledDismissed: false }).catch(() => {});
     const ok = await syncLedForReading(id);
     if (ok) setHistory((prev) => prev.map((r) => (r.id === id ? { ...r, ledSynced: true } : r)));
   }, [patchLed]);
@@ -389,13 +390,13 @@ export default function HistoryScreen({ navigation }: any) {
           bulkUploading={historyBulkUploading}
           onCopyLink={copyReportLinkFromHistory}
           onOpenReport={openReportFromHistory}
-          onLedConfirm={confirmLed}
+          onLedConfirm={(id, d) => confirmLed(id, [d])}
           onLedPick={setLedPickFor}
           onLedDismiss={(id) => { patchLed(id, { ledDismissed: true }).catch(() => {}); }}
           onOpenTm30={(reading) => {
             try {
               const analysis = reading.analysis ?? analyzeSpectrum(reading.result.spectrum);
-              navigation.navigate('Tm30Report', { input: tm30InputFromReading(reading.result, analysis, reading.label, reading.savedAt, reading.led) });
+              navigation.navigate('Tm30Report', { input: tm30InputFromReading(reading.result, analysis, reading.label, reading.savedAt, reading.led, ledsOfReading(reading)) });
             } catch (e: any) {
               Alert.alert('Could not open the TM-30 report', String(e?.message ?? e));
             }
@@ -406,7 +407,7 @@ export default function HistoryScreen({ navigation }: any) {
       <LedPickerModal
         visible={!!ledPickFor}
         lists={ledLists}
-        initial={ledPickFor?.led ?? (ledPickFor && ledPickFor.ledSuggestion && ledPickFor.ledSuggestion !== 'none' ? { brand: ledPickFor.ledSuggestion.brand, model: ledPickFor.ledSuggestion.model, cct: ledPickFor.ledSuggestion.cct ?? undefined } : undefined)}
+        initial={ledPickFor && ledsOfReading(ledPickFor).length ? ledsOfReading(ledPickFor) : (ledPickFor && ledPickFor.ledSuggestion && ledPickFor.ledSuggestion !== 'none' ? [{ brand: ledPickFor.ledSuggestion.brand, model: ledPickFor.ledSuggestion.model, cct: ledPickFor.ledSuggestion.cct ?? undefined }] : undefined)}
         onSave={(d) => ledPickFor && confirmLed(ledPickFor.id, d)}
         onCancel={() => setLedPickFor(null)}
       />
