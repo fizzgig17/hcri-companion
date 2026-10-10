@@ -431,8 +431,14 @@ export default function HomeScreen({ navigation }: any) {
    * is the very first connect of the session with nothing recorded yet),
    * this still falls back to the normal picker rather than guessing.
    */
+  // Which connect attempt is current (Cancel bumps it) and what it is doing, for the status line.
+  const connectRunRef = useRef(0);
+  const [connectStage, setConnectStage] = useState<string | null>(null);
   const connect = useCallback(
     async (opts?: { preferLastDeviceOnMultiple?: boolean; promptIfBluetoothOff?: boolean }) => {
+      const run = ++connectRunRef.current;          // a Cancel bumps this, so a stale run stops touching state
+      const stale = () => run !== connectRunRef.current;
+      setConnectStage('Starting Bluetooth…');
       // Clear a test reading in the same batch as the status change, so it
       // never gets a rendered frame beside the "Connecting…" button.
       if (resultRef.current?.sampleLabel) {
@@ -463,12 +469,16 @@ export default function HomeScreen({ navigation }: any) {
         // this is needed -- it's what used to require a power cycle after
         // reloading the app with the meter still connected). Cheap/harmless
         // when there's nothing stale to clear.
+        conn.beginConnect();
         await conn.resetStaleConnection();
+        if (stale()) return;
         // The "stop early once the last-used meter is heard" shortcut is only for the
         // silent foreground reconnect. A launch or a Connect tap listens for the full
         // window so a second meter in range is always seen and offered in the list.
         const lastIdForScan = opts?.preferLastDeviceOnMultiple ? await loadLastDeviceId().catch(() => null) : null;
+        setConnectStage('Scanning for meter…');
         const candidates = await conn.scanForKnownMeters(CONNECT_SCAN_WINDOW_MS, { preferDeviceId: lastIdForScan });
+        if (stale()) return;
 
         if (candidates.length === 0) {
           setMultiMeterCandidates(null);
@@ -477,8 +487,12 @@ export default function HomeScreen({ navigation }: any) {
 
         if (candidates.length === 1) {
           setMultiMeterCandidates(null);
+          setConnectStage('Connecting to meter…');
           await conn.connectToDevice(candidates[0].id);
+          if (stale()) { conn.disconnect().catch(() => {}); return; }
+          setConnectStage('Setting up meter…');
           await initializeMeter(conn);
+          if (stale()) { conn.disconnect().catch(() => {}); return; }
           setDeviceName(conn.getDeviceName());
           setStatus('connected');
           return;
@@ -493,8 +507,12 @@ export default function HomeScreen({ navigation }: any) {
         const lastId = opts?.preferLastDeviceOnMultiple ? await loadLastDeviceId().catch(() => null) : null;
         const lastMatch = lastId ? candidates.find((d) => d.id === lastId) : undefined;
         if (lastMatch) {
+          setConnectStage('Connecting to meter…');
           await conn.connectToDevice(lastMatch.id);
+          if (stale()) { conn.disconnect().catch(() => {}); return; }
+          setConnectStage('Setting up meter…');
           await initializeMeter(conn);
+          if (stale()) { conn.disconnect().catch(() => {}); return; }
           setDeviceName(conn.getDeviceName());
           setStatus('connected');
           return;
@@ -507,6 +525,7 @@ export default function HomeScreen({ navigation }: any) {
         setDevicePickerVisible(true);
         setStatus('disconnected');
       } catch (e: any) {
+        if (stale()) return;   // cancelled: the Cancel handler already reset the status
         appendLog(`Connect failed: ${e.message}`);
         setStatus('disconnected');
       }
@@ -514,13 +533,25 @@ export default function HomeScreen({ navigation }: any) {
     [appendLog, getConnection, showBluetoothOffAlert]
   );
 
+  /** The Cancel tap while "Connecting…": stop the scan/connect and go back to Not Connected right away. */
+  const cancelConnect = useCallback(() => {
+    connectRunRef.current++;
+    getConnection().abortConnect();
+    setConnectStage(null);
+    setStatus('disconnected');
+  }, [getConnection]);
+
   /** Called when the person taps a device in the picker overlay -- whether it just opened from connect()'s own scan, or was reopened later via the "switch meter" icon while already connected to a different one of the same candidates. */
   const selectDeviceFromPicker = useCallback(
     async (deviceId: string) => {
+      const run = ++connectRunRef.current;
+      const stale = () => run !== connectRunRef.current;
       setDevicePickerVisible(false);
       setStatus('connecting');
+      setConnectStage('Connecting to meter…');
       try {
         const conn = getConnection();
+        conn.beginConnect();
         if (conn.isConnected() && conn.getDeviceId() === deviceId) {
           setStatus('connected'); // already on this one -- nothing to do
           return;
@@ -532,10 +563,14 @@ export default function HomeScreen({ navigation }: any) {
           await conn.disconnect();
         }
         await conn.connectToDevice(deviceId);
+        if (stale()) { conn.disconnect().catch(() => {}); return; }
+        setConnectStage('Setting up meter…');
         await initializeMeter(conn);
+        if (stale()) { conn.disconnect().catch(() => {}); return; }
         setDeviceName(conn.getDeviceName());
         setStatus('connected');
       } catch (e: any) {
+        if (stale()) return;
         appendLog(`Connect failed: ${e.message}`);
         setStatus('disconnected');
       }
@@ -1407,6 +1442,7 @@ export default function HomeScreen({ navigation }: any) {
       <View style={styles.mainArea}>
           <MainTab
             status={status}
+            connectStage={status === 'connecting' ? connectStage : null}
             isBusy={isBusy}
             result={result}
             analysis={analysis}
@@ -1497,6 +1533,7 @@ export default function HomeScreen({ navigation }: any) {
           copyingLink={copyingLink}
           onCopyLink={copyReportLink}
           onResetConnection={resetConnection}
+          onCancelConnect={cancelConnect}
           liveSupported={deviceSupportsLive(deviceName)}
           flickerSupported={deviceSupportsFlicker(deviceName) && mode !== 'live'}
           activeMode={mode}

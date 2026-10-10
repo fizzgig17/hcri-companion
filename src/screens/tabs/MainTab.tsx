@@ -121,6 +121,8 @@ interface Props {
    * Home's own header (dropped along with the rest of that header -- see
    * HomeScreen.tsx), so this is the one place it's still visible at all. */
   connectedDeviceName?: string | null;
+  /** What the connect sequence is doing right now ("Scanning for meter…"); shown instead of plain "Connecting…". */
+  connectStage?: string | null;
   /** Meter battery level from 8C C3, or null/undefined until the meter has answered (then nothing is shown). */
   battery?: BatteryStatus | null;
   /** Upload title/label -- the SAME state DataTab's own Upload Title field
@@ -173,6 +175,7 @@ export default function MainTab({
   onCopyLink,
   statIds,
   connectedDeviceName,
+  connectStage,
   connectedDeviceId,
   battery,
   uploadTitle,
@@ -365,10 +368,10 @@ export default function MainTab({
         {connectedDeviceName ? (
           <>
             <Text style={[styles.deviceNameText, { flexShrink: 1 }]} numberOfLines={1}>{connectedDeviceName}</Text>
-            <Text style={[styles.statusText, { flexShrink: 0 }]} numberOfLines={1}> · {statusLabels[status]}</Text>
+            <Text style={[styles.statusText, { flexShrink: 0 }]} numberOfLines={1}> · {connectStage || statusLabels[status]}</Text>
           </>
         ) : (
-          <Text style={styles.statusText} numberOfLines={1}>{statusLabels[status]}</Text>
+          <Text style={styles.statusText} numberOfLines={1}>{connectStage || statusLabels[status]}</Text>
         )}
         {isBusy && <ActivityIndicator size="small" color={colors.muted} style={{ marginLeft: 8 }} />}
         {/* Meter battery (8C C3). Only while a meter is connected and has

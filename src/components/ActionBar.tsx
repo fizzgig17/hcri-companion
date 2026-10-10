@@ -59,6 +59,7 @@ interface Props {
   hasReading: boolean;
   isSample: boolean;
   connect: () => void;
+  onCancelConnect?: () => void;
   measure: () => void;
   disconnect: () => void;
   onShowTestReading: () => void;
@@ -208,7 +209,9 @@ export default function ActionBar(p: Props) {
         </View>
 
         {status === 'disconnected' && mainButton('bluetooth', 'Connect to Meter', p.connect, p.onResetConnection)}
-        {busyLabel && mainButton(status === 'connecting' ? 'bluetooth' : 'play', busyLabel)}
+        {busyLabel && (status === 'connecting'
+          ? mainButton('bluetooth', 'Tap to cancel', p.onCancelConnect)
+          : mainButton('play', busyLabel))}
         {connected && mainButton('play', 'Take reading', idle ? p.measure : undefined)}
 
         <View style={[styles.slot, styles.slotRight]}>
