@@ -29,7 +29,10 @@ import { fetchSampleReading } from '../hcri/fetchSampleReading';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
 import { loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
-import { addReading, recordUpload, setReadingFlicker } from '../storage/readingHistory';
+import { addReading, recordUpload, setReadingFlicker, updateReadingLed } from '../storage/readingHistory';
+import { fetchLedSuggestion, LedDetails, LedSuggestion } from '../hcri/ledApi';
+import { syncLedForReading } from '../hcri/ledSync';
+import { EMPTY_LED_LISTS, getCachedLedLists, LedLists, refreshLedLists } from '../hcri/ledLists';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
 import { shareDebugLog } from '../utils/shareLog';
 import { shareSingleReadingCsv } from '../utils/shareCsv';
@@ -136,6 +139,12 @@ export default function HomeScreen({ navigation }: any) {
   // moment a fresh measurement starts, so an upload triggered right after
   // can never accidentally write onto a PREVIOUS reading's History row.
   const [currentReadingId, setCurrentReadingId] = useState<string | null>(null);
+  // LED suggestion for the current reading (Main tab's floating card). Hidden by taking a new reading
+  // (currentReadingId changes) or by the card's own close button; History keeps offering it until approved.
+  const [ledSuggestion, setLedSuggestion] = useState<LedSuggestion | null>(null);
+  const [ledPickerOpen, setLedPickerOpen] = useState(false);
+  const [currentLed, setCurrentLed] = useState<LedDetails | null>(null);
+  const [ledLists, setLedLists] = useState<LedLists>(EMPTY_LED_LISTS);
   // True while the copy-link button's own request (getReportLink, for a
   // private report only -- a public one resolves with no request) is in
   // flight, so the icon can show a spinner instead of being tappable
@@ -248,6 +257,49 @@ export default function HomeScreen({ navigation }: any) {
       hideSub.remove();
     };
   }, [measureAndScroll]);
+
+  // LED dropdown lists: show the cached copy right away, fetch the first time (if online), re-check at most daily.
+  useEffect(() => {
+    let live = true;
+    getCachedLedLists().then((l) => live && setLedLists(l));
+    refreshLedLists().then((l) => live && setLedLists(l));
+    return () => { live = false; };
+  }, []);
+
+  // Ask hCRI.io what LED this spectrum looks like whenever a new real reading is saved, and again when the
+  // person gives it a title (the title can name the LED, which settles near-ties).
+  const ledCardClosedRef = useRef(false);
+  useEffect(() => {
+    setLedSuggestion(null);
+    setCurrentLed(null);
+    ledCardClosedRef.current = false;
+  }, [currentReadingId]);
+  useEffect(() => {
+    const id = currentReadingId;
+    const r = resultRef.current;
+    if (!id || !r || r.sampleLabel) return;
+    let live = true;
+    // Debounced so typing/saving a title doesn't fire a request per change.
+    const t = setTimeout(async () => {
+      const creds = await loadHcriCredentials();
+      if (!creds?.token) return;
+      const s = await fetchLedSuggestion(r.spectrum, creds.token, uploadTitle);
+      if (!live || s === undefined) return;
+      await updateReadingLed(id, { ledSuggestion: s ?? 'none' }).catch(() => {});
+      if (s && !ledCardClosedRef.current) setLedSuggestion(s);
+    }, 400);
+    return () => { live = false; clearTimeout(t); };
+  }, [currentReadingId, uploadTitle]);
+
+  const confirmLed = useCallback(async (d: LedDetails) => {
+    const id = currentReadingId;
+    setLedSuggestion(null);
+    setLedPickerOpen(false);
+    if (!id) return;
+    setCurrentLed(d);
+    await updateReadingLed(id, { led: d, ledSynced: false, ledDismissed: false }).catch(() => {});
+    syncLedForReading(id);
+  }, [currentReadingId]);
 
   useEffect(() => {
     const loadCachedUsername = () => {
@@ -1197,9 +1249,10 @@ export default function HomeScreen({ navigation }: any) {
       // (or neither) instead of both. Best-effort: a storage hiccup here
       // shouldn't make an otherwise-successful upload look like it failed.
       if (currentReadingId) {
-        recordUpload(currentReadingId, label, res.reportId, res.isPublic).catch((e: any) =>
-          appendLog(`Failed to sync upload to history: ${e.message}`)
-        );
+        const rid = currentReadingId;
+        recordUpload(rid, label, res.reportId, res.isPublic)
+          .then(() => syncLedForReading(rid))
+          .catch((e: any) => appendLog(`Failed to sync upload to history: ${e.message}`));
       }
     } else {
       // A failure is still worth interrupting for -- this is the one
@@ -1381,6 +1434,16 @@ export default function HomeScreen({ navigation }: any) {
             uploadTitle={uploadTitle}
             onUploadTitleChange={setUploadTitle}
             cachedUsername={cachedUsername}
+            ledSuggestion={ledSuggestion}
+            ledCurrent={currentLed}
+            onLedEdit={currentReadingId ? () => setLedPickerOpen(true) : undefined}
+            ledLists={ledLists}
+            ledPickerOpen={ledPickerOpen}
+            onLedYes={() => ledSuggestion && confirmLed({ brand: ledSuggestion.brand, model: ledSuggestion.model, cct: ledSuggestion.cct ?? undefined })}
+            onLedOther={() => setLedPickerOpen(true)}
+            onLedClose={() => { ledCardClosedRef.current = true; setLedSuggestion(null); }}
+            onLedPickerCancel={() => setLedPickerOpen(false)}
+            onLedPickerSave={confirmLed}
             scrollInputIntoView={scrollInputIntoView}
             pagerResetKey={pagerResetKey}
             flicker={
@@ -1407,6 +1470,12 @@ export default function HomeScreen({ navigation }: any) {
             onUploadTitleChange={setUploadTitle}
             onShareCsv={shareCurrentCsv}
             cachedUsername={cachedUsername}
+            ledCurrent={currentLed}
+            onLedEdit={currentReadingId ? () => setLedPickerOpen(true) : undefined}
+            ledLists={ledLists}
+            ledPickerOpen={ledPickerOpen}
+            onLedPickerSave={confirmLed}
+            onLedPickerCancel={() => setLedPickerOpen(false)}
           />
         )}
       </ScrollView>
@@ -1438,7 +1507,7 @@ export default function HomeScreen({ navigation }: any) {
           onShowTm30={() => {
             if (!result || !analysis) return;
             navigation.navigate('Tm30Report', {
-              input: tm30InputFromReading(result, analysis, result.sampleLabel || uploadTitle.trim() || 'Current reading', Date.now()),
+              input: tm30InputFromReading(result, analysis, result.sampleLabel || uploadTitle.trim() || 'Current reading', Date.now(), currentLed ?? undefined),
             });
           }}
           onSaveLive={saveLive}

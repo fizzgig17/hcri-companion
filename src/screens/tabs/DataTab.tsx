@@ -18,6 +18,9 @@ import { SpectralAnalysis } from '../../utils/spectralAnalysis';
 import { buildCsv, defaultLabel } from '../../hcri/buildCsv';
 import { HCRI_BRAND_HOST } from '../../hcri/buildTarget';
 import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
+import LedPickerModal from '../../components/LedPickerModal';
+import { LedDetails } from '../../hcri/ledApi';
+import { LedLists } from '../../hcri/ledLists';
 
 const ICON_CLOUD = 'M16 16l-4-4-4 4M12 12v9M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3';
 const ICON_TRAY = 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12';
@@ -66,6 +69,14 @@ interface Props {
   /** Scrolls a given TextInput ref clear of the keyboard -- see
    * HomeScreen.tsx's own comment on this. Same prop MainTab takes. */
   scrollInputIntoView: (inputRef: React.RefObject<any>) => void;
+  /** LED details confirmed for this reading (brand / model / CCT), if any. */
+  ledCurrent?: LedDetails | null;
+  /** Opens the LED picker; undefined until the reading is saved to History. */
+  onLedEdit?: () => void;
+  ledLists?: LedLists | null;
+  ledPickerOpen?: boolean;
+  onLedPickerSave?: (d: LedDetails) => void;
+  onLedPickerCancel?: () => void;
 }
 
 export default function DataTab({
@@ -82,6 +93,12 @@ export default function DataTab({
   onShareCsv,
   cachedUsername,
   scrollInputIntoView,
+  ledCurrent,
+  onLedEdit,
+  ledLists,
+  ledPickerOpen,
+  onLedPickerSave,
+  onLedPickerCancel,
 }: Props) {
   const { colors } = useTheme();
   // See HomeScreen.tsx's scrollInputIntoView comment -- needs a ref to the
@@ -159,6 +176,11 @@ export default function DataTab({
     copyLinkIcon: { fontSize: 15, marginRight: 6 },
     copyLinkSpinner: { marginRight: 6 },
     copyLinkLabel: { color: colors.accent, fontSize: 13, fontWeight: '700' },
+
+    ledBlock: { marginTop: 12 },
+    ledHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+    ledEdit: { color: colors.accent, fontSize: 12, fontWeight: '700' },
+    ledNone: { color: colors.muted, fontSize: 12, paddingVertical: 4 },
 
     fieldLabel: { color: colors.muted, fontSize: 11, marginBottom: 4 },
     // Background/border live on the wrapper, not the TextInput itself, so the
@@ -247,6 +269,38 @@ export default function DataTab({
             editable={!result.sampleLabel}
           />
         </View>
+
+        {/* LED details: the same brand / model / CCT Main's pill and the
+            History strip edit. Shown here too so the Data tab lists
+            everything that goes with this reading. */}
+        <View style={styles.ledBlock}>
+          <View style={styles.ledHeader}>
+            <Text style={styles.fieldLabel}>LED</Text>
+            {onLedEdit && (
+              <TouchableOpacity onPress={onLedEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel="Edit LED details">
+                <Text style={styles.ledEdit}>{ledCurrent && (ledCurrent.brand || ledCurrent.model || ledCurrent.cct) ? 'Edit' : '💡 Add LED details'}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          {ledCurrent && (ledCurrent.brand || ledCurrent.model || ledCurrent.cct) ? (
+            <>
+              <View style={styles.row}><Text style={styles.rowLabel}>Brand</Text><Text style={styles.rowValue}>{ledCurrent.brand || '—'}</Text></View>
+              <View style={styles.row}><Text style={styles.rowLabel}>Model</Text><Text style={styles.rowValue}>{ledCurrent.model || '—'}</Text></View>
+              <View style={styles.row}><Text style={styles.rowLabel}>CCT</Text><Text style={styles.rowValue}>{ledCurrent.cct || '—'}</Text></View>
+            </>
+          ) : (
+            <Text style={styles.ledNone}>{onLedEdit ? 'No LED details yet.' : 'LED details can be added once the reading is saved.'}</Text>
+          )}
+        </View>
+        {ledLists && onLedPickerSave && onLedPickerCancel && (
+          <LedPickerModal
+            visible={!!ledPickerOpen}
+            lists={ledLists}
+            initial={ledCurrent ?? undefined}
+            onSave={onLedPickerSave}
+            onCancel={onLedPickerCancel}
+          />
+        )}
 
         {/* Exactly what buildCsv() will send -- calling the real function
             rather than reconstructing the format here, so this preview can

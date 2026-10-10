@@ -30,6 +30,7 @@ import {
   deleteReading,
   deleteManyReadings,
   setReadingReportLink,
+  updateReadingLed,
   SavedReading,
 } from '../storage/readingHistory';
 import { loadHcriCredentials } from '../storage/secureStorage';
@@ -40,6 +41,10 @@ import { shareSingleReadingCsv, shareAllReadingsCsv } from '../utils/shareCsv';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
 import { tm30InputFromReading } from '../utils/tm30Report';
 import { analyzeSpectrum } from '../utils/spectralAnalysis';
+import LedPickerModal from '../components/LedPickerModal';
+import { EMPTY_LED_LISTS, getCachedLedLists, LedLists, refreshLedLists } from '../hcri/ledLists';
+import { fetchLedSuggestion, LedDetails } from '../hcri/ledApi';
+import { syncLedForReading } from '../hcri/ledSync';
 
 export default function HistoryScreen({ navigation }: any) {
   const { colors } = useTheme();
@@ -66,6 +71,46 @@ export default function HistoryScreen({ navigation }: any) {
       .catch((e: any) => appendLog(`Failed to load reading history: ${e.message}`))
       .finally(() => setHistoryLoading(false));
   }, [appendLog]);
+
+  // LED details: cached dropdown lists, plus a lazy suggestion lookup for readings that were never asked about
+  // (needs the API token and internet; quietly does nothing otherwise).
+  const [ledLists, setLedLists] = useState<LedLists>(EMPTY_LED_LISTS);
+  const [ledPickFor, setLedPickFor] = useState<SavedReading | null>(null);
+  useEffect(() => {
+    let live = true;
+    getCachedLedLists().then((l) => live && setLedLists(l));
+    refreshLedLists().then((l) => live && setLedLists(l));
+    return () => { live = false; };
+  }, []);
+
+  const patchLed = useCallback((id: string, patch: Parameters<typeof updateReadingLed>[1]) => {
+    setHistory((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+    return updateReadingLed(id, patch);
+  }, []);
+  const confirmLed = useCallback(async (id: string, d: LedDetails) => {
+    setLedPickFor(null);
+    await patchLed(id, { led: d, ledSynced: false, ledDismissed: false }).catch(() => {});
+    const ok = await syncLedForReading(id);
+    if (ok) setHistory((prev) => prev.map((r) => (r.id === id ? { ...r, ledSynced: true } : r)));
+  }, [patchLed]);
+
+  useEffect(() => {
+    if (historyLoading) return;
+    const todo = history.filter((r) => !r.led && !r.ledSuggestion && !r.ledDismissed && !r.result.sampleLabel).slice(0, 8);
+    if (!todo.length) return;
+    let live = true;
+    (async () => {
+      const creds = await loadHcriCredentials();
+      if (!creds?.token) return;
+      for (const r of todo) {
+        if (!live) return;
+        const s = await fetchLedSuggestion(r.result.spectrum, creds.token, r.label);
+        // Network failure and "no match" look the same here; only remember an answer when we got one.
+        if (s) await patchLed(r.id, { ledSuggestion: s }).catch(() => {});
+      }
+    })();
+    return () => { live = false; };
+  }, [historyLoading, history.length, patchLed]);
 
   useEffect(() => {
     refreshHistory();
@@ -103,6 +148,7 @@ export default function HistoryScreen({ navigation }: any) {
   const saveReportLink = useCallback(async (id: string, reportId: number, isPublic: boolean) => {
     try {
       await setReadingReportLink(id, reportId, isPublic);
+      syncLedForReading(id);
       setHistory((prev) => prev.map((r) => (r.id === id ? { ...r, reportId, reportIsPublic: isPublic } : r)));
     } catch (e: any) {
       appendLog(`Failed to save report link to history: ${e.message}`);
@@ -343,10 +389,13 @@ export default function HistoryScreen({ navigation }: any) {
           bulkUploading={historyBulkUploading}
           onCopyLink={copyReportLinkFromHistory}
           onOpenReport={openReportFromHistory}
+          onLedConfirm={confirmLed}
+          onLedPick={setLedPickFor}
+          onLedDismiss={(id) => { patchLed(id, { ledDismissed: true }).catch(() => {}); }}
           onOpenTm30={(reading) => {
             try {
               const analysis = reading.analysis ?? analyzeSpectrum(reading.result.spectrum);
-              navigation.navigate('Tm30Report', { input: tm30InputFromReading(reading.result, analysis, reading.label, reading.savedAt) });
+              navigation.navigate('Tm30Report', { input: tm30InputFromReading(reading.result, analysis, reading.label, reading.savedAt, reading.led) });
             } catch (e: any) {
               Alert.alert('Could not open the TM-30 report', String(e?.message ?? e));
             }
@@ -354,6 +403,13 @@ export default function HistoryScreen({ navigation }: any) {
           copyingLinkId={copyingLinkId}
         />
       </ScrollView>
+      <LedPickerModal
+        visible={!!ledPickFor}
+        lists={ledLists}
+        initial={ledPickFor?.led ?? (ledPickFor && ledPickFor.ledSuggestion && ledPickFor.ledSuggestion !== 'none' ? { brand: ledPickFor.ledSuggestion.brand, model: ledPickFor.ledSuggestion.model, cct: ledPickFor.ledSuggestion.cct ?? undefined } : undefined)}
+        onSave={(d) => ledPickFor && confirmLed(ledPickFor.id, d)}
+        onCancel={() => setLedPickFor(null)}
+      />
     </SafeAreaView>
   );
 }

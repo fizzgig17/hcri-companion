@@ -7,7 +7,7 @@
 // in these ids) always agree on what "Rf" or "R9" means and how many
 // decimals it gets -- the same single-source-of-truth spirit as
 // spectralAnalysis.ts itself, and the formatting here matches exactly
-// what DataTab already shows for the same values (CCT 0dp, Ra/R9/Ri 1dp,
+// what DataTab already shows for the same values (CCT 0dp, Ra whole, R9/Ri 1dp,
 // Duv 5dp, x/y 4dp) so a value never reads differently in two places.
 //
 // `par` (also on MeterResult) is deliberately NOT offered here -- see
@@ -35,7 +35,7 @@ export interface StatMetric {
 
 const CORE_METRICS: StatMetric[] = [
   { id: 'cct', label: 'CCT', format: (_r, a) => ({ value: a.cct.toFixed(0), unit: 'K' }) },
-  { id: 'ra', label: 'Ra (CRI)', format: (_r, a) => ({ value: a.ra.toFixed(1) }) },
+  { id: 'ra', label: 'Ra (CRI)', format: (_r, a) => ({ value: Math.round(a.ra).toString() }) },
   { id: 'duv', label: 'Duv', format: (_r, a) => ({ value: a.duv.toFixed(5) }) },
   { id: 'lux', label: 'Lux', format: (r) => (r.lux !== null ? { value: r.lux.toFixed(0) } : null) },
   { id: 'rf', label: 'Rf', format: (_r, a) => ({ value: a.rf.toFixed(0) }) },

@@ -1,1 +1,1 @@
-New: in-app TM-30 report. Tap TM-30 after any reading (or in History) to view the full report on your phone and share it as a PDF, no upload needed. Fixed the Settings drag and drop for measurements, and Reset to Default now works.
+New: the app suggests the LED (brand, model, CCT) from the spectrum and the reading title, and you can add or edit LED details yourself on Main, History and Data. The in-app TM-30 report PDF now matches the hCRI.io report page.

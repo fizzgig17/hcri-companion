@@ -34,9 +34,11 @@ export interface DraggableStatListProps {
   onReorder: (newOrder: string[]) => void;
   /** Called when a row's checkbox is tapped. */
   onToggle: (id: string) => void;
+  /** True while a row is held for dragging. The parent should lock its own scrolling then (iOS scrolls the page under the finger otherwise). */
+  onDragActiveChange?: (active: boolean) => void;
 }
 
-export default function DraggableStatList({ order, enabled, labelFor, onReorder, onToggle }: DraggableStatListProps) {
+export default function DraggableStatList({ order, enabled, labelFor, onReorder, onToggle, onDragActiveChange }: DraggableStatListProps) {
   const { colors } = useTheme();
   // One Animated.Value per id, each tracking that row's current `top`
   // (index * ROW_HEIGHT), created once per id and reused across
@@ -100,6 +102,7 @@ export default function DraggableStatList({ order, enabled, labelFor, onReorder,
       Animated.timing(top, { toValue: finalIndex * ROW_HEIGHT, duration: 150, useNativeDriver: false }).start();
     }
     draggingIdRef.current = null;
+    onDragActiveChange?.(false);
     onReorder(liveOrderRef.current.slice());
   }
 
@@ -110,6 +113,7 @@ export default function DraggableStatList({ order, enabled, labelFor, onReorder,
       // mid-drag and the drag ends early.
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
+        onDragActiveChange?.(true);
         draggingIdRef.current = id;
         grantTopRef.current = liveOrderRef.current.indexOf(id) * ROW_HEIGHT;
       },

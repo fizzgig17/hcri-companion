@@ -30,6 +30,10 @@ import type { FlickerSettingsApi } from '../../components/FlickerSettingsModal';
 import type { FlickerUploadApi } from '../../components/FlickerChart';
 import type { BatteryStatus } from '../../ble/protocol';
 import { SpectralAnalysis } from '../../utils/spectralAnalysis';
+import LedSuggestionCard from '../../components/LedSuggestionCard';
+import LedPickerModal from '../../components/LedPickerModal';
+import { LedDetails, LedSuggestion } from '../../hcri/ledApi';
+import { LedLists } from '../../hcri/ledLists';
 import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
 import { EMPTY_METER_RESULT, EMPTY_SPECTRAL_ANALYSIS } from '../../utils/placeholderReading';
 
@@ -45,6 +49,19 @@ export interface FoundDevice {
 }
 
 interface Props {
+  /** LED suggestion card (floats over the lower part of the chart; never resizes it or covers the action bar). */
+  ledSuggestion?: LedSuggestion | null;
+  /** LED details already confirmed for the current reading (shown on the LED pill in the title box). */
+  ledCurrent?: LedDetails | null;
+  /** Opens the LED picker for the current reading (the pill in the title box). */
+  onLedEdit?: () => void;
+  ledLists?: LedLists;
+  ledPickerOpen?: boolean;
+  onLedYes?: () => void;
+  onLedOther?: () => void;
+  onLedClose?: () => void;
+  onLedPickerCancel?: () => void;
+  onLedPickerSave?: (d: LedDetails) => void;
   status: Status;
   isBusy: boolean;
   result: MeterResult | null;
@@ -164,6 +181,7 @@ export default function MainTab({
   scrollInputIntoView,
   flicker,
   pagerResetKey,
+  ledSuggestion, ledCurrent, onLedEdit, ledLists, ledPickerOpen, onLedYes, onLedOther, onLedClose, onLedPickerCancel, onLedPickerSave,
 }: Props) {
   const { colors, statusColors } = useTheme();
   const canSwitchMeters = status === 'connected' && (devicePickerDevices?.length ?? 0) > 1;
@@ -278,6 +296,12 @@ export default function MainTab({
       paddingVertical: 8,
       color: colors.muted,
       fontSize: 13,
+    },
+    ledPill: {
+      position: 'absolute', right: 6, top: 0, bottom: 0, justifyContent: 'center',
+    },
+    ledPillInner: {
+      borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 12, paddingHorizontal: 9, paddingVertical: 4, backgroundColor: colors.card,
     },
     titleInputEmpty: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
     titleInput: {
@@ -432,7 +456,19 @@ export default function MainTab({
             extraHorizontalChrome comment. */}
         <View style={styles.chartRegion} onLayout={(e) => setChartRegionH(Math.floor(e.nativeEvent.layout.height))}>
           <SpectrumTab result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} sampleLabel={result?.sampleLabel} flicker={flicker} pagerResetKey={pagerResetKey} />
+          {ledSuggestion && hasReading && !result?.sampleLabel && onLedYes && onLedOther && onLedClose && (
+            <LedSuggestionCard floating suggestion={ledSuggestion} onYes={onLedYes} onOther={onLedOther} onClose={onLedClose} />
+          )}
         </View>
+        {ledLists && onLedPickerSave && onLedPickerCancel && (
+          <LedPickerModal
+            visible={!!ledPickerOpen}
+            lists={ledLists}
+            initial={ledCurrent ?? (ledSuggestion ? { brand: ledSuggestion.brand, model: ledSuggestion.model, cct: ledSuggestion.cct ?? undefined } : undefined)}
+            onSave={onLedPickerSave}
+            onCancel={onLedPickerCancel}
+          />
+        )}
         {!hasReading && <View style={[styles.titleInputWrap, { opacity: 0 }]} />}
         {hasReading && (
           <TouchableOpacity
@@ -447,12 +483,21 @@ export default function MainTab({
             accessibilityLabel="Upload title. Tap to edit."
           >
             <Text
-              style={[styles.titleInputOverlay, uploadTitle.length > 0 && styles.titleTextSet]}
+              style={[styles.titleInputOverlay, uploadTitle.length > 0 && styles.titleTextSet, !result?.sampleLabel && onLedEdit ? { paddingRight: 92 } : null]}
               numberOfLines={2}
               ellipsizeMode="tail"
             >
               {uploadTitle.length > 0 ? uploadTitle : defaultLabel(cachedUsername, displayResult.deviceName)}
             </Text>
+            {!result?.sampleLabel && onLedEdit && (
+              <TouchableOpacity style={styles.ledPill} onPress={onLedEdit} accessibilityRole="button" accessibilityLabel="LED details for this reading">
+                <View style={styles.ledPillInner}>
+                  <Text style={{ color: ledCurrent && (ledCurrent.brand || ledCurrent.model || ledCurrent.cct) ? colors.accent : colors.muted, fontSize: 12, fontWeight: '600' }}>
+                    {ledCurrent && (ledCurrent.brand || ledCurrent.model || ledCurrent.cct) ? '💡 LED ✓' : '💡 Add LED'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )}
           </TouchableOpacity>
         )}
 

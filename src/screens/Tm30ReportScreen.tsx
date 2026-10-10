@@ -13,7 +13,7 @@ import RNShare from 'react-native-share';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLog } from '../contexts/LogContext';
-import { buildTm30Html, Tm30Input } from '../utils/tm30Report';
+import { buildTm30Html, buildTm30PdfHtml, TM30_PDF_PAGE, Tm30Input } from '../utils/tm30Report';
 import { withBackgroundDisconnectSuppressed } from '../ble/backgroundDisconnectGuard';
 
 export default function Tm30ReportScreen({ route }: any) {
@@ -38,16 +38,20 @@ export default function Tm30ReportScreen({ route }: any) {
     setSharing(true);
     try {
       const name = `TM-30_${(input.title || 'reading').replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 60)}`;
-      const pdf = await generatePDF({ html: built.html, fileName: name, width: 595, height: 842 });
+      const pdf = await generatePDF({ html: buildTm30PdfHtml(input), fileName: name, width: TM30_PDF_PAGE.width, height: TM30_PDF_PAGE.height });
       const path = pdf.filePath;
       if (!path) throw new Error('No PDF file was produced.');
-      appendLog(`TM-30 PDF created: ${path}`);
+      appendLog(`TM-30 PDF created: ${path} (${pdf.numberOfPages ?? '?'} page(s))`);
+      appendLog('TM-30 PDF: opening the share sheet…');
       await withBackgroundDisconnectSuppressed(async () => {
         await RNShare.open({ url: path.startsWith('file://') ? path : `file://${path}`, type: 'application/pdf', filename: `${name}.pdf` });
       });
+      appendLog('TM-30 PDF: share sheet closed.');
     } catch (e: any) {
       // The share sheet being dismissed rejects with a message containing "User did not share".
-      if (!String(e?.message ?? e).includes('did not share')) {
+      if (String(e?.message ?? e).includes('did not share')) {
+        appendLog('TM-30 PDF: share cancelled.');
+      } else {
         appendLog(`TM-30 PDF failed: ${e?.message ?? e}`);
         Alert.alert('Could not create the PDF', String(e?.message ?? e));
       }

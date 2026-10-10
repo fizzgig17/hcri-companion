@@ -186,6 +186,10 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
     );
   }
 
+  // Main shows an all-zero placeholder before the first reading (so the layout never jumps). The CIE and
+  // R-values pages would just be empty cards then, so they only exist once there is a real reading (x,y > 0).
+  const hasReading = analysis.x > 0 || analysis.y > 0;
+
   return (
     <SwipablePages
       resetKey={pagerResetKey ?? result}
@@ -327,7 +331,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
               },
             ]
           : []),
-      ]}
+      ].filter((pg) => hasReading || (pg.key !== 'chrom' && pg.key !== 'rvalues'))}
     />
   );
 }

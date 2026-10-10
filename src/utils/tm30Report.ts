@@ -15,6 +15,7 @@ import { CMF10_Y } from '../hcri/cesData';
 import { APP_VERSION } from '../buildInfo';
 import type { MeterResult } from '../ble/parseResult';
 import type { SpectralAnalysis } from './spectralAnalysis';
+import { buildAnnexSvg } from './tm30AnnexSvg';
 
 export interface Tm30Input {
   /** Reading title (History label). */
@@ -30,12 +31,15 @@ export interface Tm30Input {
   y: number;
   ra: number;
   r9: number;
+  /** LED the person confirmed for this reading (shown in the strip under the header). */
+  led?: { brand?: string; model?: string; cct?: string };
 }
 
 /** Report input for a reading: the spectrum plus the app's own analysis values. */
-export function tm30InputFromReading(result: MeterResult, analysis: SpectralAnalysis, title: string, takenAt?: number): Tm30Input {
+export function tm30InputFromReading(result: MeterResult, analysis: SpectralAnalysis, title: string, takenAt?: number, led?: Tm30Input['led']): Tm30Input {
   return {
     title,
+    led,
     takenAt,
     deviceName: result.sampleLabel ? undefined : result.deviceName,
     spectrum: result.spectrum,
@@ -85,9 +89,8 @@ const PANEL_LINE = '#bed2e1';
 const AXIS = '#50647a';
 
 // ── SPD chart ───────────────────────────────────────────────────────────────
-function spdChart(input: Tm30Input): string {
+function spdChart(input: Tm30Input, W = 360, H = 210): string {
   const pts = input.spectrum.filter((p) => isFinite(p.nm) && isFinite(p.value));
-  const W = 360, H = 210;
   const pL = 34, pR = W - 8, pT = 12, pB = H - 34;
   if (pts.length < 2 || Math.max(...pts.map((p) => p.value)) <= 0) {
     return `<svg viewBox="0 0 ${W} 60" width="100%"><text x="${W / 2}" y="34" text-anchor="middle" font-size="11" fill="${MUTED}">No spectral data</text></svg>`;
@@ -148,9 +151,11 @@ function binChart(
   data: number[],
   axisMax: number,
   yLabels: [string, string, string],
+  W = 360,
+  H = 138,
+  plotH = 92,
 ): string {
-  const W = 360, H = 138;
-  const pL = 36, pR = W - 6, pT = 14, plotH = 92;
+  const pL = 36, pR = W - 6, pT = 14;
   const bw = (pR - pL) / 16;
   const zeroY = pT + plotH / 2;
   let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica,Arial,sans-serif">`;
@@ -197,18 +202,18 @@ function binChart(
     }
     s += `<text x="${f1(pL + h * bw + bw / 2)}" y="${pT + plotH + 10}" text-anchor="middle" font-size="7.5" fill="${AXIS}">${h + 1}</text>`;
   }
-  s += `<text x="${(pL + pR) / 2}" y="${H - 3}" text-anchor="middle" font-size="7.5" fill="${AXIS}">Hue bin</text>`;
+  if (H >= 100) s += `<text x="${(pL + pR) / 2}" y="${H - 3}" text-anchor="middle" font-size="7.5" fill="${AXIS}">Hue bin</text>`;
   return s + '</svg>';
 }
 
 // ── Color vector graphic ────────────────────────────────────────────────────
-function cvgWheel(d: Tm30Detail): string {
+function cvgWheel(d: Tm30Detail, maxWidth = '420px'): string {
   const W = 340, cx = W / 2, cy = W / 2, R = 108;
   const pt = (r: number, aDeg: number): [number, number] => {
     const a = (aDeg * Math.PI) / 180;
     return [cx + r * Math.cos(a), cy - r * Math.sin(a)];
   };
-  let s = `<svg viewBox="0 0 ${W} ${W}" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica,Arial,sans-serif" style="max-width:420px;display:block;margin:0 auto">`;
+  let s = `<svg viewBox="0 0 ${W} ${W}" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica,Arial,sans-serif" style="max-width:${maxWidth};display:block;margin:0 auto">`;
   // Hue sectors: bin h spans hue angle h*22.5 .. (h+1)*22.5, counter-clockwise from east (as TM-30 plots it).
   for (let h = 0; h < 16; h++) {
     const a1 = h * 22.5, a2 = a1 + 22.5;
@@ -255,9 +260,9 @@ function cvgWheel(d: Tm30Detail): string {
 }
 
 // ── 99 color samples ────────────────────────────────────────────────────────
-function cesChart(d: Tm30Detail): string {
-  const W = 360, H = 110;
-  const pL = 28, pR = W - 6, pT = 8, plotH = 70;
+function cesChart(d: Tm30Detail, H = 110, plotH = 70): string {
+  const W = 360;
+  const pL = 28, pR = W - 6, pT = 8;
   const bw = (pR - pL) / 99;
   let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Helvetica,Arial,sans-serif">`;
   s += `<rect x="${pL}" y="${pT}" width="${pR - pL}" height="${plotH}" fill="#f8fafc" stroke="${PANEL_LINE}" stroke-width="0.6"/>`;
@@ -366,4 +371,29 @@ export function buildTm30Html(input: Tm30Input): string {
 ${notes ? `<h2>Notes</h2><div class="note">${esc(notes)}</div>` : ''}
 <div class="foot">Generated ${genStr} on-device by hCRI Companion v${esc(APP_VERSION)} · Colors are for visual orientation purposes only.</div>
 </div></body></html>`;
+}
+
+/**
+ * The shared PDF: one A4 page laid out like hCRI.io's own TM-30 PDF (SPD + three local-shift charts
+ * on top, color vector graphic with Rf/Rg and the value tiles, the 99-sample bars, then notes and
+ * the xy / CRI boxes). Every size is in rem with 1rem = 1/59.5 of the page width, so the page keeps
+ * its A4 proportions whatever width the PDF renderer lays the HTML out at.
+ */
+/** PDF page size (CSS px = PDF points) -- the same proportions as the website's TM-30 report (825 x 1070). */
+export const TM30_PDF_PAGE = { width: 595, height: 772 };
+
+/**
+ * The shared PDF: the hCRI.io TM-30 report page (see tm30AnnexSvg.ts), drawn as one fixed-size SVG so nothing
+ * depends on viewport units (a 0-wide print viewport printed a blank page on iOS before).
+ */
+export function buildTm30PdfHtml(input: Tm30Input): string {
+  const svg = buildAnnexSvg(
+    { ...input, generatedBy: `Generated on-device by hCRI Companion v${APP_VERSION}  ·  IES TM-30-18` },
+    TM30_PDF_PAGE.width,
+    TM30_PDF_PAGE.height
+  );
+  return `<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=${TM30_PDF_PAGE.width}, initial-scale=1">
+<style>@page{margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fafbfc;width:${TM30_PDF_PAGE.width}px;height:${TM30_PDF_PAGE.height}px;overflow:hidden}</style>
+</head><body>${svg}</body></html>`;
 }
