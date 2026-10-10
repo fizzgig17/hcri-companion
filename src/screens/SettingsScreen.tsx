@@ -141,7 +141,7 @@ export default function SettingsScreen({ navigation, route }: any) {
   const [genEmail, setGenEmail] = useState('');
   const [genPassword, setGenPassword] = useState('');
   const [genTokenName, setGenTokenName] = useState(DEFAULT_GENERATED_TOKEN_NAME);
-  const tokenScrollRef = useRef<ScrollView>(null);
+  const tokenScrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const kbHeight = useKeyboardHeight(true);
   const { height: winH } = useWindowDimensions();
   const [genBusy, setGenBusy] = useState(false);
