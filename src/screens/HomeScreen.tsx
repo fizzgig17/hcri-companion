@@ -1470,6 +1470,12 @@ export default function HomeScreen({ navigation }: any) {
             onUploadTitleChange={setUploadTitle}
             onShareCsv={shareCurrentCsv}
             cachedUsername={cachedUsername}
+            ledCurrent={currentLed}
+            onLedEdit={currentReadingId ? () => setLedPickerOpen(true) : undefined}
+            ledLists={ledLists}
+            ledPickerOpen={ledPickerOpen}
+            onLedPickerSave={confirmLed}
+            onLedPickerCancel={() => setLedPickerOpen(false)}
           />
         )}
       </ScrollView>
