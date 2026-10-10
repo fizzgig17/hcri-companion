@@ -31,7 +31,7 @@ import { loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadF
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
 import { addReading, loadHistory, recordUpload, setReadingFlicker, updateReadingLed } from '../storage/readingHistory';
 import { fetchLedSuggestion, LedDetails, LedSuggestion } from '../hcri/ledApi';
-import { ledPatch, hasLed } from '../hcri/leds';
+import { ledPatch, hasLed, ledsOfReading } from '../hcri/leds';
 import { syncLedForReading } from '../hcri/ledSync';
 import { EMPTY_LED_LISTS, getCachedLedLists, LedLists, refreshLedLists } from '../hcri/ledLists';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
@@ -275,6 +275,26 @@ export default function HomeScreen({ navigation }: any) {
     setCurrentLeds([]);
     ledCardClosedRef.current = false;
   }, [currentReadingId]);
+  // The LEDs can also be edited from History; pick up the saved ones when this screen comes back into view (and when the
+  // current reading changes), so Main always shows what History shows.
+  const refreshLedFromHistory = useCallback(async () => {
+    const id = currentReadingId;
+    if (!id) return;
+    try {
+      const entry = (await loadHistory()).find((x) => x.id === id);
+      if (!entry) return;
+      const leds = ledsOfReading(entry);
+      setCurrentLeds(leds);
+      if (leds.length || entry.ledDismissed) setLedSuggestion(null);
+    } catch {
+      // keep what is shown
+    }
+  }, [currentReadingId]);
+  useEffect(() => {
+    refreshLedFromHistory();
+    const unsubscribe = navigation.addListener('focus', refreshLedFromHistory);
+    return unsubscribe;
+  }, [navigation, refreshLedFromHistory]);
   useEffect(() => {
     const id = currentReadingId;
     const r = resultRef.current;
