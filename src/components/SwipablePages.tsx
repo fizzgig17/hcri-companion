@@ -22,6 +22,7 @@
 // one is actually on screen.
 
 import InfoButton from './InfoButton';
+import HintPressable from './HintPressable';
 import { PagerLockContext } from './PagerLock';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -30,7 +31,6 @@ import {
   NativeSyntheticEvent,
   NativeScrollEvent,
   StyleSheet,
-  TouchableOpacity,
 } from 'react-native';
 
 import { useTheme } from '../contexts/ThemeContext';
@@ -230,9 +230,9 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
               </View>
             )}
             {pages.map((p, i) => (
-              <TouchableOpacity key={p.key} onPress={() => goTo(i)} hitSlop={8} style={styles.dotTouchable}>
+              <HintPressable key={p.key} hint={p.label} onPress={() => goTo(i)} hitSlop={8} style={styles.dotTouchable} accessibilityLabel={p.label}>
                 <View style={[styles.dot, i === activeIndex && styles.dotActive]} />
-              </TouchableOpacity>
+              </HintPressable>
             ))}
           </View>
         </>

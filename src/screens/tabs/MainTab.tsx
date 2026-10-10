@@ -35,6 +35,7 @@ import LedPickerModal from '../../components/LedPickerModal';
 import { LedDetails, LedSuggestion } from '../../hcri/ledApi';
 import { LedLists } from '../../hcri/ledLists';
 import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
+import HintPressable from '../../components/HintPressable';
 import { EMPTY_METER_RESULT, EMPTY_SPECTRAL_ANALYSIS } from '../../utils/placeholderReading';
 
 // Title field (56) + its top margin (8), always subtracted so the charts are
@@ -379,7 +380,7 @@ export default function MainTab({
             vendor app warns at), green otherwise. A bolt means the meter
             reports it's charging. */}
         {battery && status !== 'disconnected' && (
-          <View style={styles.batteryWrap} accessibilityLabel={`Meter battery ${battery.percent} percent${battery.charging ? ', charging' : ''}`}>
+          <HintPressable hint={`Meter battery ${battery.percent}%${battery.charging ? ', charging' : ''}`} activeOpacity={1} style={styles.batteryWrap} accessibilityLabel={`Meter battery ${battery.percent} percent${battery.charging ? ', charging' : ''}`}>
             <View style={[styles.batteryBody, { borderColor: battery.percent <= 20 ? colors.danger : colors.accent }]}>
               <View
                 style={{
@@ -395,7 +396,7 @@ export default function MainTab({
               {battery.charging ? '⚡' : ''}
               {battery.percent}%
             </Text>
-          </View>
+          </HintPressable>
         )}
         {/* Only shows up when the meter currently connected was one of
             SEVERAL matches the last scan found -- lets you reopen that same

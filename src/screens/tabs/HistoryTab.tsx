@@ -22,6 +22,7 @@
 
 import React, { useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal } from 'react-native';
+import HintPressable from '../../components/HintPressable';
 import Svg, { Polyline, Path } from 'react-native-svg';
 import CollapsibleSection from '../../components/CollapsibleSection';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -313,27 +314,27 @@ function HistoryRow({
             {analysis.cct.toFixed(0)}K · Ra {Math.round(analysis.ra)}
           </Text>
           {!!reading.result.flicker && (
-            <View style={{ marginLeft: 6 }} accessibilityLabel="Includes a flicker reading">
+            <HintPressable hint="Includes a flicker reading" activeOpacity={1} style={{ marginLeft: 6 }} accessibilityLabel="Includes a flicker reading">
               <Svg width={16} height={12} viewBox="0 0 16 12">
                 <Polyline points="0,9 3,9 3,2 7,2 7,9 11,9 11,2 15,2" fill="none" stroke={colors.accent} strokeWidth={1.6} strokeLinejoin="round" />
               </Svg>
-            </View>
+            </HintPressable>
           )}
         </View>
         {!selectMode && (
           <View style={styles.rowHeaderButtons}>
-            <TouchableOpacity onPress={() => onUploadWithLabel(reading.id, reading.label)} disabled={uploading} style={{ marginRight: 14, opacity: uploading ? 0.6 : 1 }} accessibilityRole="button" accessibilityLabel="Upload reading" hitSlop={{ top: 10, bottom: 10, left: 7, right: 7 }}>
+            <HintPressable hint="Upload to hCRI.io" onPress={() => onUploadWithLabel(reading.id, reading.label)} disabled={uploading} style={{ marginRight: 14, opacity: uploading ? 0.6 : 1 }} accessibilityRole="button" accessibilityLabel="Upload reading" hitSlop={{ top: 10, bottom: 10, left: 7, right: 7 }}>
               {uploading ? <ActivityIndicator size="small" color={colors.accent} /> : <ActionIcon d={ICON_CLOUD} color={colors.accent} size={19} />}
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => onShareOne(reading)} style={{ marginRight: 14 }} accessibilityRole="button" accessibilityLabel="Share CSV" hitSlop={{ top: 10, bottom: 10, left: 7, right: 7 }}>
+            </HintPressable>
+            <HintPressable hint="Share CSV" onPress={() => onShareOne(reading)} style={{ marginRight: 14 }} accessibilityRole="button" accessibilityLabel="Share CSV" hitSlop={{ top: 10, bottom: 10, left: 7, right: 7 }}>
               <ActionIcon d={ICON_TRAY} color={colors.text} size={19} />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => onOpen(reading)} style={{ marginRight: 14 }} accessibilityRole="button" accessibilityLabel="View reading" hitSlop={{ top: 10, bottom: 10, left: 7, right: 7 }}>
+            </HintPressable>
+            <HintPressable hint="View reading" onPress={() => onOpen(reading)} style={{ marginRight: 14 }} accessibilityRole="button" accessibilityLabel="View reading" hitSlop={{ top: 10, bottom: 10, left: 7, right: 7 }}>
               <ActionIcon d={ICON_EYE} color={colors.info} size={19} />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => onDelete(reading.id)} accessibilityRole="button" accessibilityLabel="Delete reading" hitSlop={{ top: 10, bottom: 10, left: 7, right: 7 }}>
+            </HintPressable>
+            <HintPressable hint="Delete reading" onPress={() => onDelete(reading.id)} accessibilityRole="button" accessibilityLabel="Delete reading" hitSlop={{ top: 10, bottom: 10, left: 7, right: 7 }}>
               <ActionIcon d={ICON_TRASH} color={colors.danger} size={19} />
-            </TouchableOpacity>
+            </HintPressable>
           </View>
         )}
       </View>

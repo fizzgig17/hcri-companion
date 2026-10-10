@@ -7,6 +7,7 @@
 import React from 'react';
 import { TouchableOpacity, Text, Alert, StyleSheet, StyleProp, ViewStyle } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
+import HintPressable from './HintPressable';
 
 interface Props {
   title: string;
@@ -46,7 +47,8 @@ export default function InfoButton({ title, message, label, style }: Props) {
     );
   }
   return (
-    <TouchableOpacity
+    <HintPressable
+      hint="More info"
       onPress={() => Alert.alert(title, message)}
       style={[styles.button, style]}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -54,6 +56,6 @@ export default function InfoButton({ title, message, label, style }: Props) {
       activeOpacity={0.7}
     >
       <Text style={styles.text}>?</Text>
-    </TouchableOpacity>
+    </HintPressable>
   );
 }
