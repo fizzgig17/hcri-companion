@@ -11,6 +11,19 @@
 // system haptic right.
 
 import { Vibration, Platform } from 'react-native';
+import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
+
+// iOS ignores the length passed to Vibration.vibrate() and always gives one long ~0.4s buzz, so on iOS the Taptic
+// Engine is used instead (light tap, success/error notification). Android keeps short timed vibrations.
+function iosHaptic(type: 'impactLight' | 'notificationSuccess' | 'notificationError'): boolean {
+  if (Platform.OS !== 'ios') return false;
+  try {
+    ReactNativeHapticFeedback.trigger(type, { enableVibrateFallback: false, ignoreAndroidSystemSettings: false });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // Vibration.vibrate() throws (not a rejected promise -- a synchronous throw
 // straight out of the native module) if the VIBRATE permission isn't
@@ -45,17 +58,20 @@ function safeVibrate(pattern: number | number[]): void {
 /** Firm double buzz for a successful reading or upload -- clearly longer than the button tick. */
 export function hapticSuccess(): void {
   if (!resultsEnabled) return;
+  if (iosHaptic('notificationSuccess')) return;
   safeVibrate(Platform.OS === 'android' ? [0, 140, 70, 140] : [0, 100, 60, 100]);
 }
 
 /** Triple buzz for a failed/timed-out reading or upload -- deliberately distinct from the success buzz so the two are tellable apart without looking at the screen. */
 export function hapticFailure(): void {
   if (!resultsEnabled) return;
+  if (iosHaptic('notificationError')) return;
   safeVibrate(Platform.OS === 'android' ? [0, 90, 80, 90, 80, 90] : [0, 70, 60, 70, 60, 70]);
 }
 
 /** Short tick for pressing any of the action-bar buttons. */
 export function hapticTap(): void {
   if (!tapsEnabled) return;
+  if (iosHaptic('impactLight')) return;
   safeVibrate(Platform.OS === 'android' ? 25 : 15);
 }
