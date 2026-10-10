@@ -560,6 +560,10 @@ export default function SettingsScreen({ navigation, route }: any) {
             value={username}
             onChangeText={setUsername}
             autoCapitalize="none"
+            autoCorrect={false}
+            textContentType="username"
+            autoComplete="username"
+            importantForAutofill="yes"
             placeholder="username"
             placeholderTextColor={colors.mutedFaint}
           />
@@ -570,6 +574,10 @@ export default function SettingsScreen({ navigation, route }: any) {
             value={token}
             onChangeText={setToken}
             autoCapitalize="none"
+            autoCorrect={false}
+            textContentType="password"
+            autoComplete="password"
+            importantForAutofill="yes"
             secureTextEntry
             placeholder="hcri_..."
             placeholderTextColor={colors.mutedFaint}
@@ -619,6 +627,11 @@ export default function SettingsScreen({ navigation, route }: any) {
               value={genEmail}
               onChangeText={setGenEmail}
               autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              textContentType="username"
+              autoComplete="username"
+              importantForAutofill="yes"
               editable={!genBusy}
               placeholder="username or email"
               placeholderTextColor={colors.mutedFaint}
@@ -630,6 +643,10 @@ export default function SettingsScreen({ navigation, route }: any) {
               value={genPassword}
               onChangeText={setGenPassword}
               autoCapitalize="none"
+              autoCorrect={false}
+              textContentType="password"
+              autoComplete="current-password"
+              importantForAutofill="yes"
               secureTextEntry
               editable={!genBusy}
               placeholder="password"
