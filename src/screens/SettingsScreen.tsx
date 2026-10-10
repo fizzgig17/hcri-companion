@@ -6,11 +6,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { ScrollView, View, Text, TextInput, Switch, TouchableOpacity, StyleSheet, Alert, Modal, Linking, useWindowDimensions } from 'react-native';
+import { ScrollView, View, Text, TextInput, Switch, TouchableOpacity, StyleSheet, Alert, Modal, Linking, Platform, useWindowDimensions } from 'react-native';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IS_DEV_BUILD, HCRI_API_HOST } from '../hcri/buildTarget';
 import PrimaryButton from '../components/PrimaryButton';
+import HintPressable from '../components/HintPressable';
+import Svg, { Path } from 'react-native-svg';
 import DraggableStatList from '../components/DraggableStatList';
 import {
   loadHcriCredentials,
@@ -143,6 +145,8 @@ export default function SettingsScreen({ navigation, route }: any) {
   const [tokenModalVisible, setTokenModalVisible] = useState(false);
   const [genEmail, setGenEmail] = useState('');
   const [genPassword, setGenPassword] = useState('');
+  // The password box is always hidden when the window opens; the eye button reveals it until pressed again or the window closes.
+  const [genShowPassword, setGenShowPassword] = useState(false);
   const [genTokenName, setGenTokenName] = useState(DEFAULT_GENERATED_TOKEN_NAME);
   const tokenScrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const kbHeight = useKeyboardHeight(true);
@@ -317,6 +321,7 @@ export default function SettingsScreen({ navigation, route }: any) {
     // "never hang onto it longer than it has to" spirit as generateApiToken.ts
     // itself never persisting or logging it.
     setGenPassword('');
+    setGenShowPassword(false);
   };
 
   const generateToken = async () => {
@@ -330,6 +335,7 @@ export default function SettingsScreen({ navigation, route }: any) {
     try {
       const result = await generateApiToken(email, genPassword, name);
       setGenPassword('');
+      setGenShowPassword(false);
       setTokenModalVisible(false);
       // Same locked-view, "Forget Credentials to change it" behavior as
       // manually pasting a token in and tapping Save -- generating one
@@ -512,16 +518,16 @@ export default function SettingsScreen({ navigation, route }: any) {
         />
       </View>
       {settingsTab === 'update' ? (
-        <ScrollView style={styles.scrollArea} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat}>
+        <ScrollView style={styles.scrollArea} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat} keyboardShouldPersistTaps="handled">
           <VersionStamp />
           <UpdateTab />
         </ScrollView>
       ) : settingsTab === 'about' ? (
-        <ScrollView style={styles.scrollArea} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat}>
+        <ScrollView style={styles.scrollArea} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat} keyboardShouldPersistTaps="handled">
           <AboutTab />
         </ScrollView>
       ) : (
-    <ScrollView style={styles.scrollArea} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat}>
+    <ScrollView style={styles.scrollArea} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat} keyboardShouldPersistTaps="handled">
       {/* Which build you're looking at, at a glance -- came up more than
           once this session when testing against a build that was already
           a few fixes behind develop. See buildInfo.ts for how this stays
@@ -642,20 +648,37 @@ export default function SettingsScreen({ navigation, route }: any) {
             />
 
             <Text style={[styles.modalLabel, { marginTop: 8, marginBottom: 4 }]}>Password</Text>
-            <TextInput
-              style={[styles.input, { padding: 9 }]}
-              value={genPassword}
-              onChangeText={setGenPassword}
-              autoCapitalize="none"
-              autoCorrect={false}
-              textContentType="password"
-              autoComplete="current-password"
-              importantForAutofill="yes"
-              secureTextEntry
-              editable={!genBusy}
-              placeholder="password"
-              placeholderTextColor={colors.mutedFaint}
-            />
+            <View>
+              <TextInput
+                style={[styles.input, { padding: 9, paddingRight: 46 }]}
+                value={genPassword}
+                onChangeText={setGenPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="password"
+                autoComplete="current-password"
+                importantForAutofill="yes"
+                secureTextEntry={!genShowPassword}
+                keyboardType={genShowPassword && Platform.OS === 'android' ? 'visible-password' : 'default'}
+                editable={!genBusy}
+                placeholder="password"
+                placeholderTextColor={colors.mutedFaint}
+              />
+              <HintPressable
+                hint={genShowPassword ? 'Hide password' : 'Show password'}
+                onPress={() => setGenShowPassword((v) => !v)}
+                disabled={genBusy}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel={genShowPassword ? 'Hide password' : 'Show password'}
+                style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 44, alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={genShowPassword ? colors.accent : colors.muted} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" />
+                  {genShowPassword && <Path d="M3 3l18 18" />}
+                </Svg>
+              </HintPressable>
+            </View>
             <TouchableOpacity onPress={openForgotPassword} disabled={genBusy} style={styles.forgotPasswordLink}>
               <Text style={styles.forgotPasswordText}>Forgot password?</Text>
             </TouchableOpacity>
