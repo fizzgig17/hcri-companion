@@ -1,1 +1,1 @@
-Fixed: the LED details window is no longer covered by the keyboard on Android. Also new in 1.21: LED suggestions and details on Main, History and Data, and a TM-30 PDF that matches hCRI.io.
+Layout fixes: the LED button no longer overlaps the reading title, History rows have more room before the icons, and the Generate API Token window stays above the keyboard. On iPhone the app is now named hCRI under its icon.
