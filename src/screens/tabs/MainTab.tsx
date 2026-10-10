@@ -30,6 +30,10 @@ import type { FlickerSettingsApi } from '../../components/FlickerSettingsModal';
 import type { FlickerUploadApi } from '../../components/FlickerChart';
 import type { BatteryStatus } from '../../ble/protocol';
 import { SpectralAnalysis } from '../../utils/spectralAnalysis';
+import LedSuggestionCard from '../../components/LedSuggestionCard';
+import LedPickerModal from '../../components/LedPickerModal';
+import { LedDetails, LedSuggestion } from '../../hcri/ledApi';
+import { LedLists } from '../../hcri/ledLists';
 import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
 import { EMPTY_METER_RESULT, EMPTY_SPECTRAL_ANALYSIS } from '../../utils/placeholderReading';
 
@@ -45,6 +49,15 @@ export interface FoundDevice {
 }
 
 interface Props {
+  /** LED suggestion card (floats over the lower part of the chart; never resizes it or covers the action bar). */
+  ledSuggestion?: LedSuggestion | null;
+  ledLists?: LedLists;
+  ledPickerOpen?: boolean;
+  onLedYes?: () => void;
+  onLedOther?: () => void;
+  onLedClose?: () => void;
+  onLedPickerCancel?: () => void;
+  onLedPickerSave?: (d: LedDetails) => void;
   status: Status;
   isBusy: boolean;
   result: MeterResult | null;
@@ -164,6 +177,7 @@ export default function MainTab({
   scrollInputIntoView,
   flicker,
   pagerResetKey,
+  ledSuggestion, ledLists, ledPickerOpen, onLedYes, onLedOther, onLedClose, onLedPickerCancel, onLedPickerSave,
 }: Props) {
   const { colors, statusColors } = useTheme();
   const canSwitchMeters = status === 'connected' && (devicePickerDevices?.length ?? 0) > 1;
@@ -432,7 +446,19 @@ export default function MainTab({
             extraHorizontalChrome comment. */}
         <View style={styles.chartRegion} onLayout={(e) => setChartRegionH(Math.floor(e.nativeEvent.layout.height))}>
           <SpectrumTab result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} sampleLabel={result?.sampleLabel} flicker={flicker} pagerResetKey={pagerResetKey} />
+          {ledSuggestion && hasReading && !result?.sampleLabel && onLedYes && onLedOther && onLedClose && (
+            <LedSuggestionCard floating suggestion={ledSuggestion} onYes={onLedYes} onOther={onLedOther} onClose={onLedClose} />
+          )}
         </View>
+        {ledLists && onLedPickerSave && onLedPickerCancel && (
+          <LedPickerModal
+            visible={!!ledPickerOpen}
+            lists={ledLists}
+            initial={ledSuggestion ? { brand: ledSuggestion.brand, model: ledSuggestion.model, cct: ledSuggestion.cct ?? undefined } : undefined}
+            onSave={onLedPickerSave}
+            onCancel={onLedPickerCancel}
+          />
+        )}
         {!hasReading && <View style={[styles.titleInputWrap, { opacity: 0 }]} />}
         {hasReading && (
           <TouchableOpacity

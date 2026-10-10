@@ -41,6 +41,7 @@ function ActionIcon({ d, color, size = 22 }: { d: string; color: string; size?: 
   );
 }
 import { analyzeSpectrum } from '../../utils/spectralAnalysis';
+import LedSuggestionCard, { ledText } from '../../components/LedSuggestionCard';
 
 interface Props {
   history: SavedReading[];
@@ -72,6 +73,10 @@ interface Props {
   onOpenReport: (reading: SavedReading, tm30: boolean) => void;
   /** Opens the in-app TM-30 report, generated on the phone from the stored spectrum (works for readings that were never uploaded). */
   onOpenTm30: (reading: SavedReading) => void;
+  /** LED details: accept a suggestion, open the picker ("Other"), or drop the suggestion for a reading. */
+  onLedConfirm: (id: string, d: { brand?: string; model?: string; cct?: string }) => void;
+  onLedPick: (reading: SavedReading) => void;
+  onLedDismiss: (id: string) => void;
 }
 
 function formatSavedAt(ms: number): string {
@@ -113,6 +118,9 @@ function HistoryRow({
   copyingLink,
   onOpenReport,
   onOpenTm30,
+  onLedConfirm,
+  onLedPick,
+  onLedDismiss,
 }: {
   reading: SavedReading;
   uploading: boolean;
@@ -129,6 +137,9 @@ function HistoryRow({
   onOpenReport: (reading: SavedReading, tm30: boolean) => void;
   /** Opens the in-app TM-30 report, generated on the phone from the stored spectrum (works for readings that were never uploaded). */
   onOpenTm30: (reading: SavedReading) => void;
+  onLedConfirm: (id: string, d: { brand?: string; model?: string; cct?: string }) => void;
+  onLedPick: (reading: SavedReading) => void;
+  onLedDismiss: (id: string) => void;
 }) {
   const { colors } = useTheme();
   // Title editing works like the Main tab's: tap the title, edit it in a
@@ -338,6 +349,21 @@ function HistoryRow({
         <Text style={{ color: colors.text, fontSize: 13 }}>{reading.label}</Text>
       </TouchableOpacity>
 
+      {reading.led ? (
+        <TouchableOpacity onPress={() => onLedPick(reading)} disabled={selectMode} style={{ marginTop: 4 }} accessibilityLabel="LED details. Tap to change.">
+          <Text style={{ color: colors.muted, fontSize: 12 }}>💡 {ledText({ brand: reading.led.brand, model: reading.led.model, cct: reading.led.cct })}</Text>
+        </TouchableOpacity>
+      ) : !selectMode && !reading.ledDismissed && reading.ledSuggestion && reading.ledSuggestion !== 'none' ? (
+        <View style={{ marginTop: 6 }}>
+          <LedSuggestionCard
+            suggestion={reading.ledSuggestion}
+            onYes={() => { const s = reading.ledSuggestion as { brand: string; model: string; cct: string | null }; onLedConfirm(reading.id, { brand: s.brand, model: s.model, cct: s.cct ?? undefined }); }}
+            onOther={() => onLedPick(reading)}
+            onClose={() => onLedDismiss(reading.id)}
+          />
+        </View>
+      ) : null}
+
       <Modal
         visible={modalVisible}
         transparent
@@ -462,6 +488,9 @@ export default function HistoryTab({
   copyingLinkId,
   onOpenReport,
   onOpenTm30,
+  onLedConfirm,
+  onLedPick,
+  onLedDismiss,
 }: Props) {
   const { colors } = useTheme();
   const [selectMode, setSelectMode] = useState(false);
@@ -730,6 +759,9 @@ export default function HistoryTab({
           copyingLink={copyingLinkId === r.id}
           onOpenReport={onOpenReport}
           onOpenTm30={onOpenTm30}
+          onLedConfirm={onLedConfirm}
+          onLedPick={onLedPick}
+          onLedDismiss={onLedDismiss}
         />
       ))}
 
@@ -757,6 +789,9 @@ export default function HistoryTab({
                 copyingLink={copyingLinkId === r.id}
                 onOpenReport={onOpenReport}
           onOpenTm30={onOpenTm30}
+          onLedConfirm={onLedConfirm}
+          onLedPick={onLedPick}
+          onLedDismiss={onLedDismiss}
               />
             ))}
           </View>

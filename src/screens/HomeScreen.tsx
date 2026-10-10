@@ -29,7 +29,10 @@ import { fetchSampleReading } from '../hcri/fetchSampleReading';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
 import { loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
-import { addReading, recordUpload, setReadingFlicker } from '../storage/readingHistory';
+import { addReading, recordUpload, setReadingFlicker, updateReadingLed } from '../storage/readingHistory';
+import { fetchLedSuggestion, LedDetails, LedSuggestion } from '../hcri/ledApi';
+import { syncLedForReading } from '../hcri/ledSync';
+import { EMPTY_LED_LISTS, getCachedLedLists, LedLists, refreshLedLists } from '../hcri/ledLists';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
 import { shareDebugLog } from '../utils/shareLog';
 import { shareSingleReadingCsv } from '../utils/shareCsv';
@@ -136,6 +139,11 @@ export default function HomeScreen({ navigation }: any) {
   // moment a fresh measurement starts, so an upload triggered right after
   // can never accidentally write onto a PREVIOUS reading's History row.
   const [currentReadingId, setCurrentReadingId] = useState<string | null>(null);
+  // LED suggestion for the current reading (Main tab's floating card). Hidden by taking a new reading
+  // (currentReadingId changes) or by the card's own close button; History keeps offering it until approved.
+  const [ledSuggestion, setLedSuggestion] = useState<LedSuggestion | null>(null);
+  const [ledPickerOpen, setLedPickerOpen] = useState(false);
+  const [ledLists, setLedLists] = useState<LedLists>(EMPTY_LED_LISTS);
   // True while the copy-link button's own request (getReportLink, for a
   // private report only -- a public one resolves with no request) is in
   // flight, so the icon can show a spinner instead of being tappable
@@ -248,6 +256,40 @@ export default function HomeScreen({ navigation }: any) {
       hideSub.remove();
     };
   }, [measureAndScroll]);
+
+  // LED dropdown lists: show the cached copy right away, fetch the first time (if online), re-check at most daily.
+  useEffect(() => {
+    let live = true;
+    getCachedLedLists().then((l) => live && setLedLists(l));
+    refreshLedLists().then((l) => live && setLedLists(l));
+    return () => { live = false; };
+  }, []);
+
+  // Ask hCRI.io what LED this spectrum looks like whenever a new real reading is saved.
+  useEffect(() => {
+    setLedSuggestion(null);
+    const id = currentReadingId;
+    const r = resultRef.current;
+    if (!id || !r || r.sampleLabel) return;
+    let live = true;
+    (async () => {
+      const creds = await loadHcriCredentials();
+      if (!creds?.token) return;
+      const s = await fetchLedSuggestion(r.spectrum, creds.token);
+      await updateReadingLed(id, { ledSuggestion: s ?? 'none' }).catch(() => {});
+      if (live && s) setLedSuggestion(s);
+    })();
+    return () => { live = false; };
+  }, [currentReadingId]);
+
+  const confirmLed = useCallback(async (d: LedDetails) => {
+    const id = currentReadingId;
+    setLedSuggestion(null);
+    setLedPickerOpen(false);
+    if (!id) return;
+    await updateReadingLed(id, { led: d, ledSynced: false, ledDismissed: false }).catch(() => {});
+    syncLedForReading(id);
+  }, [currentReadingId]);
 
   useEffect(() => {
     const loadCachedUsername = () => {
@@ -1197,9 +1239,10 @@ export default function HomeScreen({ navigation }: any) {
       // (or neither) instead of both. Best-effort: a storage hiccup here
       // shouldn't make an otherwise-successful upload look like it failed.
       if (currentReadingId) {
-        recordUpload(currentReadingId, label, res.reportId, res.isPublic).catch((e: any) =>
-          appendLog(`Failed to sync upload to history: ${e.message}`)
-        );
+        const rid = currentReadingId;
+        recordUpload(rid, label, res.reportId, res.isPublic)
+          .then(() => syncLedForReading(rid))
+          .catch((e: any) => appendLog(`Failed to sync upload to history: ${e.message}`));
       }
     } else {
       // A failure is still worth interrupting for -- this is the one
@@ -1381,6 +1424,14 @@ export default function HomeScreen({ navigation }: any) {
             uploadTitle={uploadTitle}
             onUploadTitleChange={setUploadTitle}
             cachedUsername={cachedUsername}
+            ledSuggestion={ledSuggestion}
+            ledLists={ledLists}
+            ledPickerOpen={ledPickerOpen}
+            onLedYes={() => ledSuggestion && confirmLed({ brand: ledSuggestion.brand, model: ledSuggestion.model, cct: ledSuggestion.cct ?? undefined })}
+            onLedOther={() => setLedPickerOpen(true)}
+            onLedClose={() => setLedSuggestion(null)}
+            onLedPickerCancel={() => setLedPickerOpen(false)}
+            onLedPickerSave={confirmLed}
             scrollInputIntoView={scrollInputIntoView}
             pagerResetKey={pagerResetKey}
             flicker={

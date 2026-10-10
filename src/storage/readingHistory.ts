@@ -71,6 +71,14 @@ export interface SavedReading {
    */
   reportId?: number;
   reportIsPublic?: boolean;
+  /** LED details the person confirmed (or picked via "Other") for this reading. */
+  led?: { brand?: string; model?: string; cct?: string };
+  /** True once the person dismissed the LED suggestion for this reading (never ask again). */
+  ledDismissed?: boolean;
+  /** Suggestion fetched from hCRI.io, cached so History doesn't re-request it. `none` = asked, no clear match. */
+  ledSuggestion?: { brand: string; model: string; cct: string | null } | 'none';
+  /** True when `led` was saved to the report on hCRI.io (or there is no report yet and it still needs sending). */
+  ledSynced?: boolean;
 }
 
 function makeId(): string {
@@ -124,7 +132,7 @@ export async function renameReading(id: string, label: string): Promise<void> {
  */
 export async function setReadingReportLink(id: string, reportId: number, isPublic: boolean): Promise<void> {
   const existing = await loadHistory();
-  const next = existing.map((r) => (r.id === id ? { ...r, reportId, reportIsPublic: isPublic } : r));
+  const next = existing.map((r) => (r.id === id ? { ...r, reportId, reportIsPublic: isPublic, ledSynced: false } : r));
   await saveAll(next);
 }
 
@@ -153,7 +161,7 @@ export async function recordUpload(
   const existing = await loadHistory();
   const next = existing.map((r) =>
     r.id === id
-      ? { ...r, label, ...(typeof reportId === 'number' && typeof isPublic === 'boolean' ? { reportId, reportIsPublic: isPublic } : {}) }
+      ? { ...r, label, ...(typeof reportId === 'number' && typeof isPublic === 'boolean' ? { reportId, reportIsPublic: isPublic, ledSynced: false } : {}) }
       : r
   );
   await saveAll(next);
@@ -177,4 +185,13 @@ export async function setReadingFlicker(id: string, flicker: NonNullable<MeterRe
   const existing = await loadHistory();
   const next = existing.map((r) => (r.id === id ? { ...r, result: { ...r.result, flicker } } : r));
   await saveAll(next);
+}
+
+/** Patches LED-related fields of one reading (confirm / dismiss / cache a suggestion / mark synced). */
+export async function updateReadingLed(
+  id: string,
+  patch: Partial<Pick<SavedReading, 'led' | 'ledDismissed' | 'ledSuggestion' | 'ledSynced'>>
+): Promise<void> {
+  const existing = await loadHistory();
+  await saveAll(existing.map((r) => (r.id === id ? { ...r, ...patch } : r)));
 }
