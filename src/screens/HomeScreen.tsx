@@ -9,7 +9,7 @@
 
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BackHandler, View, ScrollView, StyleSheet, Alert, AppState, Keyboard, Linking } from 'react-native';
+import { BackHandler, View, ScrollView, StyleSheet, Alert, AppState, Keyboard, Linking, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MeterConnection } from '../ble/MeterConnection';
 import type { BatteryStatus } from '../ble/protocol';
@@ -47,6 +47,7 @@ import { useLog } from '../contexts/LogContext';
 import { withBackgroundDisconnectSuppressed, isBackgroundDisconnectSuppressed } from '../ble/backgroundDisconnectGuard';
 import TabBar from '../components/TabBar';
 import InfoButton from '../components/InfoButton';
+import { SettingsIcon } from '../components/TabBarIcons';
 import ActionBar from '../components/ActionBar';
 import MainTab, { Status, FoundDevice } from './tabs/MainTab';
 import DataTab from './tabs/DataTab';
@@ -1438,8 +1439,11 @@ export default function HomeScreen({ navigation }: any) {
     rootRow: { flex: 1, flexDirection: 'row' },
     rootColumn: { flex: 1 },
     mainColumn: { flex: 1, minWidth: 0, minHeight: 0 },
+    mainColumnStacked: { flex: 3, minWidth: 0, minHeight: 0 },
     historyBeside: { width: 320, borderLeftWidth: 1, borderLeftColor: colors.cardBorder },
-    historyBelow: { height: 300, borderTopWidth: 1, borderTopColor: colors.cardBorder },
+    // Portrait: History gets about two fifths of the window rather than a fixed strip.
+    historyBelow: { flex: 2, minHeight: 320, borderTopWidth: 1, borderTopColor: colors.cardBorder },
+    headerCog: { width: 32, height: 32, borderRadius: 16, borderWidth: 1, borderColor: colors.cardBorder, alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
     // paddingBottom is extra-generous (not just enough to clear the home
     // indicator/nav bar) because this ScrollView is shared by every tab --
     // Data's own content (collapsible sections expanded) can run
@@ -1491,7 +1495,7 @@ export default function HomeScreen({ navigation }: any) {
     // there to clear the status bar/notch directly.
     <SafeAreaView style={styles.container} edges={IS_DEV_BUILD ? ['left', 'right'] : ['top', 'left', 'right']}>
       <View style={layoutMode === 'stacked' ? styles.rootColumn : styles.rootRow}>
-      <View style={styles.mainColumn}>
+      <View style={layoutMode === 'stacked' ? styles.mainColumnStacked : styles.mainColumn}>
       {/* Docked -- a sibling of the ScrollView below, not inside it, so it
           stays on screen no matter how far down a long Data tab you've
           scrolled. No title/gear header any more -- "hCRI Companion" was
@@ -1514,6 +1518,17 @@ export default function HomeScreen({ navigation }: any) {
           message="hCRI Companion connects to your Hopoocolor spectrometer over Bluetooth, takes a reading and shows its spectrum and lighting stats (CCT, CRI and TM-30 Rf/Rg). Every reading is saved to History, and you can optionally upload it to your hCRI.io account to see its full TM-30 report and share it. To upload, add your hCRI.io username and API token in Settings. Tap Settings to choose which measurements show. No meter handy? Test reading loads a random public hCRI.io report so you can try the charts (sample data: it isn't saved or uploadable). Meter won't connect? Press and hold Connect to Meter to reset the connection."
           style={styles.headerInfo}
         />
+        {wide && (
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Settings')}
+            style={styles.headerCog}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Settings"
+            activeOpacity={0.7}
+          >
+            <SettingsIcon color={colors.muted} size={18} />
+          </TouchableOpacity>
+        )}
       </View>
       {/* Logs is NOT rendered inside this ScrollView -- see LogsTab.tsx's
           own file-level comment for why: nested inside here, dragging

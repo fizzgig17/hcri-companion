@@ -54,7 +54,7 @@ function SingleColumn(Screen: React.ComponentType<any>): React.ComponentType<any
     return (
       <View style={{ flex: 1, alignItems: 'center' }}>
         <View style={{ flex: 1, width: '100%', maxWidth: WIDE_SINGLE_COLUMN_WIDTH }}>
-          <ContentWidthContext.Provider value={Math.min(width - 84, WIDE_SINGLE_COLUMN_WIDTH)}>
+          <ContentWidthContext.Provider value={Math.min(width - 32, WIDE_SINGLE_COLUMN_WIDTH)}>
             <Screen {...props} />
           </ContentWidthContext.Provider>
         </View>
@@ -80,8 +80,8 @@ function Tabs() {
   // Some phones (e.g. Galaxy Z Fold) report a tiny/zero bottom inset yet have
   // rounded corners or a gesture pill that clips the labels, so keep a floor.
   const bottomPad = Math.max(insets.bottom, 10);
-  // Tablets and unfolded foldables: the tabs become a slim rail on the left, and History is shown
-  // alongside the reading on Home instead of being a tab of its own (see HomeScreen).
+  // Tablets and unfolded foldables: no tab bar; History is shown with the reading on Home and Settings
+  // is a cog next to the ? (see HomeScreen).
   const wide = useLayoutMode() !== 'compact';
 
   return (
@@ -91,10 +91,9 @@ function Tabs() {
         headerTintColor: colors.text,
         ...(wide
           ? {
-              tabBarPosition: 'left' as const,
-              tabBarVariant: 'material' as const,
-              tabBarStyle: { backgroundColor: colors.card, borderRightColor: colors.cardBorder, width: 84 },
-              tabBarLabelStyle: { fontSize: 11, fontWeight: '600' as const },
+              // No tab bar at all on tablets: Home holds the graphs and History, and Settings is a cog
+              // beside the ? (HomeScreen), so the whole window is the reading.
+              tabBarStyle: { display: 'none' as const },
             }
           : {
               // Compact bar: 40dp of content (icon + label) plus the gesture/nav inset below it.

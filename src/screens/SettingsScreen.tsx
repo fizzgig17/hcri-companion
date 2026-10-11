@@ -8,6 +8,7 @@ import { BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScrollView, View, Text, TextInput, Switch, TouchableOpacity, StyleSheet, Alert, Modal, Linking, Platform, useWindowDimensions } from 'react-native';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
+import { useLayoutMode } from '../layout';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IS_DEV_BUILD, HCRI_API_HOST } from '../hcri/buildTarget';
 import PrimaryButton from '../components/PrimaryButton';
@@ -158,6 +159,7 @@ export default function SettingsScreen({ navigation, route }: any) {
   const kbHeight = useKeyboardHeight(true);
   const { height: winH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const wide = useLayoutMode() !== 'compact';
   const kbUp = kbHeight > 0;
   const [genBusy, setGenBusy] = useState(false);
 
@@ -378,6 +380,8 @@ export default function SettingsScreen({ navigation, route }: any) {
     scrollArea: { flex: 1 },
     // Same heading style as History's page title.
     screenTitle: { fontSize: 20, fontWeight: '700', color: colors.text, paddingHorizontal: 16, paddingTop: 16 },
+    titleRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 16 },
+    backLink: { color: colors.accent, fontSize: 16, fontWeight: '600' },
     tabBarWrap: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4 },
     // Padding lives here (the scrollable content) rather than on the
     // ScrollView's own `style` -- padding on the outer style can clip the
@@ -522,7 +526,16 @@ export default function SettingsScreen({ navigation, route }: any) {
 
   return (
     <SafeAreaView style={styles.container} edges={IS_DEV_BUILD ? ['left', 'right'] : ['top', 'left', 'right']}>
-      <Text style={styles.screenTitle}>Settings</Text>
+      {wide ? (
+        <View style={styles.titleRow}>
+          <TouchableOpacity onPress={() => navigation.navigate('Home')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 12 }} accessibilityLabel="Back to Home" activeOpacity={0.7}>
+            <Text style={styles.backLink}>‹ Home</Text>
+          </TouchableOpacity>
+          <Text style={[styles.screenTitle, { paddingHorizontal: 0, paddingTop: 0, marginLeft: 16 }]}>Settings</Text>
+        </View>
+      ) : (
+        <Text style={styles.screenTitle}>Settings</Text>
+      )}
       <View style={styles.tabBarWrap}>
         <TabBar
           tabs={[
