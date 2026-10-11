@@ -154,6 +154,8 @@ interface Props {
   pagerResetKey?: unknown;
   /** Tablet / unfolded layout: all graphs at once (SpectrumGrid) and the stat tiles in one row, instead of the swipeable pager. */
   wide?: boolean;
+  /** Tablet held upright: the charts use the portrait arrangement (big chart left, the rest down the right). */
+  portrait?: boolean;
 }
 
 export default function MainTab({
@@ -190,6 +192,7 @@ export default function MainTab({
   flicker,
   pagerResetKey,
   wide,
+  portrait,
   ledSuggestion, ledCurrent, onLedEdit, ledLists, ledPickerOpen, onLedYes, onLedOther, onLedClose, onLedPickerCancel, onLedPickerSave,
 }: Props) {
   const { colors, statusColors } = useTheme();
@@ -469,7 +472,7 @@ export default function MainTab({
         <View style={styles.chartRegion} onLayout={(e) => { setChartRegionH(Math.floor(e.nativeEvent.layout.height)); setChartRegionW(Math.floor(e.nativeEvent.layout.width)); }}>
           {wide ? (
             chartRegionW > 0 && chartRegionH > 0 ? (
-              <SpectrumGrid result={displayResult} analysis={displayAnalysis} sampleLabel={result?.sampleLabel} flicker={flicker} width={chartRegionW} height={chartRegionH} />
+              <SpectrumGrid result={displayResult} analysis={displayAnalysis} sampleLabel={result?.sampleLabel} flicker={flicker} layout={portrait ? 'portrait' : 'landscape'} width={chartRegionW} height={chartRegionH} />
             ) : null
           ) : (
           <SpectrumTab result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} sampleLabel={result?.sampleLabel} flicker={flicker} pagerResetKey={pagerResetKey} />

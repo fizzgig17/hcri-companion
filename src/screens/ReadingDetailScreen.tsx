@@ -42,7 +42,8 @@ export default function ReadingDetailScreen({ route, navigation }: any) {
   const { colors } = useTheme();
   const reading: SavedReading = route.params.reading;
   // Tablets: every graph at once (spectrum, CIE, R1-R15 and, when the reading has one, flicker), like Home.
-  const wide = useLayoutMode() !== 'compact';
+  const layoutMode = useLayoutMode();
+  const wide = layoutMode !== 'compact';
   const contentWidth = useContentWidth();
   const { height: winH } = useWindowDimensions();
 
@@ -114,6 +115,7 @@ export default function ReadingDetailScreen({ route, navigation }: any) {
           result={reading.result}
           analysis={analysis}
           flicker={reading.result.flicker ? { reading: reading.result.flicker, running: false, history: [], fromReading: true } : undefined}
+          layout={layoutMode === 'stacked' ? 'portrait' : 'landscape'}
           width={Math.max(0, contentWidth - 32)}
           height={Math.max(380, Math.min(580, Math.round(winH * 0.55)))}
         />

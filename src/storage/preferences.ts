@@ -151,6 +151,17 @@ export async function saveAutoConnectPreference(enabled: boolean): Promise<void>
   await AsyncStorage.setItem(AUTO_CONNECT_KEY, enabled ? 'true' : 'false');
 }
 
+// Tablet layouts: which chart sits in the big slot ('spectrum' | 'cie' | 'rvalues' | 'flicker'); see SpectrumGrid.tsx.
+const CHART_TOP_KEY = 'hcri.io.pref.chartTop';
+
+export async function loadChartTopPreference(): Promise<string | null> {
+  return AsyncStorage.getItem(CHART_TOP_KEY);
+}
+
+export async function saveChartTopPreference(id: string): Promise<void> {
+  await AsyncStorage.setItem(CHART_TOP_KEY, id);
+}
+
 // Defaults to 'system' -- a fresh install should follow the phone's own
 // light/dark setting rather than forcing dark (this app's original, only
 // look) on someone whose phone is set to light mode. Light and Dark are

@@ -1,12 +1,20 @@
 // src/components/SpectrumGrid.tsx
 //
-// The wide-layout replacement for SpectrumTab's swipeable pager: every graph at once. The spectrum fills the
-// top; CIE 1931, CRI R1-R15 and (when the meter supports it) Flicker sit side by side underneath. Used by
-// MainTab on tablets and unfolded foldables (see layout.ts). Takes the exact pixel size of the region it fills,
-// so nothing scrolls and nothing is clipped.
+// The wide-layout replacement for SpectrumTab's swipeable pager: every graph at once, with one of them large and
+// the others small. Used by MainTab on tablets and unfolded foldables (see layout.ts).
+//
+//   landscape  the big chart across the top; the others side by side underneath.
+//   portrait   the big chart on the left, in proportion rather than ultra-wide; the others stacked down the right.
+//
+// Any small chart can be dragged (or tapped by its ⠿ handle) onto the big slot. The chosen chart becomes big and
+// the rest keep a fixed order -- spectrum, CIE, R1-R15, flicker -- so promoting the R-bars gives
+// R-bars / spectrum, CIE, flicker; promoting CIE then gives CIE / spectrum, R-bars, flicker. The choice is saved.
+//
+// It takes the exact pixel size of the region it fills, and positions every card itself (absolute rectangles), so
+// nothing scrolls, nothing is clipped, and a card being dragged can float over the others.
 
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Animated, PanResponder } from 'react-native';
 import SpectrumChart, { SPECTRUM_HEADER_H } from './SpectrumChart';
 import ChromaticityChart from './ChromaticityChart';
 import RValuesBarChart from './RValuesBarChart';
@@ -17,6 +25,8 @@ import { SpectralAnalysis } from '../utils/spectralAnalysis';
 import type { FlickerReading } from '../ble/liveSessions';
 import type { FlickerSettingsApi } from './FlickerSettingsModal';
 import type { FlickerUploadApi } from './FlickerChart';
+import { chartOrder, gridRects, CHART_IDS, ChartId, Rect } from '../chartGrid';
+import { loadChartTopPreference, saveChartTopPreference } from '../storage/preferences';
 
 type FlickerProps = {
   reading: FlickerReading | null;
@@ -33,11 +43,15 @@ type FlickerProps = {
   fromReading?: boolean;
 };
 
+export type { ChartId } from '../chartGrid';
+
 interface Props {
   result: MeterResult;
   analysis: SpectralAnalysis;
   sampleLabel?: string;
   flicker?: FlickerProps;
+  /** 'landscape': big chart on top, others underneath. 'portrait': big chart left, others down the right. */
+  layout?: 'landscape' | 'portrait';
   /** Exact size of the region to fill. */
   width: number;
   height: number;
@@ -45,13 +59,89 @@ interface Props {
 
 // Each card has padding 10 and a 1px border on every side.
 const CARD_CHROME = 22;
-const GAP = 12;
 
-export default function SpectrumGrid({ result, analysis, sampleLabel, flicker, width, height }: Props) {
+function DraggableCard({ id, rect, bigRect, onPromote, onDragChange, children, style, handleColor }: {
+  id: ChartId; rect: Rect; bigRect: Rect; onPromote: (id: ChartId) => void; onDragChange: (dragging: boolean) => void;
+  children: React.ReactNode; style: any; handleColor: string;
+}) {
+  const pan = useRef(new Animated.ValueXY()).current;
+  const [dragging, setDragging] = useState(false);
+  // The responder is created once; keep the latest geometry and callbacks where it can read them.
+  const live = useRef({ rect, bigRect, onPromote, onDragChange, id });
+  live.current = { rect, bigRect, onPromote, onDragChange, id };
+
+  const responder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => { setDragging(true); live.current.onDragChange(true); },
+      onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
+      onPanResponderRelease: (_e, g) => {
+        const { rect: r, bigRect: b, onPromote: promote, id: cid } = live.current;
+        const cx = r.x + r.w / 2 + g.dx;
+        const cy = r.y + r.h / 2 + g.dy;
+        const moved = Math.hypot(g.dx, g.dy) > 8;
+        const inBig = cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h;
+        setDragging(false);
+        live.current.onDragChange(false);
+        pan.setValue({ x: 0, y: 0 });
+        if (inBig || !moved) promote(cid);   // dropped on the big chart, or just tapped the handle
+      },
+      onPanResponderTerminate: () => { setDragging(false); live.current.onDragChange(false); pan.setValue({ x: 0, y: 0 }); },
+    }),
+  ).current;
+
+  return (
+    <Animated.View
+      style={[
+        { position: 'absolute', left: rect.x, top: rect.y, width: rect.w, height: rect.h },
+        dragging && { zIndex: 20, elevation: 12, shadowColor: '#000', shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
+        { transform: pan.getTranslateTransform() },
+      ]}
+    >
+      <View style={[style, { width: rect.w, height: rect.h }, dragging && { opacity: 0.92 }]}>{children}</View>
+      <View
+        {...responder.panHandlers}
+        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+        accessibilityRole="button"
+        accessibilityLabel="Drag to the large chart to enlarge this chart"
+        style={handleStyles.handle}
+      >
+        <Text allowFontScaling={false} style={[handleStyles.glyph, { color: handleColor }]}>⠿</Text>
+      </View>
+    </Animated.View>
+  );
+}
+
+const handleStyles = StyleSheet.create({
+  handle: { position: 'absolute', top: 2, right: 2, width: 34, height: 30, alignItems: 'center', justifyContent: 'center' },
+  glyph: { fontSize: 20, lineHeight: 22 },
+});
+
+export default function SpectrumGrid({ result, analysis, sampleLabel, flicker, layout = 'landscape', width, height }: Props) {
   const { colors } = useTheme();
   const hasReading = analysis.x > 0 || analysis.y > 0;
-  const lowerH = hasReading ? Math.max(150, Math.min(240, Math.round(height * 0.4))) : 0;
-  const topH = Math.max(120, height - (hasReading ? lowerH + GAP : 0));
+  const [topPref, setTopPref] = useState<ChartId>('spectrum');
+  const [dragging, setDragging] = useState(false);
+
+  useEffect(() => {
+    loadChartTopPreference().then((v) => { if (v && CHART_IDS.has(v)) setTopPref(v as ChartId); }).catch(() => {});
+  }, []);
+
+  const available: ChartId[] = useMemo(
+    () => (hasReading ? (['spectrum', 'cie', 'rvalues', ...(flicker ? ['flicker'] : [])] as ChartId[]) : ['spectrum']),
+    [hasReading, flicker],
+  );
+  const order = useMemo(() => chartOrder(topPref, available), [topPref, available]);
+  const rects = useMemo(() => gridRects(order, width, height, layout), [order, width, height, layout]);
+  const bigId = order[0];
+
+  const promote = (id: ChartId) => {
+    if (id === bigId) return;
+    setTopPref(id);
+    saveChartTopPreference(id).catch(() => {});
+  };
 
   const styles = StyleSheet.create({
     card: {
@@ -62,18 +152,11 @@ export default function SpectrumGrid({ result, analysis, sampleLabel, flicker, w
       padding: 10,
       overflow: 'hidden',
     },
-    // The CIE diagram is drawn for a white backdrop in either theme (see SpectrumTab's chromCard).
-    chromCard: { backgroundColor: '#ffffff' },
+    // The CIE diagram and the flicker chart are drawn for a white backdrop in either theme.
+    whiteCard: { backgroundColor: '#ffffff' },
+    dropHint: { borderColor: colors.accent, borderWidth: 2 },
     title: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', height: 14, marginBottom: 2 },
-    row: { flexDirection: 'row', marginTop: GAP },
   });
-
-  const cardsInRow = flicker ? 3 : 2;
-  const weights = flicker ? [1, 1.5, 1.15] : [1, 1.6];
-  const totalW = width - GAP * (cardsInRow - 1);
-  const wsum = weights.reduce((a, b) => a + b, 0);
-  const cardW = weights.map((w) => Math.floor((totalW * w) / wsum));
-  const innerH = Math.max(60, lowerH - CARD_CHROME);
 
   const details = sampleLabel
     ? { showRelative: true }
@@ -81,45 +164,67 @@ export default function SpectrumGrid({ result, analysis, sampleLabel, flicker, w
     ? { integrationMs: result.integrationTimeMs, integrationDecimals: 1, showSpectral: true, showRelative: true }
     : { integrationMs: result.integrationTimeMs, peakSignal: result.peakSignal, darkSignal: result.darkSignal, showSpectral: true };
 
-  const spectrumW = Math.max(0, width - CARD_CHROME);
-  const spectrumPlotH = Math.max(60, topH - CARD_CHROME - SPECTRUM_HEADER_H);
+  const body = (id: ChartId, r: Rect, isBig: boolean) => {
+    const w = Math.max(0, r.w - CARD_CHROME);
+    const h = Math.max(60, r.h - CARD_CHROME);
+    switch (id) {
+      case 'spectrum':
+        return <SpectrumChart spectrum={result.spectrum} width={w} height={Math.max(60, h - SPECTRUM_HEADER_H)} details={isBig ? details : undefined} />;
+      case 'cie':
+        return <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} height={Math.max(60, h - 16)} width={w} />;
+      case 'rvalues':
+        return (
+          <>
+            <Text style={styles.title} allowFontScaling={false} numberOfLines={1}>CRI R1-R15</Text>
+            <RValuesBarChart ri={analysis.ri} height={Math.max(60, h - 16)} width={w} />
+          </>
+        );
+      case 'flicker':
+        return flicker ? (
+          <FlickerChart
+            reading={flicker.reading}
+            running={flicker.running}
+            history={flicker.history}
+            settings={flicker.settings}
+            upload={flicker.upload}
+            target={flicker.target}
+            onStart={flicker.onStart}
+            onStop={flicker.onStop}
+            canSampleReading={flicker.canSampleReading}
+            redoLabel={flicker.redoLabel}
+            readingNote={flicker.readingNote}
+            fromReading={flicker.fromReading}
+            width={w}
+            height={h}
+          />
+        ) : null;
+    }
+  };
+
+  const cardStyle = (id: ChartId) => [styles.card, (id === 'cie' || id === 'flicker') && styles.whiteCard];
+  const bigRect = rects[bigId];
 
   return (
     <View style={{ width, height }}>
-      <View style={[styles.card, { height: topH, justifyContent: 'center' }]}>
-        <SpectrumChart spectrum={result.spectrum} width={spectrumW} height={spectrumPlotH} details={details} />
+      <View
+        style={[{ position: 'absolute', left: bigRect.x, top: bigRect.y, width: bigRect.w, height: bigRect.h }, ...(cardStyle(bigId) as any[]), { padding: 10 }, dragging && styles.dropHint]}
+      >
+        {body(bigId, bigRect, true)}
       </View>
-      {hasReading && (
-        <View style={[styles.row, { height: lowerH }]}>
-          <View style={[styles.card, styles.chromCard, { width: cardW[0], height: lowerH, marginRight: GAP }]}>
-            <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} height={Math.max(60, innerH - 16)} width={Math.max(0, cardW[0] - CARD_CHROME)} />
-          </View>
-          <View style={[styles.card, { width: cardW[1], height: lowerH, marginRight: flicker ? GAP : 0 }]}>
-            <Text style={styles.title} allowFontScaling={false} numberOfLines={1}>CRI R1-R15</Text>
-            <RValuesBarChart ri={analysis.ri} height={Math.max(60, innerH - 16)} width={Math.max(0, cardW[1] - CARD_CHROME)} />
-          </View>
-          {flicker && (
-            <View style={[styles.card, styles.chromCard, { width: cardW[2], height: lowerH }]}>
-              <FlickerChart
-                reading={flicker.reading}
-                running={flicker.running}
-                history={flicker.history}
-                settings={flicker.settings}
-                upload={flicker.upload}
-                target={flicker.target}
-                onStart={flicker.onStart}
-                onStop={flicker.onStop}
-                canSampleReading={flicker.canSampleReading}
-                redoLabel={flicker.redoLabel}
-                readingNote={flicker.readingNote}
-                fromReading={flicker.fromReading}
-                width={Math.max(0, cardW[2] - CARD_CHROME)}
-                height={innerH}
-              />
-            </View>
-          )}
-        </View>
-      )}
+      {order.slice(1).map((id) => (
+        <DraggableCard
+          key={id}
+          id={id}
+          rect={rects[id]}
+          bigRect={bigRect}
+          onPromote={promote}
+          onDragChange={setDragging}
+          style={cardStyle(id)}
+          handleColor={id === 'cie' || id === 'flicker' ? '#666' : colors.muted}
+        >
+          {body(id, rects[id], false)}
+        </DraggableCard>
+      ))}
     </View>
   );
 }

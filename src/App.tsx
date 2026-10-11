@@ -23,6 +23,7 @@ import SettingsScreen from './screens/SettingsScreen';
 import ReadingDetailScreen from './screens/ReadingDetailScreen';
 import Tm30ReportScreen from './screens/Tm30ReportScreen';
 import PhotoScreen from './screens/PhotoScreen';
+import OverlayPanel from './components/OverlayPanel';
 import CompareScreen from './screens/CompareScreen';
 import ErrorBoundary from './components/ErrorBoundary';
 import DevBuildBanner from './components/DevBuildBanner';
@@ -65,6 +66,14 @@ function SingleColumn(Screen: React.ComponentType<any>, maxWidth: number = WIDE_
   Wrapped.displayName = `SingleColumn(${Screen.displayName || Screen.name || 'Screen'})`;
   singleColumnCache.set(Screen, Wrapped);
   return Wrapped;
+}
+// Tablets: Settings opens as a panel over Home (with an X) rather than replacing the page.
+function SettingsOverlay({ navigation, route }: any) {
+  return (
+    <OverlayPanel title="Settings" closeHint="Close settings" onClose={() => navigation.goBack()}>
+      <SettingsScreen navigation={navigation} route={route} panel />
+    </OverlayPanel>
+  );
 }
 const Tab = createBottomTabNavigator();
 
@@ -170,7 +179,8 @@ function Navigation() {
         <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
         <Stack.Screen name="ReadingDetail" component={SingleColumn(ReadingDetailScreen, 1100)} options={{ title: 'Reading' }} />
         <Stack.Screen name="Tm30Report" component={Tm30ReportScreen} options={{ title: 'TM-30 Report' }} />
-        <Stack.Screen name="Photo" component={PhotoScreen} options={{ title: 'See it on a photo' }} />
+        <Stack.Screen name="Photo" component={PhotoScreen} options={{ presentation: 'transparentModal', headerShown: false, animation: 'fade' }} />
+        <Stack.Screen name="SettingsOverlay" component={SettingsOverlay} options={{ presentation: 'transparentModal', headerShown: false, animation: 'fade' }} />
         <Stack.Screen name="Compare" component={CompareScreen} options={{ title: 'Compare readings' }} />
       </Stack.Navigator>
     </NavigationContainer>

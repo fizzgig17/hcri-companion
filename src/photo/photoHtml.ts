@@ -25,12 +25,11 @@ export function buildPhotoHtml(input: Tm30Input, c: { bg: string; text: string; 
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <style>
   html,body{margin:0;background:${c.bg};color:${c.text};font-family:-apple-system,Roboto,Helvetica,Arial,sans-serif;-webkit-text-size-adjust:100%}
-  .page{max-width:900px;margin:0 auto;padding:18px 20px 40px}
+  .page{max-width:1100px;margin:0 auto;padding:18px 20px 40px}
   h1{font-size:20px;margin:0 0 4px}
-  .sub{font-size:13px;color:${c.dim};margin:0 0 14px}
-  .help{font-size:13px;line-height:1.55;color:${c.dim};margin:0 0 14px}
+  .sub{font-size:14px;color:${c.dim};margin:0 0 6px;text-align:center}
+  .help{font-size:13px;line-height:1.55;color:${c.dim};margin:0 auto 16px;max-width:760px;text-align:center}
 </style></head><body><div class="page">
-<h1>See it on a photo</h1>
 <p class="sub">${esc(input.title || 'Reading')} · ${esc(summary)}</p>
 <p class="help">The left side of each swatch is the true (reference) colour; the right side is how this light renders it. Drag the divider to compare, or load your own photo. Photos stay on this device.</p>
 <div id="root"></div></div>

@@ -9,11 +9,12 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { WebView } from 'react-native-webview';
+import OverlayPanel from '../components/OverlayPanel';
 import { useTheme } from '../contexts/ThemeContext';
 import type { Tm30Input } from '../utils/tm30Report';
 import { buildPhotoHtml } from '../photo/photoHtml';
 
-export default function PhotoScreen({ route }: any) {
+export default function PhotoScreen({ route, navigation }: any) {
   const { colors } = useTheme();
   const input: Tm30Input = route.params.input;
   const built = useMemo(() => {
@@ -31,12 +32,14 @@ export default function PhotoScreen({ route }: any) {
   });
 
   return (
-    <View style={styles.container}>
-      {built.error ? (
-        <Text style={styles.err}>{built.error}</Text>
-      ) : (
-        <WebView style={styles.web} originWhitelist={['*']} source={{ html: built.html }} overScrollMode="never" allowFileAccess />
-      )}
-    </View>
+    <OverlayPanel title="See it on a photo" closeHint="Close photo" onClose={() => navigation.goBack()} maxWidth={1180}>
+      <View style={styles.container}>
+        {built.error ? (
+          <Text style={styles.err}>{built.error}</Text>
+        ) : (
+          <WebView style={styles.web} originWhitelist={['*']} source={{ html: built.html }} overScrollMode="never" allowFileAccess />
+        )}
+      </View>
+    </OverlayPanel>
   );
 }
