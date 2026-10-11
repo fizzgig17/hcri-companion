@@ -8,6 +8,7 @@
 import { Buffer } from 'buffer';
 import { HCRI_API_BASE } from './apiConfig';
 import { maskSecret } from '../utils/maskSecret';
+import fetchWithTimeout, { NetworkError, UPLOAD_TIMEOUT_MS } from './fetchWithTimeout';
 
 const HCRI_UPLOAD_URL = `${HCRI_API_BASE}/index.php/api/v1/upload`;
 
@@ -54,15 +55,21 @@ export async function uploadToHcri(
   form.append('label', label);
   if (replaceId) form.append('replaceId', String(replaceId));
 
-  const response = await fetch(HCRI_UPLOAD_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      // Do NOT set Content-Type manually -- fetch sets the multipart
-      // boundary itself when the body is a FormData instance.
-    },
-    body: form,
-  });
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(HCRI_UPLOAD_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        // Do NOT set Content-Type manually -- fetch sets the multipart
+        // boundary itself when the body is a FormData instance.
+      },
+      body: form,
+    }, UPLOAD_TIMEOUT_MS);
+  } catch (e: any) {
+    if (e instanceof NetworkError) return { success: false, message: e.message };
+    throw e;
+  }
 
   const text = await response.text();
   if (!response.ok) {

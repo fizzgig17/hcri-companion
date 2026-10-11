@@ -318,7 +318,10 @@ export default function HomeScreen({ navigation }: any) {
     setLedPickerOpen(false);
     if (!id) return;
     setCurrentLeds(d);
-    await updateReadingLed(id, { ...ledPatch(d), ledSynced: false, ledDismissed: !d.some(hasLed), ledCleared: !d.some(hasLed) }).catch(() => {});
+    await updateReadingLed(id, { ...ledPatch(d), ledSynced: false, ledDismissed: !d.some(hasLed), ledCleared: !d.some(hasLed) }).catch((e: any) => {
+      appendLog(`Failed to save LED details: ${e?.message ?? e}`);
+      Alert.alert('LED details not saved', "They couldn't be saved on this device. Try again.");
+    });
     syncLedForReading(id);
   }, [currentReadingId]);
 
@@ -825,6 +828,7 @@ export default function HomeScreen({ navigation }: any) {
         // failed -- the reading is still shown/usable, it just didn't get
         // added to History this time.
         appendLog(`Failed to save reading to history: ${e.message}`);
+        Alert.alert('Not saved to History', 'The reading is shown here, but it could not be added to History on this device. Upload it now if you want to keep it.');
       }
     } catch (e: any) {
       appendLog(`Measurement failed: ${e.message}`);

@@ -7,6 +7,7 @@
 import { HCRI_API_BASE } from './apiConfig';
 import type { MeterResult, FlickerCapture } from '../ble/parseResult';
 import { uploadToHcri, UploadResult } from './uploadToHcri';
+import fetchWithTimeout, { UPLOAD_TIMEOUT_MS } from './fetchWithTimeout';
 
 const HCRI_FLICKER_URL = `${HCRI_API_BASE}/index.php/api/v1/flicker`;
 
@@ -35,11 +36,11 @@ export async function uploadFlickerToHcri(
     if (opts.model) body.model = opts.model;
     if (Object.keys(settings).length) body.settings = settings;
 
-    const response = await fetch(HCRI_FLICKER_URL, {
+    const response = await fetchWithTimeout(HCRI_FLICKER_URL, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-    });
+    }, UPLOAD_TIMEOUT_MS);
     if (!response.ok) {
       log?.(`Flicker upload skipped (${response.status})${opts.reportId ? ' -- the report itself was uploaded' : ''}.`);
       return false;

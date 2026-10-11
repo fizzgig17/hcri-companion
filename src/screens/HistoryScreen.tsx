@@ -90,7 +90,9 @@ export default function HistoryScreen({ navigation }: any) {
   }, []);
   const confirmLed = useCallback(async (id: string, d: LedDetails[]) => {
     setLedPickFor(null);
-    await patchLed(id, { ...ledPatch(d), ledSynced: false, ledDismissed: !d.some(hasLed), ledCleared: !d.some(hasLed) }).catch(() => {});
+    await patchLed(id, { ...ledPatch(d), ledSynced: false, ledDismissed: !d.some(hasLed), ledCleared: !d.some(hasLed) }).catch(() => {
+      Alert.alert('LED details not saved', "They couldn't be saved on this device. Try again.");
+    });
     const ok = await syncLedForReading(id);
     if (ok) setHistory((prev) => prev.map((r) => (r.id === id ? { ...r, ledSynced: true } : r)));
   }, [patchLed]);

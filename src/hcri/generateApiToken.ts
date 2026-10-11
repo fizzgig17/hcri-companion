@@ -20,6 +20,7 @@
 
 import { HCRI_API_BASE } from './apiConfig';
 import { maskSecret } from '../utils/maskSecret';
+import fetchWithTimeout from './fetchWithTimeout';
 
 const LOGIN_URL = `${HCRI_API_BASE}/index.php/api/auth/login`;
 const TOKENS_URL = `${HCRI_API_BASE}/index.php/api/tokens`;
@@ -57,7 +58,7 @@ export async function generateApiToken(
 ): Promise<GeneratedToken> {
   log?.(`POST ${LOGIN_URL} email="${usernameOrEmail}"`);
 
-  const loginRes = await fetch(LOGIN_URL, {
+  const loginRes = await fetchWithTimeout(LOGIN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: usernameOrEmail, password }),
@@ -77,7 +78,7 @@ export async function generateApiToken(
 
   log?.(`POST ${TOKENS_URL} name="${tokenName}" (as ${resolvedUsername})`);
 
-  const tokenRes = await fetch(TOKENS_URL, {
+  const tokenRes = await fetchWithTimeout(TOKENS_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
