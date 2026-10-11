@@ -52,6 +52,8 @@ import {
   loadFlickerWithReadingPreference,
   saveFlickerWithReadingPreference,
   loadLedSuggestionsPreference,
+  loadAutoConnectPreference,
+  saveAutoConnectPreference,
   saveLedSuggestionsPreference,
   saveTbCorrectionPreference,
 } from '../storage/preferences';
@@ -136,6 +138,7 @@ export default function SettingsScreen({ navigation, route }: any) {
   const [tbCorrection, setTbCorrection] = useState(true);
   const [flickerWithReading, setFlickerWithReading] = useState(false);
   const [ledSuggestions, setLedSuggestions] = useState(true);
+  const [autoConnect, setAutoConnect] = useState(true);
   // Which measurements show on the Main tab's result card, and in what
   // order -- starts from the built-in default so the list renders
   // immediately (not empty) while loadStatDisplayPrefs() resolves.
@@ -180,6 +183,7 @@ export default function SettingsScreen({ navigation, route }: any) {
     loadTbCorrectionPreference().then(setTbCorrection);
     loadFlickerWithReadingPreference().then(setFlickerWithReading);
     loadLedSuggestionsPreference().then(setLedSuggestions);
+    loadAutoConnectPreference().then(setAutoConnect);
     loadStatDisplayPrefs().then(setStatPrefs);
     // Intentionally run once on mount only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -227,6 +231,11 @@ export default function SettingsScreen({ navigation, route }: any) {
     setResultHapticsEnabled(value);
     if (value) hapticSuccess();
     await saveHapticResultsPreference(value);
+  };
+
+  const toggleAutoConnect = async (value: boolean) => {
+    setAutoConnect(value);
+    await saveAutoConnectPreference(value);
   };
 
   const toggleLedSuggestions = async (value: boolean) => {
@@ -787,6 +796,17 @@ export default function SettingsScreen({ navigation, route }: any) {
           </Text>
         </View>
         <Switch accessibilityLabel="Torch Bearer correction" value={tbCorrection} onValueChange={toggleTbCorrection} trackColor={{ true: colors.accent }} />
+      </View>
+
+      <View style={styles.toggleRow}>
+        <View style={styles.toggleTextWrap}>
+          <Text style={styles.toggleLabel}>Auto-connect to meter</Text>
+          <Text style={styles.toggleHint}>
+            On by default. The app looks for your meter when it opens and when you switch back to it, and skips the
+            attempt while Bluetooth is off. Turn off to connect only when you tap Connect to Meter.
+          </Text>
+        </View>
+        <Switch accessibilityLabel="Auto-connect to meter" value={autoConnect} onValueChange={toggleAutoConnect} trackColor={{ true: colors.accent }} />
       </View>
 
       <View style={styles.toggleRow}>

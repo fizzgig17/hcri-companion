@@ -139,6 +139,18 @@ export async function saveLedSuggestionsPreference(enabled: boolean): Promise<vo
   await AsyncStorage.setItem(LED_SUGGESTIONS_KEY, enabled ? 'true' : 'false');
 }
 
+// Default ON -- the app looks for the meter by itself when it opens and when you come back to it. Turn off to
+// connect only when you tap Connect to Meter.
+const AUTO_CONNECT_KEY = 'hcri.io.pref.autoConnect';
+
+export async function loadAutoConnectPreference(): Promise<boolean> {
+  return (await AsyncStorage.getItem(AUTO_CONNECT_KEY)) !== 'false';
+}
+
+export async function saveAutoConnectPreference(enabled: boolean): Promise<void> {
+  await AsyncStorage.setItem(AUTO_CONNECT_KEY, enabled ? 'true' : 'false');
+}
+
 // Defaults to 'system' -- a fresh install should follow the phone's own
 // light/dark setting rather than forcing dark (this app's original, only
 // look) on someone whose phone is set to light mode. Light and Dark are
