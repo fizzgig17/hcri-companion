@@ -22,6 +22,7 @@ import HistoryScreen from './screens/HistoryScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import ReadingDetailScreen from './screens/ReadingDetailScreen';
 import Tm30ReportScreen from './screens/Tm30ReportScreen';
+import PhotoScreen from './screens/PhotoScreen';
 import CompareScreen from './screens/CompareScreen';
 import ErrorBoundary from './components/ErrorBoundary';
 import DevBuildBanner from './components/DevBuildBanner';
@@ -44,7 +45,7 @@ const Stack = createNativeStackNavigator();
 // Single-column screens (Settings, a past reading) stay a comfortable reading width, centered, on wide windows
 // instead of stretching across a tablet. A no-op on phones. Memoized per screen so navigation sees a stable component.
 const singleColumnCache = new Map<React.ComponentType<any>, React.ComponentType<any>>();
-function SingleColumn(Screen: React.ComponentType<any>): React.ComponentType<any> {
+function SingleColumn(Screen: React.ComponentType<any>, maxWidth: number = WIDE_SINGLE_COLUMN_WIDTH): React.ComponentType<any> {
   const cached = singleColumnCache.get(Screen);
   if (cached) return cached;
   const Wrapped = (props: any) => {
@@ -53,8 +54,8 @@ function SingleColumn(Screen: React.ComponentType<any>): React.ComponentType<any
     if (mode === 'compact') return <Screen {...props} />;
     return (
       <View style={{ flex: 1, alignItems: 'center' }}>
-        <View style={{ flex: 1, width: '100%', maxWidth: WIDE_SINGLE_COLUMN_WIDTH }}>
-          <ContentWidthContext.Provider value={Math.min(width - 32, WIDE_SINGLE_COLUMN_WIDTH)}>
+        <View style={{ flex: 1, width: '100%', maxWidth }}>
+          <ContentWidthContext.Provider value={Math.min(width - 32, maxWidth)}>
             <Screen {...props} />
           </ContentWidthContext.Provider>
         </View>
@@ -167,8 +168,9 @@ function Navigation() {
             reading") sits on top of the tabs as a full-screen push, the
             same relationship it had to Home before. */}
         <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
-        <Stack.Screen name="ReadingDetail" component={SingleColumn(ReadingDetailScreen)} options={{ title: 'Reading' }} />
+        <Stack.Screen name="ReadingDetail" component={SingleColumn(ReadingDetailScreen, 1100)} options={{ title: 'Reading' }} />
         <Stack.Screen name="Tm30Report" component={Tm30ReportScreen} options={{ title: 'TM-30 Report' }} />
+        <Stack.Screen name="Photo" component={PhotoScreen} options={{ title: 'See it on a photo' }} />
         <Stack.Screen name="Compare" component={CompareScreen} options={{ title: 'Compare readings' }} />
       </Stack.Navigator>
     </NavigationContainer>

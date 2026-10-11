@@ -17,12 +17,14 @@
 // JSON-serializable-only.
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
 import { SavedReading } from '../storage/readingHistory';
 import { analyzeSpectrum } from '../utils/spectralAnalysis';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
 import { STAT_METRIC_BY_ID } from '../utils/statMetrics';
 import SpectrumTab from './tabs/SpectrumTab';
+import SpectrumGrid from '../components/SpectrumGrid';
+import { useContentWidth, useLayoutMode } from '../layout';
 import StatCard from '../components/StatCard';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -39,6 +41,10 @@ function formatSavedAt(ms: number): string {
 export default function ReadingDetailScreen({ route, navigation }: any) {
   const { colors } = useTheme();
   const reading: SavedReading = route.params.reading;
+  // Tablets: every graph at once (spectrum, CIE, R1-R15 and, when the reading has one, flicker), like Home.
+  const wide = useLayoutMode() !== 'compact';
+  const contentWidth = useContentWidth();
+  const { height: winH } = useWindowDimensions();
 
   // Same fallback readingHistory.ts's own SavedReading.analysis comment
   // describes: readings saved before `analysis` existed on disk don't have
@@ -103,11 +109,21 @@ export default function ReadingDetailScreen({ route, navigation }: any) {
         </Text>
       </View>
 
-      <SpectrumTab
-        result={reading.result}
-        analysis={analysis}
-        flicker={reading.result.flicker ? { reading: reading.result.flicker, running: false, focusNonce: 0, history: [] } : undefined}
-      />
+      {wide ? (
+        <SpectrumGrid
+          result={reading.result}
+          analysis={analysis}
+          flicker={reading.result.flicker ? { reading: reading.result.flicker, running: false, history: [], fromReading: true } : undefined}
+          width={Math.max(0, contentWidth - 32)}
+          height={Math.max(380, Math.min(580, Math.round(winH * 0.55)))}
+        />
+      ) : (
+        <SpectrumTab
+          result={reading.result}
+          analysis={analysis}
+          flicker={reading.result.flicker ? { reading: reading.result.flicker, running: false, focusNonce: 0, history: [] } : undefined}
+        />
+      )}
     </ScrollView>
   );
 }

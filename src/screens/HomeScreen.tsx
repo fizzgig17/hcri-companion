@@ -9,7 +9,7 @@
 
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BackHandler, View, ScrollView, StyleSheet, Alert, AppState, Keyboard, Linking, TouchableOpacity } from 'react-native';
+import { BackHandler, Platform, View, ScrollView, StyleSheet, Alert, AppState, Keyboard, Linking, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MeterConnection } from '../ble/MeterConnection';
 import type { BatteryStatus } from '../ble/protocol';
@@ -1588,8 +1588,8 @@ export default function HomeScreen({ navigation }: any) {
             flicker={
               (status === 'connected' || status === 'uploading' || status === 'measuring') && deviceSupportsFlicker(deviceName) && mode !== 'live'
                 ? { reading: flickerReading, running: mode === 'flicker', focusNonce: flickerFocus, history: flickerHistory, settings: flickerSettingsApi, upload: flickerUploadApi, target: mode === 'flicker' ? flickerTarget : null, onStart: startFlickerSample, onStop: stopFlicker, canSampleReading, fromReading: flickerFromReading, redoLabel: result?.flicker ? 'Redo for reading' : 'Add to reading', readingNote: result ? (currentReadingId ? 'saved' : 'unsaved') : undefined }
-                : result?.sampleLabel && result.flicker
-                  // A test reading whose report has flicker: show its first capture, view only (no meter needed).
+                : (result?.sampleLabel || wide) && result?.flicker
+                  // A test reading whose report has flicker -- or, on tablets, any reading that has one: show its first capture, view only (no meter needed).
                   ? { reading: result.flicker, running: false, focusNonce: flickerFocus, history: [], fromReading: true }
                   : undefined
             }
@@ -1654,6 +1654,16 @@ export default function HomeScreen({ navigation }: any) {
               input: tm30InputFromReading(result, analysis, result.sampleLabel || uploadTitle.trim() || 'Current reading', Date.now(), currentLeds[0] ?? undefined, currentLeds),
             });
           }}
+          onShowPhoto={
+            Platform.OS === 'ios' && Platform.isPad
+              ? () => {
+                  if (!result || !analysis) return;
+                  navigation.navigate('Photo', {
+                    input: tm30InputFromReading(result, analysis, result.sampleLabel || uploadTitle.trim() || 'Current reading', Date.now()),
+                  });
+                }
+              : undefined
+          }
           onSaveLive={saveLive}
         />
       )}
