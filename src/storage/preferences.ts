@@ -127,6 +127,18 @@ export async function saveFlickerWithReadingPreference(enabled: boolean): Promis
   await AsyncStorage.setItem(FLICKER_WITH_READING_KEY, enabled ? 'true' : 'false');
 }
 
+// Default ON -- hCRI.io suggests the LED (brand, model, CCT) from the spectrum after each reading. Turning it
+// off stops those requests and hides the suggestion cards; adding LED details by hand still works.
+const LED_SUGGESTIONS_KEY = 'hcri.io.pref.ledSuggestions';
+
+export async function loadLedSuggestionsPreference(): Promise<boolean> {
+  return (await AsyncStorage.getItem(LED_SUGGESTIONS_KEY)) !== 'false';
+}
+
+export async function saveLedSuggestionsPreference(enabled: boolean): Promise<void> {
+  await AsyncStorage.setItem(LED_SUGGESTIONS_KEY, enabled ? 'true' : 'false');
+}
+
 // Defaults to 'system' -- a fresh install should follow the phone's own
 // light/dark setting rather than forcing dark (this app's original, only
 // look) on someone whose phone is set to light mode. Light and Dark are
