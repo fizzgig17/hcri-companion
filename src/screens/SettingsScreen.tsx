@@ -527,14 +527,15 @@ export default function SettingsScreen({ navigation, route }: any) {
         <TabBar
           tabs={[
             { key: 'settings', label: 'Settings' },
-            { key: 'update', label: 'Update', badge: update.status === 'available' },
+            // The Update tab checks Google Play, so it is Android-only for now.
+            ...(Platform.OS === 'android' ? [{ key: 'update' as const, label: 'Update', badge: update.status === 'available' }] : []),
             { key: 'about', label: 'About' },
           ]}
           active={settingsTab}
           onChange={setSettingsTab}
         />
       </View>
-      {settingsTab === 'update' ? (
+      {settingsTab === 'update' && Platform.OS === 'android' ? (
         <ScrollView automaticallyAdjustKeyboardInsets style={styles.scrollArea} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat} keyboardShouldPersistTaps="handled">
           <VersionStamp />
           <UpdateTab />
