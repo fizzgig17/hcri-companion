@@ -125,6 +125,8 @@ export default function ReadingDetailScreen({ route, navigation }: any) {
         />
       ) : (
         <SpectrumTab
+          // Upright tablet window: tall pages instead of the phone's short fixed ones.
+          {...(layoutMode === 'stacked' ? { tall: true, regionHeight: Math.max(480, Math.min(820, Math.round(winH * 0.62))) } : {})}
           result={reading.result}
           analysis={analysis}
           flicker={reading.result.flicker ? { reading: reading.result.flicker, running: false, focusNonce: 0, history: [] } : undefined}

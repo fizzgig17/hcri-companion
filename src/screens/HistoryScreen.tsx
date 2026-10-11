@@ -16,6 +16,7 @@
 // away" and disconnect the meter out from under them -- even though the
 // meter connection itself lives entirely in HomeScreen/MainTab, not here.
 
+import { useLayoutMode } from '../layout';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Text, View, ScrollView, StyleSheet, Alert, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -54,6 +55,7 @@ import { ledPatch, ledsOfReading, hasLed } from '../hcri/leds';
  * which Home bumps when a reading is taken or uploaded.
  */
 export default function HistoryScreen({ navigation, embedded, refreshKey }: any) {
+  const layoutMode = useLayoutMode();
   const { colors } = useTheme();
   const { appendLog } = useLog();
 
@@ -188,7 +190,7 @@ export default function HistoryScreen({ navigation, embedded, refreshKey }: any)
       const creds = await loadHcriCredentials();
       if (!creds) {
         Alert.alert('No hCRI.io account set up', 'Add your username and API token first.', [
-          { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') },
+          { text: 'Go to Settings', onPress: () => navigation.navigate(layoutMode === 'compact' ? 'Settings' : 'SettingsOverlay') },
           { text: 'Cancel', style: 'cancel' },
         ]);
         return;
@@ -240,7 +242,7 @@ export default function HistoryScreen({ navigation, embedded, refreshKey }: any)
       const creds = await loadHcriCredentials();
       if (!creds) {
         Alert.alert('No hCRI.io account set up', 'Add your username and API token first.', [
-          { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') },
+          { text: 'Go to Settings', onPress: () => navigation.navigate(layoutMode === 'compact' ? 'Settings' : 'SettingsOverlay') },
           { text: 'Cancel', style: 'cancel' },
         ]);
         return;
@@ -303,7 +305,7 @@ export default function HistoryScreen({ navigation, embedded, refreshKey }: any)
       const creds = await loadHcriCredentials();
       if (!creds) {
         Alert.alert('No hCRI.io account set up', 'Add your username and API token first.', [
-          { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') },
+          { text: 'Go to Settings', onPress: () => navigation.navigate(layoutMode === 'compact' ? 'Settings' : 'SettingsOverlay') },
           { text: 'Cancel', style: 'cancel' },
         ]);
         return;

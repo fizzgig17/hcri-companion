@@ -478,7 +478,7 @@ export default function MainTab({
           ) : portrait ? (
             // Upright tablet: the same swipeable pages as on a phone (spectrum, CIE, R-values, flicker), sized to this region.
             <ContentWidthContext.Provider value={chartRegionW + 62}>
-              <SpectrumTab result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} sampleLabel={result?.sampleLabel} flicker={flicker} pagerResetKey={pagerResetKey} />
+              <SpectrumTab tall result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} sampleLabel={result?.sampleLabel} flicker={flicker} pagerResetKey={pagerResetKey} />
             </ContentWidthContext.Provider>
           ) : (
           <SpectrumTab result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} sampleLabel={result?.sampleLabel} flicker={flicker} pagerResetKey={pagerResetKey} />

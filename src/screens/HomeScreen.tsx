@@ -1314,7 +1314,7 @@ export default function HomeScreen({ navigation }: any) {
     const creds = await loadHcriCredentials();
     if (!creds) {
       Alert.alert('No hCRI.io account set up', 'Add your username and API token first.', [
-        { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') },
+        { text: 'Go to Settings', onPress: () => navigation.navigate(layoutMode === 'compact' ? 'Settings' : 'SettingsOverlay') },
         { text: 'Cancel', style: 'cancel' },
       ]);
       return;
@@ -1391,7 +1391,7 @@ export default function HomeScreen({ navigation }: any) {
     const creds = await loadHcriCredentials();
     if (!creds) {
       Alert.alert('No hCRI.io account set up', 'Add your username and API token first.', [
-        { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') },
+        { text: 'Go to Settings', onPress: () => navigation.navigate(layoutMode === 'compact' ? 'Settings' : 'SettingsOverlay') },
         { text: 'Cancel', style: 'cancel' },
       ]);
       return;
@@ -1441,10 +1441,10 @@ export default function HomeScreen({ navigation }: any) {
     rootRow: { flex: 1, flexDirection: 'row' },
     rootColumn: { flex: 1 },
     mainColumn: { flex: 1, minWidth: 0, minHeight: 0 },
-    mainColumnStacked: { flex: 3, minWidth: 0, minHeight: 0 },
+    mainColumnStacked: { flex: 5, minWidth: 0, minHeight: 0 },
     historyBeside: { width: 320, borderLeftWidth: 1, borderLeftColor: colors.cardBorder },
     // Portrait: History gets about two fifths of the window rather than a fixed strip.
-    historyBelow: { flex: 2, minHeight: 320, borderTopWidth: 1, borderTopColor: colors.cardBorder, flexDirection: 'row' },
+    historyBelow: { flex: 3, minHeight: 300, borderTopWidth: 1, borderTopColor: colors.cardBorder, flexDirection: 'row' },
     bottomLeft: { flex: 1, minWidth: 0, borderRightWidth: 1, borderRightColor: colors.cardBorder },
     bottomRight: { flex: 1, minWidth: 0 },
     bottomRightContent: { padding: 12, paddingBottom: 24 },
