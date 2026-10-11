@@ -24,7 +24,7 @@ import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '.
 import { STAT_METRIC_BY_ID } from '../utils/statMetrics';
 import SpectrumTab from './tabs/SpectrumTab';
 import SpectrumGrid from '../components/SpectrumGrid';
-import { useContentWidth, useLayoutMode } from '../layout';
+import { useContentWidth, useLayoutMode, MIN_GRID_WIDTH } from '../layout';
 import StatCard from '../components/StatCard';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -45,8 +45,9 @@ export default function ReadingDetailScreen({ route, navigation }: any) {
   // Tablets: every graph at once (spectrum, CIE, R1-R15 and, when the reading has one, flicker), like Home.
   const layoutMode = useLayoutMode();
   // Landscape dashboards get the draggable grid; portrait/compact swipe through the charts in their original order.
-  const wide = layoutMode === 'dashboard';
   const contentWidth = useContentWidth();
+  // Narrow dashboards (square foldables) can't fit the grid -> tall pager instead.
+  const wide = layoutMode === 'dashboard' && contentWidth - 32 >= MIN_GRID_WIDTH;
   const { height: winH } = useWindowDimensions();
 
   // Same fallback readingHistory.ts's own SavedReading.analysis comment
@@ -126,7 +127,7 @@ export default function ReadingDetailScreen({ route, navigation }: any) {
       ) : (
         <SpectrumTab
           // Upright tablet window: tall pages instead of the phone's short fixed ones.
-          {...(layoutMode === 'stacked' ? { tall: true, regionHeight: Math.max(480, Math.min(820, Math.round(winH * 0.62))) } : {})}
+          {...(layoutMode !== 'compact' ? { tall: true, regionHeight: Math.max(480, Math.min(820, Math.round(winH * 0.62))) } : {})}
           result={reading.result}
           analysis={analysis}
           flicker={reading.result.flicker ? { reading: reading.result.flicker, running: false, focusNonce: 0, history: [] } : undefined}
