@@ -51,7 +51,7 @@ export default function HintPressable({ hint, onLongPress, children, ...rest }: 
 
   return (
     <>
-      <TouchableOpacity ref={ref} delayLongPress={350} {...rest} onLongPress={show}>
+      <TouchableOpacity ref={ref} accessibilityRole="button" accessibilityLabel={hint} delayLongPress={350} {...rest} onLongPress={show}>
         {children}
       </TouchableOpacity>
       {box && (

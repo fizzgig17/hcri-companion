@@ -1527,7 +1527,7 @@ export default function HomeScreen({ navigation }: any) {
           />
       </View>
       ) : (
-      <ScrollView ref={scrollRef} style={styles.scrollArea} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView automaticallyAdjustKeyboardInsets ref={scrollRef} style={styles.scrollArea} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {activeTab === 'data' && (
           <DataTab
             result={result}

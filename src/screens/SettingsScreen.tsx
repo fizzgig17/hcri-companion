@@ -288,7 +288,7 @@ export default function SettingsScreen({ navigation, route }: any) {
 
   const save = async () => {
     if (!username.trim() || !token.trim()) {
-      Alert.alert('Both fields are required');
+      Alert.alert('Missing information', 'Enter both your username and API token.');
       return;
     }
     await persistCredentials(username.trim(), token.trim());
@@ -328,7 +328,7 @@ export default function SettingsScreen({ navigation, route }: any) {
     const email = genEmail.trim();
     const name = genTokenName.trim() || DEFAULT_GENERATED_TOKEN_NAME;
     if (!email || !genPassword) {
-      Alert.alert('Username/email and password are both required');
+      Alert.alert('Missing information', 'Enter both your username or email and your password.');
       return;
     }
     setGenBusy(true);
@@ -518,16 +518,16 @@ export default function SettingsScreen({ navigation, route }: any) {
         />
       </View>
       {settingsTab === 'update' ? (
-        <ScrollView style={styles.scrollArea} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat} keyboardShouldPersistTaps="handled">
+        <ScrollView automaticallyAdjustKeyboardInsets style={styles.scrollArea} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat} keyboardShouldPersistTaps="handled">
           <VersionStamp />
           <UpdateTab />
         </ScrollView>
       ) : settingsTab === 'about' ? (
-        <ScrollView style={styles.scrollArea} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat} keyboardShouldPersistTaps="handled">
+        <ScrollView automaticallyAdjustKeyboardInsets style={styles.scrollArea} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat} keyboardShouldPersistTaps="handled">
           <AboutTab />
         </ScrollView>
       ) : (
-    <ScrollView style={styles.scrollArea} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat} keyboardShouldPersistTaps="handled">
+    <ScrollView automaticallyAdjustKeyboardInsets style={styles.scrollArea} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat} keyboardShouldPersistTaps="handled">
       {/* Which build you're looking at, at a glance -- came up more than
           once this session when testing against a build that was already
           a few fixes behind develop. See buildInfo.ts for how this stays
@@ -733,14 +733,14 @@ export default function SettingsScreen({ navigation, route }: any) {
           <Text style={styles.toggleLabel}>Button taps</Text>
           <Text style={styles.toggleHint}>A short tick when you press a button in the bar at the bottom of the Main screen.</Text>
         </View>
-        <Switch value={hapticTaps} onValueChange={toggleHapticTaps} trackColor={{ true: colors.accent }} />
+        <Switch accessibilityLabel="Button taps" value={hapticTaps} onValueChange={toggleHapticTaps} trackColor={{ true: colors.accent }} />
       </View>
       <View style={styles.toggleRow}>
         <View style={styles.toggleTextWrap}>
           <Text style={styles.toggleLabel}>Reading and upload results</Text>
           <Text style={styles.toggleHint}>A buzz when a reading or upload finishes, and a double buzz when one fails.</Text>
         </View>
-        <Switch value={hapticResults} onValueChange={toggleHapticResults} trackColor={{ true: colors.accent }} />
+        <Switch accessibilityLabel="Reading and upload results" value={hapticResults} onValueChange={toggleHapticResults} trackColor={{ true: colors.accent }} />
       </View>
 
       <View style={styles.toggleRow}>
@@ -750,7 +750,7 @@ export default function SettingsScreen({ navigation, route }: any) {
             Prevents the screen from locking during a session with the meter connected. Uses more battery.
           </Text>
         </View>
-        <Switch value={keepAwake} onValueChange={toggleKeepAwake} trackColor={{ true: colors.accent }} />
+        <Switch accessibilityLabel="Keep screen awake while connected" value={keepAwake} onValueChange={toggleKeepAwake} trackColor={{ true: colors.accent }} />
       </View>
 
       <View style={styles.toggleRow}>
@@ -762,7 +762,7 @@ export default function SettingsScreen({ navigation, route }: any) {
             foreground instead (saves the meter's battery, at the cost of reconnecting every time).
           </Text>
         </View>
-        <Switch
+        <Switch accessibilityLabel="Stay connected in background"
           value={stayConnectedInBackground}
           onValueChange={toggleStayConnectedInBackground}
           trackColor={{ true: colors.accent }}
@@ -778,7 +778,7 @@ export default function SettingsScreen({ navigation, route }: any) {
             see the raw, uncorrected spectrum. Applies to new scans, and saved CSVs say which one was used.
           </Text>
         </View>
-        <Switch value={tbCorrection} onValueChange={toggleTbCorrection} trackColor={{ true: colors.accent }} />
+        <Switch accessibilityLabel="Torch Bearer correction" value={tbCorrection} onValueChange={toggleTbCorrection} trackColor={{ true: colors.accent }} />
       </View>
 
       <View style={styles.toggleRow}>
@@ -790,7 +790,7 @@ export default function SettingsScreen({ navigation, route }: any) {
             with the reading, shown on its Flicker page, included in shared CSVs, and uploaded with the reading to hCRI.io (attached to its report). Even when off, you can add a flicker sample to a reading from the Flicker tab before uploading it.
           </Text>
         </View>
-        <Switch value={flickerWithReading} onValueChange={toggleFlickerWithReading} trackColor={{ true: colors.accent }} />
+        <Switch accessibilityLabel="Capture flicker with each reading" value={flickerWithReading} onValueChange={toggleFlickerWithReading} trackColor={{ true: colors.accent }} />
       </View>
 
       <View style={styles.toggleRow}>
@@ -802,7 +802,7 @@ export default function SettingsScreen({ navigation, route }: any) {
             standard log already covers connection and measurement status.
           </Text>
         </View>
-        <Switch value={verboseLogging} onValueChange={toggleVerboseLogging} trackColor={{ true: colors.accent }} />
+        <Switch accessibilityLabel="Verbose logging" value={verboseLogging} onValueChange={toggleVerboseLogging} trackColor={{ true: colors.accent }} />
       </View>
 
       {IS_DEV_BUILD && (

@@ -67,6 +67,8 @@ export default function TabBar<T extends string>({ tabs, active, onChange }: Pro
             style={[styles.tab, isActive && styles.tabActive]}
             onPress={() => onChange(t.key)}
             activeOpacity={0.7}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: isActive }}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Text style={[styles.tabText, isActive && styles.tabTextActive]} numberOfLines={1}>

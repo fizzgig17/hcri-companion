@@ -374,7 +374,7 @@ export default function HistoryScreen({ navigation }: any) {
           dismissed the keyboard and never passed the tap to the popup's Save
           button, so Save took two taps. "handled" lets a tap on a button go
           straight through. */}
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>History</Text>
         <HistoryTab
           history={history}
