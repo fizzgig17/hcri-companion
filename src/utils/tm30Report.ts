@@ -338,6 +338,18 @@ export function buildTm30Html(input: Tm30Input): string {
   .note{font-size:12px;color:#374a5e;padding:0 12px;line-height:1.4;word-break:break-word}
   .foot{font-size:9.5px;color:#8a97a5;text-align:center;padding:14px 14px 0;line-height:1.4}
   .cap{font-size:10.5px;color:#5b6b80;padding:2px 12px 0}
+  /* Tablets and unfolded foldables: a full page instead of a phone column. Vector graphic and spectrum on the
+     left, the three local-shift charts on the right, samples across the bottom. */
+  @media (min-width:900px){
+    .page{max-width:1240px;display:grid;grid-template-columns:minmax(0,440px) minmax(0,1fr);column-gap:8px;align-items:start}
+    .bar,.info,.big,.stats,.ces,.notes,.foot{grid-column:1/-1}
+    .cvg,.spd{grid-column:1}
+    .local{grid-column:2;grid-row:5 / span 2}
+    .bar{padding:16px 18px}.bar h1{font-size:20px}.bar .t{font-size:14px}
+    .chip{font-size:14px}.big .n .v{font-size:52px}.big .n .l{font-size:13px}
+    .stats{grid-template-columns:repeat(6,1fr)}.stat .sv{font-size:18px}.stat .sl{font-size:10.5px}
+    .cap{font-size:12px}
+  }
 </style></head><body><div class="page">
 <div class="bar"><h1>IES TM-30-18 Color Rendition Report</h1><div class="t">${esc(input.title || 'Reading')}</div></div>
 <div class="info">
@@ -357,20 +369,20 @@ export function buildTm30Html(input: Tm30Input): string {
   ${stat('CIE x', input.x.toFixed(4))}
   ${stat('CIE y', input.y.toFixed(4))}
 </div>
-<div class="keep"><h2>Color Vector Graphic</h2>
+<div class="keep cvg"><h2>Color Vector Graphic</h2>
 <div class="sec">${cvgWheel(d)}
 <div class="cap">Black circle = reference illuminant. Red shape = this light; outside the circle is more saturated, inside is less. Arrows show the shift for each of the 16 hue bins.</div></div></div>
-<div class="keep"><h2>Spectral Power Distribution</h2>
+<div class="keep spd"><h2>Spectral Power Distribution</h2>
 <div class="sec">${spdChart(input)}</div></div>
-<h2>Local Color Rendition</h2>
+<div class="local"><h2>Local Color Rendition</h2>
 <div class="sec">
   <div class="keep">${binChart('LOCAL CHROMA SHIFT (Rcs,hj)', 'chroma', d.rcsBins, csMax, [`+${csPct}%`, '0%', `-${csPct}%`])}</div>
   <div class="keep">${binChart('LOCAL HUE SHIFT (Rhs,hj)', 'hue', d.rhsBins, hsMax, [`+${hsTxt}`, '0', `-${hsTxt}`])}</div>
   <div class="keep">${binChart('LOCAL COLOR FIDELITY (Rf,hj)', 'fidelity', d.rfBins, 100, ['100', '50', '0'])}</div>
-</div>
-<div class="keep"><h2>Color Sample Fidelity, Rf,CES</h2>
+</div></div>
+<div class="keep ces"><h2>Color Sample Fidelity, Rf,CES</h2>
 <div class="sec">${cesChart(d)}</div></div>
-${notes ? `<h2>Notes</h2><div class="note">${esc(notes)}</div>` : ''}
+${notes ? `<div class="notes"><h2>Notes</h2><div class="note">${esc(notes)}</div></div>` : ''}
 <div class="foot">Generated ${genStr} on-device by hCRI Companion v${esc(APP_VERSION)} · Colors are for visual orientation purposes only.</div>
 </div></body></html>`;
 }

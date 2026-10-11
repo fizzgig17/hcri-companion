@@ -16,8 +16,9 @@
 // away" and disconnect the meter out from under them -- even though the
 // meter connection itself lives entirely in HomeScreen/MainTab, not here.
 
+import { useLayoutMode } from '../layout';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Text, ScrollView, StyleSheet, Alert, Linking } from 'react-native';
+import { Text, View, ScrollView, StyleSheet, Alert, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { useTheme } from '../contexts/ThemeContext';
@@ -48,7 +49,13 @@ import useLedSuggestionsEnabled from '../hooks/useLedSuggestionsEnabled';
 import { syncLedForReading } from '../hcri/ledSync';
 import { ledPatch, ledsOfReading, hasLed } from '../hcri/leds';
 
-export default function HistoryScreen({ navigation }: any) {
+/**
+ * `embedded`: shown inside Home's History pane on tablets and unfolded foldables (see HomeScreen) rather than as a
+ * tab of its own. It drops the screen chrome (safe-area insets, title) and reloads whenever `refreshKey` changes,
+ * which Home bumps when a reading is taken or uploaded.
+ */
+export default function HistoryScreen({ navigation, embedded, refreshKey }: any) {
+  const layoutMode = useLayoutMode();
   const { colors } = useTheme();
   const { appendLog } = useLog();
 
@@ -127,7 +134,8 @@ export default function HistoryScreen({ navigation }: any) {
     refreshHistory();
     const unsubscribe = navigation.addListener('focus', refreshHistory);
     return unsubscribe;
-  }, [navigation, refreshHistory]);
+    // refreshKey: Home changes it when a reading is saved or uploaded, so the embedded list stays current.
+  }, [navigation, refreshHistory, refreshKey]);
 
   /** Renames a History entry by itself -- no upload involved (e.g. committed on blur in HistoryTab). */
   const renameFromHistory = useCallback(async (id: string, label: string) => {
@@ -182,7 +190,7 @@ export default function HistoryScreen({ navigation }: any) {
       const creds = await loadHcriCredentials();
       if (!creds) {
         Alert.alert('No hCRI.io account set up', 'Add your username and API token first.', [
-          { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') },
+          { text: 'Go to Settings', onPress: () => navigation.navigate(layoutMode === 'compact' ? 'Settings' : 'SettingsOverlay') },
           { text: 'Cancel', style: 'cancel' },
         ]);
         return;
@@ -234,7 +242,7 @@ export default function HistoryScreen({ navigation }: any) {
       const creds = await loadHcriCredentials();
       if (!creds) {
         Alert.alert('No hCRI.io account set up', 'Add your username and API token first.', [
-          { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') },
+          { text: 'Go to Settings', onPress: () => navigation.navigate(layoutMode === 'compact' ? 'Settings' : 'SettingsOverlay') },
           { text: 'Cancel', style: 'cancel' },
         ]);
         return;
@@ -297,7 +305,7 @@ export default function HistoryScreen({ navigation }: any) {
       const creds = await loadHcriCredentials();
       if (!creds) {
         Alert.alert('No hCRI.io account set up', 'Add your username and API token first.', [
-          { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') },
+          { text: 'Go to Settings', onPress: () => navigation.navigate(layoutMode === 'compact' ? 'Settings' : 'SettingsOverlay') },
           { text: 'Cancel', style: 'cancel' },
         ]);
         return;
@@ -366,16 +374,19 @@ export default function HistoryScreen({ navigation }: any) {
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    content: { padding: 16, paddingBottom: 56 },
+    content: embedded ? { padding: 12, paddingBottom: 24 } : { padding: 16, paddingBottom: 56 },
+    pane: { flex: 1, backgroundColor: colors.background },
     title: { fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: 14 },
   });
 
+  const Frame: React.ComponentType<any> = embedded ? View : SafeAreaView;
+  const frameProps = embedded ? { style: styles.pane } : { style: styles.container, edges: IS_DEV_BUILD ? ['left', 'right'] : ['top', 'left', 'right'] };
   return (
     // 'top' dropped from edges in a dev build -- see the matching comment
     // in HomeScreen.tsx for why: DevBuildBanner already reserves the
     // status-bar/notch inset for itself right above this screen, and
     // requesting it again here double-stacks it into a dead gap.
-    <SafeAreaView style={styles.container} edges={IS_DEV_BUILD ? ['left', 'right'] : ['top', 'left', 'right']}>
+    <Frame {...frameProps}>
       {/* keyboardShouldPersistTaps="handled": this ScrollView is a parent (in
           React terms) of the rename popup in HistoryTab, and its default
           ("never") eats the first tap while the keyboard is up -- it just
@@ -396,6 +407,7 @@ export default function HistoryScreen({ navigation }: any) {
           onShareAll={shareAllFromHistory}
           onShareMany={shareManyFromHistory}
           onOpen={(reading) => navigation.navigate('ReadingDetail', { reading })}
+          onCompareMany={(readings) => navigation.navigate('Compare', { readings })}
           uploadingId={historyUploadingId}
           bulkUploading={historyBulkUploading}
           onCopyLink={copyReportLinkFromHistory}
@@ -421,6 +433,6 @@ export default function HistoryScreen({ navigation }: any) {
         onSave={(d) => ledPickFor && confirmLed(ledPickFor.id, d)}
         onCancel={() => setLedPickFor(null)}
       />
-    </SafeAreaView>
+    </Frame>
   );
 }

@@ -21,6 +21,8 @@ interface Props {
   compact?: boolean;
   /** Packing for compact tiles: 3 columns (<=9 values), 4 (<=12) or 6 (more). */
   density?: Density;
+  /** Wide layouts: exactly this many tiles per row (overrides density's column count). */
+  columns?: number;
 }
 
 export type Density = 'roomy' | 'medium' | 'tight';
@@ -35,7 +37,7 @@ const DENSITY = {
   tight: { width: '16.66%', value: 13, unit: 8, label: 8 },
 } as const;
 
-export default function StatCard({ label, value, unit, compact, density = 'roomy' }: Props) {
+export default function StatCard({ label, value, unit, compact, density = 'roomy', columns }: Props) {
   const d = DENSITY[density];
   const { colors } = useTheme();
 
@@ -56,7 +58,7 @@ export default function StatCard({ label, value, unit, compact, density = 'roomy
   });
 
   return (
-    <View style={[styles.statCard, compact && styles.statCardCompact, compact && { width: d.width }]}>
+    <View style={[styles.statCard, compact && styles.statCardCompact, compact && { width: columns ? (`${100 / columns}%` as `${number}%`) : d.width }]}>
       <Text style={[styles.statValue, compact && styles.statValueCompact, compact && { fontSize: d.value }]} numberOfLines={1} adjustsFontSizeToFit>
         {value}
         {unit ? <Text style={[styles.statUnit, compact && styles.statUnitCompact, compact && { fontSize: d.unit }]}> {unit}</Text> : null}

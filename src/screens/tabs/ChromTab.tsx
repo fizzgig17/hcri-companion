@@ -51,7 +51,7 @@ export default function ChromTab({ result }: Props) {
 
   return (
     <View style={styles.card}>
-      <ChromaticityChart x={result.x} y={result.y} cct={result.cct} height={280} width={chartWidth} />
+      <ChromaticityChart x={result.x} y={result.y} cct={result.cct} autoHeight width={chartWidth} />
       <View style={styles.statGrid}>
         <StatCard label="x" value={result.x.toFixed(4)} />
         <StatCard label="y" value={result.y.toFixed(4)} />

@@ -9,7 +9,7 @@
 
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BackHandler, View, ScrollView, StyleSheet, Alert, AppState, Keyboard, Linking } from 'react-native';
+import { BackHandler, Platform, View, ScrollView, StyleSheet, Alert, AppState, Keyboard, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MeterConnection } from '../ble/MeterConnection';
 import type { BatteryStatus } from '../ble/protocol';
@@ -41,10 +41,14 @@ import { shareSingleReadingCsv } from '../utils/shareCsv';
 import { hapticSuccess, hapticFailure } from '../utils/haptics';
 import { enableKeepAwake, disableKeepAwake } from '../utils/keepAwake';
 import { useTheme } from '../contexts/ThemeContext';
+import { useLayoutMode } from '../layout';
+import HistoryScreen from './HistoryScreen';
 import { useLog } from '../contexts/LogContext';
 import { withBackgroundDisconnectSuppressed, isBackgroundDisconnectSuppressed } from '../ble/backgroundDisconnectGuard';
 import TabBar from '../components/TabBar';
 import InfoButton from '../components/InfoButton';
+import HintPressable from '../components/HintPressable';
+import { SettingsIcon } from '../components/TabBarIcons';
 import ActionBar from '../components/ActionBar';
 import MainTab, { Status, FoundDevice } from './tabs/MainTab';
 import DataTab from './tabs/DataTab';
@@ -95,6 +99,10 @@ const DEVICE_POLL_SCAN_MS = 3000;
 const DEVICE_POLL_FORGET_MS = 65000;
 
 export default function HomeScreen({ navigation }: any) {
+  // Tablets / unfolded foldables: History sits beside (or below) the reading and the graphs are all shown at once.
+  const layoutMode = useLayoutMode();
+  const wide = layoutMode !== 'compact';
+  useEffect(() => { if (layoutMode === 'stacked') setActiveTab((t) => (t === 'data' ? 'main' : t)); }, [layoutMode]);
   const { colors } = useTheme();
   const { log, appendLog, clearLog, refreshVerboseLogging } = useLog();
   const [activeTab, setActiveTab] = useState<TabKey>('main');
@@ -1306,7 +1314,7 @@ export default function HomeScreen({ navigation }: any) {
     const creds = await loadHcriCredentials();
     if (!creds) {
       Alert.alert('No hCRI.io account set up', 'Add your username and API token first.', [
-        { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') },
+        { text: 'Go to Settings', onPress: () => navigation.navigate(layoutMode === 'compact' ? 'Settings' : 'SettingsOverlay') },
         { text: 'Cancel', style: 'cancel' },
       ]);
       return;
@@ -1383,7 +1391,7 @@ export default function HomeScreen({ navigation }: any) {
     const creds = await loadHcriCredentials();
     if (!creds) {
       Alert.alert('No hCRI.io account set up', 'Add your username and API token first.', [
-        { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') },
+        { text: 'Go to Settings', onPress: () => navigation.navigate(layoutMode === 'compact' ? 'Settings' : 'SettingsOverlay') },
         { text: 'Cancel', style: 'cancel' },
       ]);
       return;
@@ -1430,6 +1438,17 @@ export default function HomeScreen({ navigation }: any) {
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
+    rootRow: { flex: 1, flexDirection: 'row' },
+    rootColumn: { flex: 1 },
+    mainColumn: { flex: 1, minWidth: 0, minHeight: 0 },
+    mainColumnStacked: { flex: 2, minWidth: 0, minHeight: 0 },
+    historyBeside: { width: 320, borderLeftWidth: 1, borderLeftColor: colors.cardBorder },
+    // Portrait: History gets about two fifths of the window rather than a fixed strip.
+    historyBelow: { flex: 1, minHeight: 300, borderTopWidth: 1, borderTopColor: colors.cardBorder, flexDirection: 'row' },
+    bottomLeft: { flex: 1, minWidth: 0, borderRightWidth: 1, borderRightColor: colors.cardBorder },
+    bottomRight: { flex: 1, minWidth: 0 },
+    bottomRightContent: { padding: 12, paddingBottom: 24 },
+    headerCog: { width: 32, height: 32, borderRadius: 16, borderWidth: 1, borderColor: colors.cardBorder, alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
     // paddingBottom is extra-generous (not just enough to clear the home
     // indicator/nav bar) because this ScrollView is shared by every tab --
     // Data's own content (collapsible sections expanded) can run
@@ -1467,6 +1486,31 @@ export default function HomeScreen({ navigation }: any) {
     headerInfo: { marginLeft: 10 },
   });
 
+  // The Data tab's content. A function so tablets held upright can show it beside History as well (see below).
+  const renderDataTab = () => (
+    <DataTab
+      result={result}
+      analysis={analysis}
+      onUpload={upload}
+      uploading={status === 'uploading'}
+      uploadSucceeded={uploadSucceeded}
+      canCopyLink={!!lastUploadedReport}
+      copyingLink={copyingLink}
+      onCopyLink={copyReportLink}
+      scrollInputIntoView={scrollInputIntoView}
+      uploadTitle={uploadTitle}
+      onUploadTitleChange={setUploadTitle}
+      onShareCsv={shareCurrentCsv}
+      cachedUsername={cachedUsername}
+      ledCurrent={currentLeds.length ? currentLeds : null}
+      onLedEdit={currentReadingId ? () => setLedPickerOpen(true) : undefined}
+      ledLists={ledLists}
+      ledPickerOpen={ledPickerOpen}
+      onLedPickerSave={confirmLed}
+      onLedPickerCancel={() => setLedPickerOpen(false)}
+      />
+  );
+
   return (
     // 'top' dropped from edges when a dev build's orange banner (see
     // App.tsx/DevBuildBanner.tsx) is showing -- it sits directly above
@@ -1480,6 +1524,8 @@ export default function HomeScreen({ navigation }: any) {
     // builds. Production builds have no banner, so 'top' is still needed
     // there to clear the status bar/notch directly.
     <SafeAreaView style={styles.container} edges={IS_DEV_BUILD ? ['left', 'right'] : ['top', 'left', 'right']}>
+      <View style={layoutMode === 'stacked' ? styles.rootColumn : styles.rootRow}>
+      <View style={layoutMode === 'stacked' ? styles.mainColumnStacked : styles.mainColumn}>
       {/* Docked -- a sibling of the ScrollView below, not inside it, so it
           stays on screen no matter how far down a long Data tab you've
           scrolled. No title/gear header any more -- "hCRI Companion" was
@@ -1490,7 +1536,8 @@ export default function HomeScreen({ navigation }: any) {
           <TabBar
             tabs={[
               { key: 'main', label: 'Main' },
-              { key: 'data', label: 'Data' },
+              // Held upright on a tablet the Data panel sits beside History instead (below).
+              ...(layoutMode === 'stacked' ? [] : [{ key: 'data' as const, label: 'Data' }]),
               { key: 'logs', label: 'Logs' },
             ]}
             active={activeTab}
@@ -1502,6 +1549,18 @@ export default function HomeScreen({ navigation }: any) {
           message="hCRI Companion connects to your Hopoocolor spectrometer over Bluetooth, takes a reading and shows its spectrum and lighting stats (CCT, CRI and TM-30 Rf/Rg). Every reading is saved to History, and you can optionally upload it to your hCRI.io account to see its full TM-30 report and share it. To upload, add your hCRI.io username and API token in Settings. Tap Settings to choose which measurements show. No meter handy? Test reading loads a random public hCRI.io report so you can try the charts (sample data: it isn't saved or uploadable). Meter won't connect? Press and hold Connect to Meter to reset the connection."
           style={styles.headerInfo}
         />
+        {wide && (
+          <HintPressable
+            hint="Settings"
+            onPress={() => navigation.navigate('SettingsOverlay')}
+            style={styles.headerCog}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Settings"
+            activeOpacity={0.7}
+          >
+            <SettingsIcon color={colors.muted} size={18} />
+          </HintPressable>
+        )}
       </View>
       {/* Logs is NOT rendered inside this ScrollView -- see LogsTab.tsx's
           own file-level comment for why: nested inside here, dragging
@@ -1557,11 +1616,13 @@ export default function HomeScreen({ navigation }: any) {
             onLedPickerSave={confirmLed}
             scrollInputIntoView={scrollInputIntoView}
             pagerResetKey={pagerResetKey}
+            wide={wide}
+            portrait={layoutMode === 'stacked'}
             flicker={
               (status === 'connected' || status === 'uploading' || status === 'measuring') && deviceSupportsFlicker(deviceName) && mode !== 'live'
                 ? { reading: flickerReading, running: mode === 'flicker', focusNonce: flickerFocus, history: flickerHistory, settings: flickerSettingsApi, upload: flickerUploadApi, target: mode === 'flicker' ? flickerTarget : null, onStart: startFlickerSample, onStop: stopFlicker, canSampleReading, fromReading: flickerFromReading, redoLabel: result?.flicker ? 'Redo for reading' : 'Add to reading', readingNote: result ? (currentReadingId ? 'saved' : 'unsaved') : undefined }
-                : result?.sampleLabel && result.flicker
-                  // A test reading whose report has flicker: show its first capture, view only (no meter needed).
+                : (result?.sampleLabel || wide) && result?.flicker
+                  // A test reading whose report has flicker -- or, on tablets, any reading that has one: show its first capture, view only (no meter needed).
                   ? { reading: result.flicker, running: false, focusNonce: flickerFocus, history: [], fromReading: true }
                   : undefined
             }
@@ -1569,29 +1630,7 @@ export default function HomeScreen({ navigation }: any) {
       </View>
       ) : (
       <ScrollView automaticallyAdjustKeyboardInsets ref={scrollRef} style={styles.scrollArea} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        {activeTab === 'data' && (
-          <DataTab
-            result={result}
-            analysis={analysis}
-            onUpload={upload}
-            uploading={status === 'uploading'}
-            uploadSucceeded={uploadSucceeded}
-            canCopyLink={!!lastUploadedReport}
-            copyingLink={copyingLink}
-            onCopyLink={copyReportLink}
-            scrollInputIntoView={scrollInputIntoView}
-            uploadTitle={uploadTitle}
-            onUploadTitleChange={setUploadTitle}
-            onShareCsv={shareCurrentCsv}
-            cachedUsername={cachedUsername}
-            ledCurrent={currentLeds.length ? currentLeds : null}
-            onLedEdit={currentReadingId ? () => setLedPickerOpen(true) : undefined}
-            ledLists={ledLists}
-            ledPickerOpen={ledPickerOpen}
-            onLedPickerSave={confirmLed}
-            onLedPickerCancel={() => setLedPickerOpen(false)}
-          />
-        )}
+        {activeTab === 'data' && renderDataTab()}
       </ScrollView>
       ))}
       {activeTab === 'main' && (
@@ -1626,9 +1665,37 @@ export default function HomeScreen({ navigation }: any) {
               input: tm30InputFromReading(result, analysis, result.sampleLabel || uploadTitle.trim() || 'Current reading', Date.now(), currentLeds[0] ?? undefined, currentLeds),
             });
           }}
+          onShowPhoto={
+            Platform.OS === 'ios' && Platform.isPad
+              ? () => {
+                  if (!result || !analysis) return;
+                  navigation.navigate('Photo', {
+                    input: tm30InputFromReading(result, analysis, result.sampleLabel || uploadTitle.trim() || 'Current reading', Date.now()),
+                  });
+                }
+              : undefined
+          }
           onSaveLive={saveLive}
         />
       )}
+      </View>
+      {wide && layoutMode === 'dashboard' && (
+        <View style={styles.historyBeside}>
+          <HistoryScreen embedded navigation={navigation} refreshKey={`${currentReadingId ?? ''}|${uploadSucceeded ? 1 : 0}|${lastUploadedReport?.id ?? ''}`} />
+        </View>
+      )}
+      {layoutMode === 'stacked' && (
+        // Held upright: History in the bottom-left corner, the Data panel in the bottom-right.
+        <View style={styles.historyBelow}>
+          <View style={styles.bottomLeft}>
+            <HistoryScreen embedded navigation={navigation} refreshKey={`${currentReadingId ?? ''}|${uploadSucceeded ? 1 : 0}|${lastUploadedReport?.id ?? ''}`} />
+          </View>
+          <ScrollView style={styles.bottomRight} contentContainerStyle={styles.bottomRightContent} automaticallyAdjustKeyboardInsets keyboardShouldPersistTaps="handled">
+            {renderDataTab()}
+          </ScrollView>
+        </View>
+      )}
+      </View>
     </SafeAreaView>
   );
 }

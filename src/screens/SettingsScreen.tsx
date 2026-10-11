@@ -8,6 +8,7 @@ import { BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScrollView, View, Text, TextInput, Switch, TouchableOpacity, StyleSheet, Alert, Modal, Linking, Platform, useWindowDimensions } from 'react-native';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
+import { useLayoutMode } from '../layout';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IS_DEV_BUILD, HCRI_API_HOST } from '../hcri/buildTarget';
 import PrimaryButton from '../components/PrimaryButton';
@@ -83,7 +84,8 @@ const THEME_MODE_OPTIONS: { value: ThemeMode; label: string }[] = [
   { value: 'dark', label: 'Dark' },
 ];
 
-export default function SettingsScreen({ navigation, route }: any) {
+/** `panel`: shown inside the tablet overlay (OverlayPanel supplies the title and the close button). */
+export default function SettingsScreen({ navigation, route, panel }: any) {
   const { colors, mode, setMode } = useTheme();
   // Settings / About sub-tabs -- About used to be a section at the very
   // bottom of this screen, a long scroll past every setting to reach.
@@ -108,7 +110,9 @@ export default function SettingsScreen({ navigation, route }: any) {
   // leaving it, and when the Settings tab itself is tapped.
   useEffect(() => {
     const offBlur = navigation.addListener('blur', () => setSettingsTab('settings'));
-    const offPress = navigation.addListener('tabPress', () => setSettingsTab('settings'));
+    // 'tabPress' only exists on a tab navigator; inside the tablet overlay (a stack screen) there is no such event.
+    let offPress: () => void = () => {};
+    try { offPress = navigation.addListener('tabPress', () => setSettingsTab('settings')); } catch {}
     return () => {
       offBlur();
       offPress();
@@ -158,6 +162,11 @@ export default function SettingsScreen({ navigation, route }: any) {
   const kbHeight = useKeyboardHeight(true);
   const { height: winH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const layoutMode = useLayoutMode();
+  const wide = layoutMode !== 'compact';
+  // Inside the overlay: toggles on the left, measurements in the middle, and (landscape) About as a third column.
+  const columns = !!panel && wide;
+  const aboutColumn = columns && layoutMode === 'dashboard';
   const kbUp = kbHeight > 0;
   const [genBusy, setGenBusy] = useState(false);
 
@@ -378,6 +387,11 @@ export default function SettingsScreen({ navigation, route }: any) {
     scrollArea: { flex: 1 },
     // Same heading style as History's page title.
     screenTitle: { fontSize: 20, fontWeight: '700', color: colors.text, paddingHorizontal: 16, paddingTop: 16 },
+    columnsRow: { flex: 1, flexDirection: 'row' },
+    column: { flex: 1, minWidth: 0 },
+    columnDivider: { borderLeftWidth: 1, borderLeftColor: colors.cardBorder },
+    titleRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 16 },
+    backLink: { color: colors.accent, fontSize: 16, fontWeight: '600' },
     tabBarWrap: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4 },
     // Padding lives here (the scrollable content) rather than on the
     // ScrollView's own `style` -- padding on the outer style can clip the
@@ -520,32 +534,9 @@ export default function SettingsScreen({ navigation, route }: any) {
     aboutTitle: { color: colors.text, fontSize: 14, fontWeight: '600', marginBottom: 12 },
   });
 
-  return (
-    <SafeAreaView style={styles.container} edges={IS_DEV_BUILD ? ['left', 'right'] : ['top', 'left', 'right']}>
-      <Text style={styles.screenTitle}>Settings</Text>
-      <View style={styles.tabBarWrap}>
-        <TabBar
-          tabs={[
-            { key: 'settings', label: 'Settings' },
-            // The Update tab checks Google Play, so it is Android-only for now.
-            ...(Platform.OS === 'android' ? [{ key: 'update' as const, label: 'Update', badge: update.status === 'available' }] : []),
-            { key: 'about', label: 'About' },
-          ]}
-          active={settingsTab}
-          onChange={setSettingsTab}
-        />
-      </View>
-      {settingsTab === 'update' && Platform.OS === 'android' ? (
-        <ScrollView automaticallyAdjustKeyboardInsets style={styles.scrollArea} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat} keyboardShouldPersistTaps="handled">
-          <VersionStamp />
-          <UpdateTab />
-        </ScrollView>
-      ) : settingsTab === 'about' ? (
-        <ScrollView automaticallyAdjustKeyboardInsets style={styles.scrollArea} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat} keyboardShouldPersistTaps="handled">
-          <AboutTab />
-        </ScrollView>
-      ) : (
-    <ScrollView automaticallyAdjustKeyboardInsets style={styles.scrollArea} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat} keyboardShouldPersistTaps="handled">
+  // The Settings page in two parts so tablets can lay them out as columns (see `columns`).
+  const settingsLeft = (
+    <>
       {/* Which build you're looking at, at a glance -- came up more than
           once this session when testing against a build that was already
           a few fixes behind develop. See buildInfo.ts for how this stays
@@ -868,7 +859,9 @@ export default function SettingsScreen({ navigation, route }: any) {
           />
         </View>
       )}
-
+    </>
+  );
+  const settingsRight = (
       <View style={styles.statsSection}>
         <View style={styles.statsHeaderRow}>
           <Text style={styles.statsTitle}>Main Screen Measurements</Text>
@@ -889,6 +882,52 @@ export default function SettingsScreen({ navigation, route }: any) {
           onDragActiveChange={setDraggingStat}
         />
       </View>
+  );
+
+  return (
+    <SafeAreaView style={styles.container} edges={panel ? [] : IS_DEV_BUILD ? ['left', 'right'] : ['top', 'left', 'right']}>
+      {!panel && <Text style={styles.screenTitle}>Settings</Text>}
+      {!aboutColumn && (
+      <View style={styles.tabBarWrap}>
+        <TabBar
+          tabs={[
+            { key: 'settings', label: 'Settings' },
+            // The Update tab checks Google Play, so it is Android-only for now.
+            ...(Platform.OS === 'android' ? [{ key: 'update' as const, label: 'Update', badge: update.status === 'available' }] : []),
+            { key: 'about', label: 'About' },
+          ]}
+          active={settingsTab}
+          onChange={setSettingsTab}
+        />
+      </View>
+      )}
+      {settingsTab === 'update' && Platform.OS === 'android' ? (
+        <ScrollView automaticallyAdjustKeyboardInsets style={styles.scrollArea} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat} keyboardShouldPersistTaps="handled">
+          <VersionStamp />
+          <UpdateTab />
+        </ScrollView>
+      ) : settingsTab === 'about' ? (
+        <ScrollView automaticallyAdjustKeyboardInsets style={styles.scrollArea} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat} keyboardShouldPersistTaps="handled">
+          <AboutTab />
+        </ScrollView>
+      ) : columns ? (
+        <View style={styles.columnsRow}>
+          <ScrollView automaticallyAdjustKeyboardInsets style={styles.column} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat} keyboardShouldPersistTaps="handled">
+            {settingsLeft}
+          </ScrollView>
+          <ScrollView automaticallyAdjustKeyboardInsets style={[styles.column, styles.columnDivider]} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat} keyboardShouldPersistTaps="handled">
+            {settingsRight}
+          </ScrollView>
+          {aboutColumn && (
+            <ScrollView style={[styles.column, styles.columnDivider]} contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
+              <AboutTab />
+            </ScrollView>
+          )}
+        </View>
+      ) : (
+    <ScrollView automaticallyAdjustKeyboardInsets style={styles.scrollArea} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat} keyboardShouldPersistTaps="handled">
+      {settingsLeft}
+      {settingsRight}
     </ScrollView>
       )}
     </SafeAreaView>

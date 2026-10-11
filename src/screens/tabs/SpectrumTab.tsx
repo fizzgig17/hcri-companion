@@ -65,6 +65,8 @@ interface Props {
   extraHorizontalChrome?: number;
   /** Main tab: the exact height the swipeable pager (charts + dots) may fill. Charts are sized to fit it so nothing scrolls. Omit for the natural sizes (200 spectrum, 230 chrom/R-values). */
   regionHeight?: number;
+  /** Tablet held upright: the spectrum may be much taller than its usual wide aspect so the card is filled. */
+  tall?: boolean;
   /** Set when `result` is a sample from a public hCRI.io report (not a reading from the person's own meter) -- only changes the "What's this?" text. */
   sampleLabel?: string;
   /** Present only when the connected meter can measure flicker: adds the fourth (Flicker) page. `focusNonce` changing jumps to it. */
@@ -101,7 +103,7 @@ function FixedBox({ h, center, children }: { h: number; center?: boolean; childr
   return <View style={{ height: h, justifyContent: center ? 'center' : 'flex-start' }}>{h > 0 ? children(h) : null}</View>;
 }
 
-export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 0, regionHeight, sampleLabel, flicker, pagerResetKey }: Props) {
+export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 0, regionHeight, sampleLabel, flicker, pagerResetKey, tall }: Props) {
   const source = sampleLabel
     ? `This is a sample from a public hCRI.io report (${sampleLabel}), not a reading from your own meter. It isn't saved to History and can't be uploaded or shared.`
     : 'This comes from the reading your meter just took.';
@@ -210,7 +212,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
               {fill ? <FixedBox h={innerH} center>{(h) => (<SpectrumChart
                 spectrum={result.spectrum}
                 width={chartWidth}
-                height={Math.max(60, Math.min(h - SPECTRUM_HEADER_H, Math.round(chartWidth / SPECTRUM_ASPECT)))}
+                height={Math.max(60, Math.min(h - SPECTRUM_HEADER_H, Math.round(chartWidth / (tall ? 1.05 : SPECTRUM_ASPECT))))}
                 // A test reading only shows the wavelength under the red line; a real
                 // reading adds the integration time and peak/dark signal (and the spectral value).
                 details={
@@ -228,7 +230,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
               />)}</FixedBox> : (((h) => (<SpectrumChart
                 spectrum={result.spectrum}
                 width={chartWidth}
-                height={Math.max(60, Math.min(h - SPECTRUM_HEADER_H, Math.round(chartWidth / SPECTRUM_ASPECT)))}
+                height={Math.max(60, Math.min(h - SPECTRUM_HEADER_H, Math.round(chartWidth / (tall ? 1.05 : SPECTRUM_ASPECT))))}
                 // A test reading only shows the wavelength under the red line; a real
                 // reading adds the integration time and peak/dark signal (and the spectral value).
                 details={
@@ -276,7 +278,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
                   }
                 </FixedBox>
               ) : analysis.x > 0 || analysis.y > 0 ? (
-                <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} height={230} width={chartWidth} />
+                <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} autoHeight width={chartWidth} />
               ) : (
                 <View style={{ height: 230 }} />
               )}
