@@ -90,7 +90,10 @@ interface Props {
   x: number;
   y: number;
   cct?: number;
+  /** Height of the box the chart must fit in. The plot keeps the true CIE aspect inside it (see autoHeight). */
   height?: number;
+  /** Ignore `height` and make the chart exactly as tall as the true aspect needs for this width (like hcri.io). */
+  autoHeight?: boolean;
   /** The chart's actual available content width (inside SpectrumTab's chartCard padding), computed once by SpectrumTab and handed down as a plain prop -- same change, and for the same "box too big for the viewport" reason, as SpectrumChart.tsx/RValuesBarChart.tsx's matching Props. This used to be measured locally via onLayout (seeded at 0, corrected once layout ran); that still landed on the right NUMBER for this chart's own immediate container, but that container's own size was itself wrong whenever a host screen (MainTab, via its resultCard) added chrome the layers above never accounted for -- onLayout faithfully measuring a wrongly-sized ancestor doesn't help. Computing it once, in one place, up where the real chrome is known, fixes that at the source instead of here. */
   width: number;
 }
@@ -102,6 +105,9 @@ interface Props {
 // as low/crowded against the horseshoe fill, no matter how far up within
 // the box it went.
 const PADDING = { top: 34, right: 34, bottom: 24, left: 32 };
+
+/** Largest plot scale in px per unit of x or y (about hcri.io's 480px chart), so tablets don't get a giant diagram. */
+const MAX_UNIT_PX = 560;
 
 const X_DOMAIN: [number, number] = [0.0, 0.8];
 const Y_DOMAIN: [number, number] = [0.0, 0.9];
@@ -142,13 +148,21 @@ function wavelengthToColor(wavelengthNm: number): string {
   return `rgb(${to255(r)}, ${to255(g)}, ${to255(b)})`;
 }
 
-export default function ChromaticityChart({ x, y, cct, height = 300, width }: Props) {
+export default function ChromaticityChart({ x, y, cct, height: boxHeight = 300, autoHeight, width }: Props) {
   // (0,0) is the "no reading yet" placeholder -- draw no marker or x/y text then.
   const hasPoint = Number.isFinite(x) && Number.isFinite(y) && (x > 0 || y > 0);
-  const chartWidth = Math.max(width - PADDING.left - PADDING.right, 0);
-  const chartHeight = height - PADDING.top - PADDING.bottom;
+  // True aspect, as on hcri.io: one unit of x is the same length as one unit of y, so the horseshoe is not
+  // stretched to fill whatever box it is given. The plot is fitted inside the available room and centred.
+  const availW = Math.max(width - PADDING.left - PADDING.right, 0);
+  const xSpan = X_DOMAIN[1] - X_DOMAIN[0];
+  const ySpan = Y_DOMAIN[1] - Y_DOMAIN[0];
+  const height = autoHeight ? (availW / xSpan) * ySpan + PADDING.top + PADDING.bottom : boxHeight;
+  const unit = Math.max(0, Math.min(availW / xSpan, (height - PADDING.top - PADDING.bottom) / ySpan, MAX_UNIT_PX));
+  const chartWidth = unit * xSpan;
+  const chartHeight = unit * ySpan;
+  const padLeft = PADDING.left + (availW - chartWidth) / 2;
 
-  const xFor = (dx: number) => PADDING.left + ((dx - X_DOMAIN[0]) / (X_DOMAIN[1] - X_DOMAIN[0])) * chartWidth;
+  const xFor = (dx: number) => padLeft + ((dx - X_DOMAIN[0]) / (X_DOMAIN[1] - X_DOMAIN[0])) * chartWidth;
   const yFor = (dy: number) => PADDING.top + chartHeight - ((dy - Y_DOMAIN[0]) / (Y_DOMAIN[1] - Y_DOMAIN[0])) * chartHeight;
 
   // The real CIE 1931 locus is only tabulated every 5nm (81 points,
@@ -184,7 +198,7 @@ export default function ChromaticityChart({ x, y, cct, height = 300, width }: Pr
     planckianPoints.push(planckianLocusXy(t));
   }
 
-  const cctLabelX = PADDING.left + chartWidth + 4;
+  const cctLabelX = padLeft + chartWidth + 4;
 
   // Approximate centroid in screen space, used to push wavelength labels
   // outward from the curve rather than inward over the fill.
@@ -198,9 +212,9 @@ export default function ChromaticityChart({ x, y, cct, height = 300, width }: Pr
           {/* Plain white background, dotted gridlines at every 0.1, labels
               at every other tick -- matching the reference image. */}
           <Polygon
-            points={`${PADDING.left},${PADDING.top} ${PADDING.left + chartWidth},${PADDING.top} ${
-              PADDING.left + chartWidth
-            },${PADDING.top + chartHeight} ${PADDING.left},${PADDING.top + chartHeight}`}
+            points={`${padLeft},${PADDING.top} ${padLeft + chartWidth},${PADDING.top} ${
+              padLeft + chartWidth
+            },${PADDING.top + chartHeight} ${padLeft},${PADDING.top + chartHeight}`}
             fill="#ffffff"
           />
           {ALL_TICKS.map((t) => (
@@ -215,7 +229,7 @@ export default function ChromaticityChart({ x, y, cct, height = 300, width }: Pr
                 strokeDasharray="1,2"
               />
               {LABELED_X_TICKS.has(t) && (
-                <SvgText x={xFor(t)} y={height - 8} fontSize={9} fill="#888" textAnchor="middle">
+                <SvgText x={xFor(t)} y={PADDING.top + chartHeight + 14} fontSize={9} fill="#888" textAnchor="middle">
                   {t.toFixed(1)}
                 </SvgText>
               )}
@@ -224,16 +238,16 @@ export default function ChromaticityChart({ x, y, cct, height = 300, width }: Pr
           {ALL_TICKS.map((t) => (
             <React.Fragment key={`y${t}`}>
               <Line
-                x1={PADDING.left}
+                x1={padLeft}
                 y1={yFor(t)}
-                x2={PADDING.left + chartWidth}
+                x2={padLeft + chartWidth}
                 y2={yFor(t)}
                 stroke="#d8d8d8"
                 strokeWidth={0.5}
                 strokeDasharray="1,2"
               />
               {LABELED_Y_TICKS.has(t) && (
-                <SvgText x={PADDING.left - 5} y={yFor(t) + 3} fontSize={9} fill="#888" textAnchor="end">
+                <SvgText x={padLeft - 5} y={yFor(t) + 3} fontSize={9} fill="#888" textAnchor="end">
                   {t.toFixed(1)}
                 </SvgText>
               )}
@@ -357,10 +371,10 @@ export default function ChromaticityChart({ x, y, cct, height = 300, width }: Pr
               in-box placement did. */}
           {hasPoint && (
             <>
-              <SvgText x={PADDING.left} y={12} fontSize={10} fill="#333" fontFamily="monospace">
+              <SvgText x={padLeft} y={12} fontSize={10} fill="#333" fontFamily="monospace">
                 x {x.toFixed(4)}
               </SvgText>
-              <SvgText x={PADDING.left} y={24} fontSize={10} fill="#333" fontFamily="monospace">
+              <SvgText x={padLeft} y={24} fontSize={10} fill="#333" fontFamily="monospace">
                 y {y.toFixed(4)}
               </SvgText>
             </>

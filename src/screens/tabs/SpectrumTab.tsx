@@ -276,7 +276,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
                   }
                 </FixedBox>
               ) : analysis.x > 0 || analysis.y > 0 ? (
-                <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} height={230} width={chartWidth} />
+                <ChromaticityChart x={analysis.x} y={analysis.y} cct={analysis.cct} autoHeight width={chartWidth} />
               ) : (
                 <View style={{ height: 230 }} />
               )}
