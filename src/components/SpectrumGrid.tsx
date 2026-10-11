@@ -113,7 +113,15 @@ function DraggableCard({ id, rect, bigRect, onPromote, onDragChange, children, s
         accessibilityLabel="Drag to the large chart to enlarge this chart"
         style={handleStyles.handle}
       >
-        <Text allowFontScaling={false} style={[handleStyles.glyph, { color: handleColor }]}>⠿</Text>
+        {/* Drawn from Views, not a glyph: the braille character has no font on iOS and the handle vanished. */}
+        <View style={handleStyles.dots}>
+          {[0, 1, 2].map((r) => (
+            <View key={r} style={handleStyles.dotRow}>
+              <View style={[handleStyles.dot, { backgroundColor: handleColor }]} />
+              <View style={[handleStyles.dot, { backgroundColor: handleColor }]} />
+            </View>
+          ))}
+        </View>
       </View>
     </Animated.View>
   );
@@ -121,7 +129,9 @@ function DraggableCard({ id, rect, bigRect, onPromote, onDragChange, children, s
 
 const handleStyles = StyleSheet.create({
   handle: { position: 'absolute', top: 2, right: 2, width: 34, height: 30, alignItems: 'center', justifyContent: 'center' },
-  glyph: { fontSize: 20, lineHeight: 22 },
+  dots: { gap: 3 },
+  dotRow: { flexDirection: 'row', gap: 3 },
+  dot: { width: 4, height: 4, borderRadius: 2 },
 });
 
 export default function SpectrumGrid({ result, analysis, sampleLabel, flicker, layout = 'landscape', persist = true, onDragChange, width, height }: Props) {
