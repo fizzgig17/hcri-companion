@@ -170,7 +170,7 @@ export default function CompareScreen({ route }: any) {
   const wide = layoutMode !== 'compact';
   const anyFlicker = items.some((it) => !!it.flicker);
   // Same landscape / portrait / phone arrangement as the main page.
-  const cols = layoutMode === 'dashboard' ? Math.min(3, items.length) : layoutMode === 'stacked' ? Math.min(2, items.length) : 1;
+  const cols = Math.max(1, Math.min(layoutMode === 'compact' ? 1 : 3, items.length, Math.floor((contentWidth - 32 + 12) / 312)));
   const GAP = 14;
   const areaW = Math.max(0, contentWidth - 32);
   const cardW = Math.floor((areaW - GAP * (cols - 1)) / cols);

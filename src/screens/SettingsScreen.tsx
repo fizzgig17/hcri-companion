@@ -8,7 +8,7 @@ import { BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScrollView, View, Text, TextInput, Switch, TouchableOpacity, StyleSheet, Alert, Modal, Linking, Platform, useWindowDimensions } from 'react-native';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
-import { useLayoutMode } from '../layout';
+import { useLayoutMode, useContentWidth } from '../layout';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IS_DEV_BUILD, HCRI_API_HOST } from '../hcri/buildTarget';
 import PrimaryButton from '../components/PrimaryButton';
@@ -165,8 +165,9 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   const layoutMode = useLayoutMode();
   const wide = layoutMode !== 'compact';
   // Inside the overlay: toggles on the left, measurements in the middle, and (landscape) About as a third column.
-  const columns = !!panel && wide;
-  const aboutColumn = columns && layoutMode === 'dashboard';
+  const settingsW = useContentWidth();
+  const columns = !!panel && wide && settingsW >= 640;
+  const aboutColumn = columns && layoutMode === 'dashboard' && settingsW >= 960;
   const kbUp = kbHeight > 0;
   const [genBusy, setGenBusy] = useState(false);
 

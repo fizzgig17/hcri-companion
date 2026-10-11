@@ -9,7 +9,7 @@
 
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BackHandler, Platform, View, ScrollView, StyleSheet, Alert, AppState, Keyboard, Linking } from 'react-native';
+import { BackHandler, useWindowDimensions, Platform, View, ScrollView, StyleSheet, Alert, AppState, Keyboard, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MeterConnection } from '../ble/MeterConnection';
 import type { BatteryStatus } from '../ble/protocol';
@@ -27,7 +27,7 @@ import { uploadReadingToHcri, uploadFlickerToHcri } from '../hcri/uploadFlickerT
 import { getReportLink } from '../hcri/getReportLink';
 import { fetchSampleReading } from '../hcri/fetchSampleReading';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
-import { loadAutoConnectPreference, loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference, loadTestReportIdPreference } from '../storage/preferences';
+import { loadAutoConnectPreference, loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference, loadTestReportIdPreference, loadSideTabPreference, saveSideTabPreference } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
 import { addReading, loadHistory, recordUpload, setReadingFlicker, updateReadingLed } from '../storage/readingHistory';
 import { fetchLedSuggestion, LedDetails, LedSuggestion } from '../hcri/ledApi';
@@ -41,7 +41,7 @@ import { shareSingleReadingCsv } from '../utils/shareCsv';
 import { hapticSuccess, hapticFailure } from '../utils/haptics';
 import { enableKeepAwake, disableKeepAwake } from '../utils/keepAwake';
 import { useTheme } from '../contexts/ThemeContext';
-import { useLayoutMode } from '../layout';
+import { useLayoutMode, isSquareWindow, sideColumnWidth, MIN_GRID_WIDTH } from '../layout';
 import HistoryScreen from './HistoryScreen';
 import { useLog } from '../contexts/LogContext';
 import { withBackgroundDisconnectSuppressed, isBackgroundDisconnectSuppressed } from '../ble/backgroundDisconnectGuard';
@@ -102,7 +102,18 @@ export default function HomeScreen({ navigation }: any) {
   // Tablets / unfolded foldables: History sits beside (or below) the reading and the graphs are all shown at once.
   const layoutMode = useLayoutMode();
   const wide = layoutMode !== 'compact';
-  useEffect(() => { if (layoutMode === 'stacked') setActiveTab((t) => (t === 'data' ? 'main' : t)); }, [layoutMode]);
+  const { width: winW, height: winH } = useWindowDimensions();
+  // Unfolded foldable (nearly square): the right column switches between History and Data, and it is wider than
+  // the usual tablet History strip so it stays readable. Narrow left panes swipe through the charts instead of
+  // drawing them all at once.
+  const square = layoutMode === 'dashboard' && isSquareWindow(winW, winH);
+  const sideW = layoutMode !== 'dashboard' ? 0 : square ? sideColumnWidth(winW) : 320;
+  const gridCharts = layoutMode === 'dashboard' && winW - sideW >= MIN_GRID_WIDTH;
+  const dataBesideHistory = layoutMode === 'stacked' || square;
+  const [sideTab, setSideTab] = useState<'history' | 'data'>('history');
+  useEffect(() => { loadSideTabPreference().then(setSideTab).catch(() => {}); }, []);
+  const changeSideTab = (t: 'history' | 'data') => { setSideTab(t); saveSideTabPreference(t).catch(() => {}); };
+  useEffect(() => { if (dataBesideHistory) setActiveTab((t) => (t === 'data' ? 'main' : t)); }, [dataBesideHistory]);
   const { colors } = useTheme();
   const { log, appendLog, clearLog, refreshVerboseLogging } = useLog();
   const [activeTab, setActiveTab] = useState<TabKey>('main');
@@ -1442,6 +1453,8 @@ export default function HomeScreen({ navigation }: any) {
     rootColumn: { flex: 1 },
     mainColumn: { flex: 1, minWidth: 0, minHeight: 0 },
     mainColumnStacked: { flex: 2, minWidth: 0, minHeight: 0 },
+    sideColumn: { flex: 1 },
+    sideSwitch: { paddingHorizontal: 12, paddingTop: 8, paddingBottom: 6 },
     historyBeside: { width: 320, borderLeftWidth: 1, borderLeftColor: colors.cardBorder },
     // Portrait: History gets about two fifths of the window rather than a fixed strip.
     historyBelow: { flex: 1, minHeight: 300, borderTopWidth: 1, borderTopColor: colors.cardBorder, flexDirection: 'row' },
@@ -1537,7 +1550,7 @@ export default function HomeScreen({ navigation }: any) {
             tabs={[
               { key: 'main', label: 'Main' },
               // Held upright on a tablet the Data panel sits beside History instead (below).
-              ...(layoutMode === 'stacked' ? [] : [{ key: 'data' as const, label: 'Data' }]),
+              ...(dataBesideHistory ? [] : [{ key: 'data' as const, label: 'Data' }]),
               { key: 'logs', label: 'Logs' },
             ]}
             active={activeTab}
@@ -1617,7 +1630,7 @@ export default function HomeScreen({ navigation }: any) {
             scrollInputIntoView={scrollInputIntoView}
             pagerResetKey={pagerResetKey}
             wide={wide}
-            portrait={layoutMode === 'stacked'}
+            portrait={layoutMode === 'stacked' || (layoutMode === 'dashboard' && !gridCharts)}
             flicker={
               (status === 'connected' || status === 'uploading' || status === 'measuring') && deviceSupportsFlicker(deviceName) && mode !== 'live'
                 ? { reading: flickerReading, running: mode === 'flicker', focusNonce: flickerFocus, history: flickerHistory, settings: flickerSettingsApi, upload: flickerUploadApi, target: mode === 'flicker' ? flickerTarget : null, onStart: startFlickerSample, onStop: stopFlicker, canSampleReading, fromReading: flickerFromReading, redoLabel: result?.flicker ? 'Redo for reading' : 'Add to reading', readingNote: result ? (currentReadingId ? 'saved' : 'unsaved') : undefined }
@@ -1653,8 +1666,8 @@ export default function HomeScreen({ navigation }: any) {
           onCancelConnect={cancelConnect}
           liveSupported={deviceSupportsLive(deviceName)}
           // The landscape dashboard already shows the flicker chart, so it needs no Flicker button.
-          flickerSupported={layoutMode !== 'dashboard' && deviceSupportsFlicker(deviceName) && mode !== 'live'}
-          sampleHasFlicker={layoutMode !== 'dashboard' && !!(result?.sampleLabel && result.flicker)}
+          flickerSupported={!gridCharts && deviceSupportsFlicker(deviceName) && mode !== 'live'}
+          sampleHasFlicker={!gridCharts && !!(result?.sampleLabel && result.flicker)}
           activeMode={mode}
           onToggleLive={toggleLive}
           onToggleFlicker={() => setFlickerFocus((n) => n + 1)}
@@ -1681,8 +1694,28 @@ export default function HomeScreen({ navigation }: any) {
       )}
       </View>
       {wide && layoutMode === 'dashboard' && (
-        <View style={styles.historyBeside}>
-          <HistoryScreen embedded navigation={navigation} refreshKey={`${currentReadingId ?? ''}|${uploadSucceeded ? 1 : 0}|${lastUploadedReport?.id ?? ''}`} />
+        <View style={[styles.historyBeside, { width: sideW }]}>
+          {square ? (
+            // Unfolded foldable: one column, switch between History and the Data panel (remembered).
+            <View style={styles.sideColumn}>
+              <View style={styles.sideSwitch}>
+                <TabBar
+                  tabs={[{ key: 'history' as const, label: 'History' }, { key: 'data' as const, label: 'Data' }]}
+                  active={sideTab}
+                  onChange={changeSideTab}
+                />
+              </View>
+              {sideTab === 'history' ? (
+                <HistoryScreen embedded navigation={navigation} refreshKey={`${currentReadingId ?? ''}|${uploadSucceeded ? 1 : 0}|${lastUploadedReport?.id ?? ''}`} />
+              ) : (
+                <ScrollView style={styles.bottomRight} contentContainerStyle={styles.bottomRightContent} automaticallyAdjustKeyboardInsets keyboardShouldPersistTaps="handled">
+                  {renderDataTab()}
+                </ScrollView>
+              )}
+            </View>
+          ) : (
+            <HistoryScreen embedded navigation={navigation} refreshKey={`${currentReadingId ?? ''}|${uploadSucceeded ? 1 : 0}|${lastUploadedReport?.id ?? ''}`} />
+          )}
         </View>
       )}
       {layoutMode === 'stacked' && (

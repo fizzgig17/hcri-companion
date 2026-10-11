@@ -162,6 +162,18 @@ export async function saveChartTopPreference(id: string): Promise<void> {
   await AsyncStorage.setItem(CHART_TOP_KEY, id);
 }
 
+// Square windows (unfolded foldables): which panel the right-hand column shows ('history' | 'data').
+const SIDE_TAB_KEY = 'hcri.io.pref.sideTab';
+
+export async function loadSideTabPreference(): Promise<'history' | 'data'> {
+  const raw = await AsyncStorage.getItem(SIDE_TAB_KEY);
+  return raw === 'data' ? 'data' : 'history';
+}
+
+export async function saveSideTabPreference(tab: 'history' | 'data'): Promise<void> {
+  await AsyncStorage.setItem(SIDE_TAB_KEY, tab);
+}
+
 // Defaults to 'system' -- a fresh install should follow the phone's own
 // light/dark setting rather than forcing dark (this app's original, only
 // look) on someone whose phone is set to light mode. Light and Dark are
