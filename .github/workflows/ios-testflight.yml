@@ -16,8 +16,15 @@
 #        ASC_KEY_P8      the whole text of the .p8 file, including the BEGIN/END lines
 #        APPLE_TEAM_ID   your 10-character Team ID
 #
-# Signing is automatic: Xcode on the runner uses the API key to create or fetch the distribution certificate and
-# provisioning profile (-allowProvisioningUpdates), so no certificates are stored in the repo.
+# Signing: with the four secrets below set, the build signs with YOUR Apple Distribution certificate and App Store
+# provisioning profile (stored as secrets), so no new certificate is created on each run (Apple caps how many an
+# account may hold, and automatic signing on a fresh runner kept creating new ones until the build failed).
+#        IOS_DIST_P12            base64 of the Apple Distribution certificate + key (.p12)
+#        IOS_DIST_P12_PASSWORD   the .p12 password
+#        IOS_PROFILE             base64 of the App Store .mobileprovision for io.hcri.companion
+#        IOS_PROFILE_NAME        the profile's name (informational; the name inside the file is what is used)
+# Without them it falls back to automatic signing (-allowProvisioningUpdates) with the API key. The API key is still
+# used either way, to upload to TestFlight and to write each build's "What to Test" text.
 # The build number is the GitHub run number, so every upload has a higher one than the last.
 # The version shown to testers is MARKETING_VERSION in the Xcode project (bump it with each release).
 
@@ -106,6 +113,40 @@ jobs:
           printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/asc/AuthKey.p8"
           chmod 600 "$RUNNER_TEMP/asc/AuthKey.p8"
 
+      # Your own signing certificate + profile (see the header). Skipped, falling back to automatic signing, if unset.
+      - name: Install the signing certificate and profile
+        env:
+          IOS_DIST_P12: ${{ secrets.IOS_DIST_P12 }}
+          IOS_DIST_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
+          IOS_PROFILE: ${{ secrets.IOS_PROFILE }}
+        run: |
+          if [ -z "$IOS_DIST_P12" ] || [ -z "$IOS_PROFILE" ]; then
+            echo "No IOS_DIST_P12 / IOS_PROFILE secrets: using automatic signing."
+            exit 0
+          fi
+          KC="$RUNNER_TEMP/signing.keychain-db"
+          KCPASS="$(uuidgen)"
+          security create-keychain -p "$KCPASS" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KCPASS" "$KC"
+          printf '%s' "$IOS_DIST_P12" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+          security import "$RUNNER_TEMP/dist.p12" -P "$IOS_DIST_P12_PASSWORD" -A -t cert -f pkcs12 -k "$KC"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KCPASS" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | sed 's/"//g')
+          security find-identity -v -p codesigning "$KC"
+          rm -f "$RUNNER_TEMP/dist.p12"
+
+          printf '%s' "$IOS_PROFILE" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
+          security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" > "$RUNNER_TEMP/profile.plist"
+          PUUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/profile.plist")
+          PNAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/profile.plist")
+          PAPP=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$RUNNER_TEMP/profile.plist")
+          echo "Profile: $PNAME ($PUUID) for $PAPP"
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$RUNNER_TEMP/profile.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$PUUID.mobileprovision"
+          echo "SIGN_MANUAL=1" >> "$GITHUB_ENV"
+          echo "PROFILE_NAME=$PNAME" >> "$GITHUB_ENV"
+
       - name: Archive (signed, Release)
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
@@ -113,16 +154,33 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -o pipefail
+          if [ "$SIGN_MANUAL" = "1" ]; then
+            # Manual signing for the app target only (the Pods targets must stay as they are), written into the project.
+            PROFILE_NAME="$PROFILE_NAME" APPLE_TEAM_ID="$APPLE_TEAM_ID" bundle exec ruby -e '
+              require "xcodeproj"
+              proj = Xcodeproj::Project.open("ios/hCRICompanion.xcodeproj")
+              target = proj.targets.find { |t| t.name == "hCRICompanion" } or abort("target hCRICompanion not found")
+              target.build_configurations.each do |c|
+                s = c.build_settings
+                s["CODE_SIGN_STYLE"] = "Manual"
+                s["DEVELOPMENT_TEAM"] = ENV["APPLE_TEAM_ID"]
+                s["CODE_SIGN_IDENTITY"] = "Apple Distribution"
+                s["CODE_SIGN_IDENTITY[sdk=iphoneos*]"] = "Apple Distribution"
+                s["PROVISIONING_PROFILE_SPECIFIER"] = ENV["PROFILE_NAME"]
+              end
+              proj.save
+            '
+            AUTH_FLAGS=""
+          else
+            AUTH_FLAGS="-allowProvisioningUpdates -authenticationKeyPath $RUNNER_TEMP/asc/AuthKey.p8 -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID"
+          fi
           xcodebuild \
             -workspace ios/hCRICompanion.xcworkspace \
             -scheme hCRICompanion \
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/hCRI.xcarchive" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey.p8" \
-            -authenticationKeyID "$ASC_KEY_ID" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            $AUTH_FLAGS \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
             archive 2>&1 | tee xcodebuild-archive.log | tail -n 40
@@ -134,6 +192,13 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -o pipefail
+          if [ "$SIGN_MANUAL" = "1" ]; then
+            SIGN_STYLE=manual
+            SIGN_EXTRA="<key>signingCertificate</key><string>Apple Distribution</string><key>provisioningProfiles</key><dict><key>io.hcri.companion</key><string>${PROFILE_NAME}</string></dict>"
+          else
+            SIGN_STYLE=automatic
+            SIGN_EXTRA=""
+          fi
           cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -142,17 +207,20 @@ jobs:
             <key>method</key><string>app-store-connect</string>
             <key>destination</key><string>upload</string>
             <key>teamID</key><string>${APPLE_TEAM_ID}</string>
-            <key>signingStyle</key><string>automatic</string>
+            <key>signingStyle</key><string>${SIGN_STYLE}</string>
+            ${SIGN_EXTRA}
             <key>uploadSymbols</key><true/>
             <key>manageAppVersionAndBuildNumber</key><false/>
           </dict>
           </plist>
           PLIST
+          # The API key is still what authenticates the upload; -allowProvisioningUpdates only for automatic signing.
+          if [ "$SIGN_MANUAL" = "1" ]; then EXTRA_FLAGS=""; else EXTRA_FLAGS="-allowProvisioningUpdates"; fi
           xcodebuild -exportArchive \
             -archivePath "$RUNNER_TEMP/hCRI.xcarchive" \
             -exportPath "$RUNNER_TEMP/export" \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
-            -allowProvisioningUpdates \
+            $EXTRA_FLAGS \
             -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey.p8" \
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" 2>&1 | tee xcodebuild-export.log | tail -n 40
