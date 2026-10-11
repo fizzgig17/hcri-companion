@@ -161,7 +161,7 @@ jobs:
       - name: Annotate errors
         if: failure()
         run: |
-          cat xcodebuild-archive.log xcodebuild-export.log 2>/dev/null | grep -E "error:|fatal error:|\*\* (ARCHIVE|EXPORT) FAILED|Undefined symbols|Provisioning|certificate" | head -n 20 | while IFS= read -r line; do
+          cat xcodebuild-archive.log xcodebuild-export.log 2>/dev/null | grep -E ": error: |^error: |fatal error: |\*\* (ARCHIVE|EXPORT) FAILED|Validation failed|SDK version|Undefined symbols|No profiles|No signing certificate|Provisioning profile" | head -n 20 | while IFS= read -r line; do
             echo "::error::${line//%/%25}"
           done
 
