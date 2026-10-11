@@ -51,6 +51,8 @@ import {
   loadTbCorrectionPreference,
   loadFlickerWithReadingPreference,
   saveFlickerWithReadingPreference,
+  loadLedSuggestionsPreference,
+  saveLedSuggestionsPreference,
   saveTbCorrectionPreference,
 } from '../storage/preferences';
 import { setTbCorrectionEnabled } from '../ble/tbCorrection';
@@ -133,6 +135,7 @@ export default function SettingsScreen({ navigation, route }: any) {
   const [testReportId, setTestReportId] = useState('');
   const [tbCorrection, setTbCorrection] = useState(true);
   const [flickerWithReading, setFlickerWithReading] = useState(false);
+  const [ledSuggestions, setLedSuggestions] = useState(true);
   // Which measurements show on the Main tab's result card, and in what
   // order -- starts from the built-in default so the list renders
   // immediately (not empty) while loadStatDisplayPrefs() resolves.
@@ -176,6 +179,7 @@ export default function SettingsScreen({ navigation, route }: any) {
     loadTestReportIdPreference().then(setTestReportId);
     loadTbCorrectionPreference().then(setTbCorrection);
     loadFlickerWithReadingPreference().then(setFlickerWithReading);
+    loadLedSuggestionsPreference().then(setLedSuggestions);
     loadStatDisplayPrefs().then(setStatPrefs);
     // Intentionally run once on mount only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -225,6 +229,10 @@ export default function SettingsScreen({ navigation, route }: any) {
     await saveHapticResultsPreference(value);
   };
 
+  const toggleLedSuggestions = async (value: boolean) => {
+    setLedSuggestions(value);
+    await saveLedSuggestionsPreference(value);
+  };
   const toggleFlickerWithReading = async (value: boolean) => {
     setFlickerWithReading(value);
     await saveFlickerWithReadingPreference(value);
@@ -779,6 +787,18 @@ export default function SettingsScreen({ navigation, route }: any) {
           </Text>
         </View>
         <Switch accessibilityLabel="Torch Bearer correction" value={tbCorrection} onValueChange={toggleTbCorrection} trackColor={{ true: colors.accent }} />
+      </View>
+
+      <View style={styles.toggleRow}>
+        <View style={styles.toggleTextWrap}>
+          <Text style={styles.toggleLabel}>LED suggestions</Text>
+          <Text style={styles.toggleHint}>
+            On by default. After a reading, hCRI.io suggests the LED (brand, model and CCT) from the shape of the
+            spectrum and the reading's title, and you confirm it with one tap. Turn off to stop those requests and hide
+            the suggestion cards. You can still add LED details yourself with the 💡 button.
+          </Text>
+        </View>
+        <Switch accessibilityLabel="LED suggestions" value={ledSuggestions} onValueChange={toggleLedSuggestions} trackColor={{ true: colors.accent }} />
       </View>
 
       <View style={styles.toggleRow}>

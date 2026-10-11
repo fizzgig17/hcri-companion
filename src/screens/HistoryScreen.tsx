@@ -16,7 +16,7 @@
 // away" and disconnect the meter out from under them -- even though the
 // meter connection itself lives entirely in HomeScreen/MainTab, not here.
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Text, ScrollView, StyleSheet, Alert, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Clipboard from '@react-native-clipboard/clipboard';
@@ -44,6 +44,7 @@ import { analyzeSpectrum } from '../utils/spectralAnalysis';
 import LedPickerModal from '../components/LedPickerModal';
 import { EMPTY_LED_LISTS, getCachedLedLists, LedLists, refreshLedLists } from '../hcri/ledLists';
 import { fetchLedSuggestion, LedDetails } from '../hcri/ledApi';
+import useLedSuggestionsEnabled from '../hooks/useLedSuggestionsEnabled';
 import { syncLedForReading } from '../hcri/ledSync';
 import { ledPatch, ledsOfReading, hasLed } from '../hcri/leds';
 
@@ -84,6 +85,13 @@ export default function HistoryScreen({ navigation }: any) {
     return () => { live = false; };
   }, []);
 
+  const ledSuggestionsEnabled = useLedSuggestionsEnabled(navigation);
+  // With suggestions switched off, hide any suggestion already stored on a reading (it is kept, so switching back on restores it).
+  const shownHistory = useMemo(
+    () => (ledSuggestionsEnabled ? history : history.map((r) => (r.ledSuggestion ? { ...r, ledSuggestion: undefined } : r))),
+    [history, ledSuggestionsEnabled]
+  );
+
   const patchLed = useCallback((id: string, patch: Parameters<typeof updateReadingLed>[1]) => {
     setHistory((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
     return updateReadingLed(id, patch);
@@ -98,7 +106,7 @@ export default function HistoryScreen({ navigation }: any) {
   }, [patchLed]);
 
   useEffect(() => {
-    if (historyLoading) return;
+    if (historyLoading || !ledSuggestionsEnabled) return;
     const todo = history.filter((r) => !r.led && !r.ledSuggestion && !r.ledDismissed && !r.result.sampleLabel).slice(0, 8);
     if (!todo.length) return;
     let live = true;
@@ -113,7 +121,7 @@ export default function HistoryScreen({ navigation }: any) {
       }
     })();
     return () => { live = false; };
-  }, [historyLoading, history.length, patchLed]);
+  }, [historyLoading, history.length, patchLed, ledSuggestionsEnabled]);
 
   useEffect(() => {
     refreshHistory();
@@ -377,7 +385,7 @@ export default function HistoryScreen({ navigation }: any) {
       <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>History</Text>
         <HistoryTab
-          history={history}
+          history={shownHistory}
           loading={historyLoading}
           onRename={renameFromHistory}
           onUploadWithLabel={uploadFromHistory}
@@ -409,7 +417,7 @@ export default function HistoryScreen({ navigation }: any) {
       <LedPickerModal
         visible={!!ledPickFor}
         lists={ledLists}
-        initial={ledPickFor && ledsOfReading(ledPickFor).length ? ledsOfReading(ledPickFor) : (ledPickFor && ledPickFor.ledSuggestion && ledPickFor.ledSuggestion !== 'none' ? [{ brand: ledPickFor.ledSuggestion.brand, model: ledPickFor.ledSuggestion.model, cct: ledPickFor.ledSuggestion.cct ?? undefined }] : undefined)}
+        initial={ledPickFor && ledsOfReading(ledPickFor).length ? ledsOfReading(ledPickFor) : (ledSuggestionsEnabled && ledPickFor && ledPickFor.ledSuggestion && ledPickFor.ledSuggestion !== 'none' ? [{ brand: ledPickFor.ledSuggestion.brand, model: ledPickFor.ledSuggestion.model, cct: ledPickFor.ledSuggestion.cct ?? undefined }] : undefined)}
         onSave={(d) => ledPickFor && confirmLed(ledPickFor.id, d)}
         onCancel={() => setLedPickFor(null)}
       />
