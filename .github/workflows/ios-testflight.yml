@@ -54,6 +54,17 @@ jobs:
             exit 1
           fi
 
+      # App Store Connect only accepts builds made with the iOS 26 SDK (Xcode 26 or later); the runner's default Xcode is older.
+      - name: Select Xcode 26
+        run: |
+          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1)
+          if [ -z "$X" ]; then
+            echo "::error::No Xcode 26 on this runner image. Installed: $(ls /Applications | grep -i xcode | tr '\n' ' ')"
+            exit 1
+          fi
+          sudo xcode-select -s "$X/Contents/Developer"
+          xcodebuild -version
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
