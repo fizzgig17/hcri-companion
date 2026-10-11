@@ -22,6 +22,7 @@ import InfoButton from '../../components/InfoButton';
 import StatCard, { statDensity } from '../../components/StatCard';
 import { defaultLabel } from '../../hcri/buildCsv';
 import SpectrumTab from './SpectrumTab';
+import SpectrumGrid from '../../components/SpectrumGrid';
 import { statusLabels } from '../../theme';
 import { useTheme } from '../../contexts/ThemeContext';
 import { MeterResult } from '../../ble/parseResult';
@@ -151,6 +152,8 @@ interface Props {
   flicker?: { reading: FlickerReading | null; running: boolean; focusNonce: number; history: { f: number; p: number }[]; settings?: FlickerSettingsApi; upload?: FlickerUploadApi; target?: 'reading' | 'new' | null; onStart?: (target: 'reading' | 'new') => void; onStop?: () => void; canSampleReading?: boolean; redoLabel?: string; readingNote?: string; fromReading?: boolean };
   /** See SpectrumTab's pagerResetKey. */
   pagerResetKey?: unknown;
+  /** Tablet / unfolded layout: all graphs at once (SpectrumGrid) and the stat tiles in one row, instead of the swipeable pager. */
+  wide?: boolean;
 }
 
 export default function MainTab({
@@ -186,6 +189,7 @@ export default function MainTab({
   scrollInputIntoView,
   flicker,
   pagerResetKey,
+  wide,
   ledSuggestion, ledCurrent, onLedEdit, ledLists, ledPickerOpen, onLedYes, onLedOther, onLedClose, onLedPickerCancel, onLedPickerSave,
 }: Props) {
   const { colors, statusColors } = useTheme();
@@ -219,6 +223,7 @@ export default function MainTab({
   // there's no feedback loop and the charts never shift when something below
   // (the docked title) appears.
   const [chartRegionH, setChartRegionH] = useState(0);
+  const [chartRegionW, setChartRegionW] = useState(0);
 
   const styles = StyleSheet.create({
     // Fixed height, never wraps: a spinner/battery/longer status text used to push this onto a second line while connecting or measuring, shifting the charts down and back.
@@ -445,7 +450,7 @@ export default function MainTab({
               are 0 for every field until a real reading exists, so every
               tile just reads "0" until then. */}
           {visibleStats.map(({ id, metric, out }) => (
-            <StatCard key={id} label={metric.label} value={out.value} unit={out.unit} compact density={density} />
+            <StatCard key={id} label={metric.label} value={out.value} unit={out.unit} compact density={density} columns={wide ? Math.min(visibleStats.length, 9) : undefined} />
           ))}
         </View>
         {/* resultCard (below) wraps this in its own padding: 14 AND
@@ -461,8 +466,14 @@ export default function MainTab({
             and the reason charts still looked clipped on the right after
             CARD_PADDING alone was fixed. See SpectrumTab.tsx's
             extraHorizontalChrome comment. */}
-        <View style={styles.chartRegion} onLayout={(e) => setChartRegionH(Math.floor(e.nativeEvent.layout.height))}>
+        <View style={styles.chartRegion} onLayout={(e) => { setChartRegionH(Math.floor(e.nativeEvent.layout.height)); setChartRegionW(Math.floor(e.nativeEvent.layout.width)); }}>
+          {wide ? (
+            chartRegionW > 0 && chartRegionH > 0 ? (
+              <SpectrumGrid result={displayResult} analysis={displayAnalysis} sampleLabel={result?.sampleLabel} flicker={flicker} width={chartRegionW} height={chartRegionH} />
+            ) : null
+          ) : (
           <SpectrumTab result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} sampleLabel={result?.sampleLabel} flicker={flicker} pagerResetKey={pagerResetKey} />
+          )}
           {ledSuggestion && hasReading && !result?.sampleLabel && onLedYes && onLedOther && onLedClose && (
             <LedSuggestionCard floating suggestion={ledSuggestion} onYes={onLedYes} onOther={onLedOther} onClose={onLedClose} />
           )}

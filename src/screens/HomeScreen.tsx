@@ -41,6 +41,8 @@ import { shareSingleReadingCsv } from '../utils/shareCsv';
 import { hapticSuccess, hapticFailure } from '../utils/haptics';
 import { enableKeepAwake, disableKeepAwake } from '../utils/keepAwake';
 import { useTheme } from '../contexts/ThemeContext';
+import { useLayoutMode } from '../layout';
+import HistoryScreen from './HistoryScreen';
 import { useLog } from '../contexts/LogContext';
 import { withBackgroundDisconnectSuppressed, isBackgroundDisconnectSuppressed } from '../ble/backgroundDisconnectGuard';
 import TabBar from '../components/TabBar';
@@ -95,6 +97,9 @@ const DEVICE_POLL_SCAN_MS = 3000;
 const DEVICE_POLL_FORGET_MS = 65000;
 
 export default function HomeScreen({ navigation }: any) {
+  // Tablets / unfolded foldables: History sits beside (or below) the reading and the graphs are all shown at once.
+  const layoutMode = useLayoutMode();
+  const wide = layoutMode !== 'compact';
   const { colors } = useTheme();
   const { log, appendLog, clearLog, refreshVerboseLogging } = useLog();
   const [activeTab, setActiveTab] = useState<TabKey>('main');
@@ -1430,6 +1435,11 @@ export default function HomeScreen({ navigation }: any) {
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
+    rootRow: { flex: 1, flexDirection: 'row' },
+    rootColumn: { flex: 1 },
+    mainColumn: { flex: 1, minWidth: 0, minHeight: 0 },
+    historyBeside: { width: 320, borderLeftWidth: 1, borderLeftColor: colors.cardBorder },
+    historyBelow: { height: 300, borderTopWidth: 1, borderTopColor: colors.cardBorder },
     // paddingBottom is extra-generous (not just enough to clear the home
     // indicator/nav bar) because this ScrollView is shared by every tab --
     // Data's own content (collapsible sections expanded) can run
@@ -1480,6 +1490,8 @@ export default function HomeScreen({ navigation }: any) {
     // builds. Production builds have no banner, so 'top' is still needed
     // there to clear the status bar/notch directly.
     <SafeAreaView style={styles.container} edges={IS_DEV_BUILD ? ['left', 'right'] : ['top', 'left', 'right']}>
+      <View style={layoutMode === 'stacked' ? styles.rootColumn : styles.rootRow}>
+      <View style={styles.mainColumn}>
       {/* Docked -- a sibling of the ScrollView below, not inside it, so it
           stays on screen no matter how far down a long Data tab you've
           scrolled. No title/gear header any more -- "hCRI Companion" was
@@ -1557,6 +1569,7 @@ export default function HomeScreen({ navigation }: any) {
             onLedPickerSave={confirmLed}
             scrollInputIntoView={scrollInputIntoView}
             pagerResetKey={pagerResetKey}
+            wide={wide}
             flicker={
               (status === 'connected' || status === 'uploading' || status === 'measuring') && deviceSupportsFlicker(deviceName) && mode !== 'live'
                 ? { reading: flickerReading, running: mode === 'flicker', focusNonce: flickerFocus, history: flickerHistory, settings: flickerSettingsApi, upload: flickerUploadApi, target: mode === 'flicker' ? flickerTarget : null, onStart: startFlickerSample, onStop: stopFlicker, canSampleReading, fromReading: flickerFromReading, redoLabel: result?.flicker ? 'Redo for reading' : 'Add to reading', readingNote: result ? (currentReadingId ? 'saved' : 'unsaved') : undefined }
@@ -1629,6 +1642,13 @@ export default function HomeScreen({ navigation }: any) {
           onSaveLive={saveLive}
         />
       )}
+      </View>
+      {wide && (
+        <View style={layoutMode === 'stacked' ? styles.historyBelow : styles.historyBeside}>
+          <HistoryScreen embedded navigation={navigation} refreshKey={`${currentReadingId ?? ''}|${uploadSucceeded ? 1 : 0}|${lastUploadedReport?.id ?? ''}`} />
+        </View>
+      )}
+      </View>
     </SafeAreaView>
   );
 }

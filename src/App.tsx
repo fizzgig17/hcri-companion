@@ -12,7 +12,7 @@
 // HomeScreen/SettingsScreen with a bit of local state instead.
 
 import React, { useEffect } from 'react';
-import { StatusBar, View } from 'react-native';
+import { StatusBar, View, useWindowDimensions } from 'react-native';
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -22,6 +22,7 @@ import HistoryScreen from './screens/HistoryScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import ReadingDetailScreen from './screens/ReadingDetailScreen';
 import Tm30ReportScreen from './screens/Tm30ReportScreen';
+import CompareScreen from './screens/CompareScreen';
 import ErrorBoundary from './components/ErrorBoundary';
 import DevBuildBanner from './components/DevBuildBanner';
 import SplashTitle from './components/SplashTitle';
@@ -29,7 +30,7 @@ import CrashReporter from './components/CrashReporter';
 import { HomeIcon, HistoryIcon, SettingsIcon } from './components/TabBarIcons';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { LogProvider } from './contexts/LogContext';
-import { MAX_CONTENT_WIDTH } from './layout';
+import { MAX_CONTENT_WIDTH, WIDE_SINGLE_COLUMN_WIDTH, ContentWidthContext, useLayoutMode } from './layout';
 import { navigationRef } from './navigationRef';
 import { UpdateProvider } from './contexts/UpdateContext';
 import { DevBuildProvider } from './contexts/DevBuildContext';
@@ -39,6 +40,31 @@ import { loadHapticTapsPreference, loadHapticResultsPreference, loadTbCorrection
 import { setTbCorrectionEnabled } from './ble/tbCorrection';
 
 const Stack = createNativeStackNavigator();
+
+// Single-column screens (Settings, a past reading) stay a comfortable reading width, centered, on wide windows
+// instead of stretching across a tablet. A no-op on phones. Memoized per screen so navigation sees a stable component.
+const singleColumnCache = new Map<React.ComponentType<any>, React.ComponentType<any>>();
+function SingleColumn(Screen: React.ComponentType<any>): React.ComponentType<any> {
+  const cached = singleColumnCache.get(Screen);
+  if (cached) return cached;
+  const Wrapped = (props: any) => {
+    const mode = useLayoutMode();
+    const { width } = useWindowDimensions();
+    if (mode === 'compact') return <Screen {...props} />;
+    return (
+      <View style={{ flex: 1, alignItems: 'center' }}>
+        <View style={{ flex: 1, width: '100%', maxWidth: WIDE_SINGLE_COLUMN_WIDTH }}>
+          <ContentWidthContext.Provider value={Math.min(width - 84, WIDE_SINGLE_COLUMN_WIDTH)}>
+            <Screen {...props} />
+          </ContentWidthContext.Provider>
+        </View>
+      </View>
+    );
+  };
+  Wrapped.displayName = `SingleColumn(${Screen.displayName || Screen.name || 'Screen'})`;
+  singleColumnCache.set(Screen, Wrapped);
+  return Wrapped;
+}
 const Tab = createBottomTabNavigator();
 
 // The three top-level destinations -- Home (take/view the current
@@ -54,16 +80,29 @@ function Tabs() {
   // Some phones (e.g. Galaxy Z Fold) report a tiny/zero bottom inset yet have
   // rounded corners or a gesture pill that clips the labels, so keep a floor.
   const bottomPad = Math.max(insets.bottom, 10);
+  // Tablets and unfolded foldables: the tabs become a slim rail on the left, and History is shown
+  // alongside the reading on Home instead of being a tab of its own (see HomeScreen).
+  const wide = useLayoutMode() !== 'compact';
 
   return (
     <Tab.Navigator
       screenOptions={{
         headerStyle: { backgroundColor: colors.card },
         headerTintColor: colors.text,
-        // Compact bar: 40dp of content (icon + label) plus the gesture/nav inset below it.
-        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.cardBorder, height: 41 + bottomPad, paddingTop: 2, paddingBottom: bottomPad + 3 },
-        tabBarItemStyle: { paddingVertical: 0 },
-        tabBarLabelStyle: { fontSize: 10, marginTop: -2, marginBottom: 2 }, tabBarAllowFontScaling: false,
+        ...(wide
+          ? {
+              tabBarPosition: 'left' as const,
+              tabBarVariant: 'material' as const,
+              tabBarStyle: { backgroundColor: colors.card, borderRightColor: colors.cardBorder, width: 84 },
+              tabBarLabelStyle: { fontSize: 11, fontWeight: '600' as const },
+            }
+          : {
+              // Compact bar: 40dp of content (icon + label) plus the gesture/nav inset below it.
+              tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.cardBorder, height: 41 + bottomPad, paddingTop: 2, paddingBottom: bottomPad + 3 },
+              tabBarItemStyle: { paddingVertical: 0 },
+              tabBarLabelStyle: { fontSize: 10, marginTop: -2, marginBottom: 2 },
+            }),
+        tabBarAllowFontScaling: false,
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.muted,
       }}
@@ -82,11 +121,13 @@ function Tabs() {
         options={{
           headerShown: false,
           tabBarIcon: ({ color }) => <HistoryIcon color={color} size={22} />,
+          // Wide layouts show History next to the reading on Home, so its tab is hidden there.
+          ...(wide ? { tabBarButton: () => null, tabBarItemStyle: { display: 'none' as const } } : {}),
         }}
       />
       <Tab.Screen
         name="Settings"
-        component={SettingsScreen}
+        component={SingleColumn(SettingsScreen)}
         options={{
           // Same in-page heading as History (see SettingsScreen), so no native header.
           headerShown: false,
@@ -103,6 +144,7 @@ function Tabs() {
 // directly and instead renders this as ThemeProvider's child.
 function Navigation() {
   const { colors, scheme } = useTheme();
+  const mode = useLayoutMode();
   useEffect(() => {
     loadHapticTapsPreference().then(setTapHapticsEnabled).catch(() => {});
     loadHapticResultsPreference().then(setResultHapticsEnabled).catch(() => {});
@@ -111,7 +153,7 @@ function Navigation() {
 
   return (
     <View style={{ flex: 1, alignItems: 'center', backgroundColor: colors.background }}>
-    <View style={{ flex: 1, width: '100%', maxWidth: MAX_CONTENT_WIDTH }}>
+    <View style={{ flex: 1, width: '100%', maxWidth: mode === 'compact' ? MAX_CONTENT_WIDTH : undefined }}>
     <UpdateBanner />
     <NavigationContainer ref={navigationRef} theme={scheme === 'light' ? DefaultTheme : DarkTheme}>
       {/* Status bar text/icons need to flip too -- dark-on-light is
@@ -126,8 +168,9 @@ function Navigation() {
             reading") sits on top of the tabs as a full-screen push, the
             same relationship it had to Home before. */}
         <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
-        <Stack.Screen name="ReadingDetail" component={ReadingDetailScreen} options={{ title: 'Reading' }} />
+        <Stack.Screen name="ReadingDetail" component={SingleColumn(ReadingDetailScreen)} options={{ title: 'Reading' }} />
         <Stack.Screen name="Tm30Report" component={Tm30ReportScreen} options={{ title: 'TM-30 Report' }} />
+        <Stack.Screen name="Compare" component={CompareScreen} options={{ title: 'Compare readings' }} />
       </Stack.Navigator>
     </NavigationContainer>
     </View>

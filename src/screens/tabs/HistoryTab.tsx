@@ -33,6 +33,7 @@ const ICON_TRASH = 'M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 
 const ICON_X = 'M18 6L6 18M6 6l12 12';
 const ICON_CHECK = 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11';
 const ICON_EYE = 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z';
+const ICON_COMPARE = 'M3 17l5-6 4 4 8-9';
 const ICON_TRAY = 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12';
 function ActionIcon({ d, color, size = 22 }: { d: string; color: string; size?: number }) {
   return (
@@ -61,6 +62,8 @@ interface Props {
   onShareAll: () => void;
   /** Shares just the checked readings (Select mode) as one CSV -- or as a single reading's own CSV when only one is checked. */
   onShareMany: (ids: string[]) => void;
+  /** Opens the Compare screen for 2-6 checked readings (Select mode). Omit to hide the button. */
+  onCompareMany?: (readings: SavedReading[]) => void;
   /** Opens ReadingDetailScreen for one saved reading -- the same measurement grid and Spectrum/Chrom/R-Values pages the Main/Spectrum tabs show for the current reading, just fed this past one instead (see ReadingDetailScreen.tsx). */
   onOpen: (reading: SavedReading) => void;
   /** Which reading (if any) is currently mid-upload, so only ITS button shows a spinner/disables -- the others stay usable. Also used to show progress during a bulk upload, since that walks this same id through the list one at a time. */
@@ -491,6 +494,7 @@ export default function HistoryTab({
   onShareOne,
   onShareAll,
   onShareMany,
+  onCompareMany,
   onOpen,
   uploadingId,
   bulkUploading,
@@ -583,6 +587,11 @@ export default function HistoryTab({
     if (selected.size === 0) return;
     const ids = history.filter((r) => selected.has(r.id)).map((r) => r.id);
     onShareMany(ids);
+  };
+
+  const handleCompareSelected = () => {
+    if (!onCompareMany || selected.size < 2 || selected.size > 6) return;
+    onCompareMany(history.filter((r) => selected.has(r.id)));
   };
 
   const handleDeleteSelected = () => {
@@ -727,11 +736,12 @@ export default function HistoryTab({
           </TouchableOpacity>
           <View style={styles.selectBarButtons}>
             {([
+              ...(onCompareMany ? [{ icon: ICON_COMPARE, label: 'Compare', onPress: handleCompareSelected, color: colors.info, border: colors.info }] : []),
               { icon: ICON_TRAY, label: 'Share', onPress: handleShareSelected, color: colors.text },
               { icon: ICON_TRASH, label: bulkDeleting ? 'Deleting…' : 'Delete', onPress: handleDeleteSelected, color: colors.danger, border: colors.danger },
               { icon: ICON_CLOUD, label: bulkUploading ? 'Uploading…' : selected.size ? `Upload (${selected.size})` : 'Upload', onPress: handleUploadSelected, color: colors.accent, border: colors.accent },
             ] as const).map((b) => {
-              const off = selected.size === 0 || bulkUploading || bulkDeleting;
+              const off = selected.size === 0 || bulkUploading || bulkDeleting || (b.label === 'Compare' && (selected.size < 2 || selected.size > 6));
               return (
                 <TouchableOpacity
                   key={b.label}
