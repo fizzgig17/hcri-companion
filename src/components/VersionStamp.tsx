@@ -1,11 +1,11 @@
 // src/components/VersionStamp.tsx
 //
-// "hCRI Companion v1.x · Built <date>" line, shown at the top of both the
+// "hCRI Companion v<version>" line (iOS adds "· Built <date>"; Android's version is itself a date), shown at the top of both the
 // Settings and About tabs so it's in the same place on each. Values come
 // from buildInfo.ts (updated with every version bump).
 
 import React from 'react';
-import { Text, StyleSheet } from 'react-native';
+import { Text, StyleSheet, Platform } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { APP_VERSION, BUILD_DATE } from '../buildInfo';
 import { GIT_COMMIT } from '../gitCommit';
@@ -23,7 +23,9 @@ export default function VersionStamp() {
   });
   return (
     <Text style={styles.text}>
-      hCRI Companion v{APP_VERSION} · Built {builtOn}
+      hCRI Companion v{APP_VERSION}
+      {/* Android's version is a date (YYYY.M.D.N), so a separate build date would only repeat it. */}
+      {Platform.OS === 'ios' ? ` · Built ${builtOn}` : ''}
       {IS_DEV_BUILD ? ` · ${GIT_COMMIT}` : ''}
     </Text>
   );
