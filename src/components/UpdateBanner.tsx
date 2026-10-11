@@ -41,6 +41,9 @@ export default function UpdateBanner() {
   const topPad = (IS_DEV_BUILD ? 0 : insets.top) + HOVER_GAP;
   const translateY = open.interpolate({ inputRange: [0, 1], outputRange: [-(CAPSULE_H + topPad + 20), 0] });
 
+  const opacity = open.interpolate({ inputRange: [0, 0.25, 1], outputRange: [0, 1, 1] });
+  const storeName = Platform.OS === 'ios' ? 'App Store' : 'Play Store';
+
   const light = scheme === 'light';
   const capsuleBg = light ? '#4b5160' : '#d6d6dc';
   const textColor = light ? '#ffffff' : '#1a1a1e';
@@ -79,12 +82,12 @@ export default function UpdateBanner() {
   return (
     <View style={styles.slot} pointerEvents="box-none">
       <Animated.View
-        style={[styles.wrap, { transform: [{ translateY }], opacity: visible ? 1 : 0 }]}
+        style={[styles.wrap, { transform: [{ translateY }], opacity }]}
         pointerEvents={visible ? 'box-none' : 'none'}
       >
         <View style={styles.capsule} accessibilityRole="alert">
           <Text style={styles.text} numberOfLines={1}>Update available</Text>
-          <TouchableOpacity style={styles.action} onPress={openStore} accessibilityLabel="Open Play Store to update">
+          <TouchableOpacity style={styles.action} onPress={openStore} accessibilityLabel={`Open ${storeName} to update`}>
             <Text style={styles.actionText}>Update</Text>
           </TouchableOpacity>
           <HintPressable hint="Dismiss" style={styles.close} onPress={dismissBanner} accessibilityLabel="Dismiss">

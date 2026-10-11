@@ -31,6 +31,7 @@ import { loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadF
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
 import { addReading, loadHistory, recordUpload, setReadingFlicker, updateReadingLed } from '../storage/readingHistory';
 import { fetchLedSuggestion, LedDetails, LedSuggestion } from '../hcri/ledApi';
+import useLedSuggestionsEnabled from '../hooks/useLedSuggestionsEnabled';
 import { ledPatch, hasLed, ledsOfReading } from '../hcri/leds';
 import { syncLedForReading } from '../hcri/ledSync';
 import { EMPTY_LED_LISTS, getCachedLedLists, LedLists, refreshLedLists } from '../hcri/ledLists';
@@ -143,6 +144,7 @@ export default function HomeScreen({ navigation }: any) {
   // LED suggestion for the current reading (Main tab's floating card). Hidden by taking a new reading
   // (currentReadingId changes) or by the card's own close button; History keeps offering it until approved.
   const [ledSuggestion, setLedSuggestion] = useState<LedSuggestion | null>(null);
+  const ledSuggestionsEnabled = useLedSuggestionsEnabled(navigation);
   const [ledPickerOpen, setLedPickerOpen] = useState(false);
   const [currentLeds, setCurrentLeds] = useState<LedDetails[]>([]);
   const [ledLists, setLedLists] = useState<LedLists>(EMPTY_LED_LISTS);
@@ -296,6 +298,7 @@ export default function HomeScreen({ navigation }: any) {
     return unsubscribe;
   }, [navigation, refreshLedFromHistory]);
   useEffect(() => {
+    if (!ledSuggestionsEnabled) { setLedSuggestion(null); return; }
     const id = currentReadingId;
     const r = resultRef.current;
     if (!id || !r || r.sampleLabel) return;
@@ -310,7 +313,7 @@ export default function HomeScreen({ navigation }: any) {
       if (s && !ledCardClosedRef.current) setLedSuggestion(s);
     }, 400);
     return () => { live = false; clearTimeout(t); };
-  }, [currentReadingId, uploadTitle]);
+  }, [currentReadingId, uploadTitle, ledSuggestionsEnabled]);
 
   const confirmLed = useCallback(async (d: LedDetails[]) => {
     const id = currentReadingId;
