@@ -39,11 +39,13 @@ function formatSavedAt(ms: number): string {
 // shape (route.params.reading: SavedReading) is still enforced where it
 // matters, at the one call site that navigates here (HomeScreen.tsx).
 export default function ReadingDetailScreen({ route, navigation }: any) {
+  const [dragging, setDragging] = useState(false);
   const { colors } = useTheme();
   const reading: SavedReading = route.params.reading;
   // Tablets: every graph at once (spectrum, CIE, R1-R15 and, when the reading has one, flicker), like Home.
   const layoutMode = useLayoutMode();
-  const wide = layoutMode !== 'compact';
+  // Landscape dashboards get the draggable grid; portrait/compact swipe through the charts in their original order.
+  const wide = layoutMode === 'dashboard';
   const contentWidth = useContentWidth();
   const { height: winH } = useWindowDimensions();
 
@@ -90,7 +92,7 @@ export default function ReadingDetailScreen({ route, navigation }: any) {
   });
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content} scrollEnabled={!dragging}>
       <Text style={styles.savedAt}>{formatSavedAt(reading.savedAt)}</Text>
 
       <View style={styles.resultCard}>
@@ -115,7 +117,9 @@ export default function ReadingDetailScreen({ route, navigation }: any) {
           result={reading.result}
           analysis={analysis}
           flicker={reading.result.flicker ? { reading: reading.result.flicker, running: false, history: [], fromReading: true } : undefined}
-          layout={layoutMode === 'stacked' ? 'portrait' : 'landscape'}
+          layout="landscape"
+          persist={false}
+          onDragChange={setDragging}
           width={Math.max(0, contentWidth - 32)}
           height={Math.max(380, Math.min(580, Math.round(winH * 0.55)))}
         />

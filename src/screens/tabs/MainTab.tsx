@@ -23,6 +23,7 @@ import StatCard, { statDensity } from '../../components/StatCard';
 import { defaultLabel } from '../../hcri/buildCsv';
 import SpectrumTab from './SpectrumTab';
 import SpectrumGrid from '../../components/SpectrumGrid';
+import { ContentWidthContext } from '../../layout';
 import { statusLabels } from '../../theme';
 import { useTheme } from '../../contexts/ThemeContext';
 import { MeterResult } from '../../ble/parseResult';
@@ -470,10 +471,15 @@ export default function MainTab({
             CARD_PADDING alone was fixed. See SpectrumTab.tsx's
             extraHorizontalChrome comment. */}
         <View style={styles.chartRegion} onLayout={(e) => { setChartRegionH(Math.floor(e.nativeEvent.layout.height)); setChartRegionW(Math.floor(e.nativeEvent.layout.width)); }}>
-          {wide ? (
+          {wide && !portrait ? (
             chartRegionW > 0 && chartRegionH > 0 ? (
-              <SpectrumGrid result={displayResult} analysis={displayAnalysis} sampleLabel={result?.sampleLabel} flicker={flicker} layout={portrait ? 'portrait' : 'landscape'} width={chartRegionW} height={chartRegionH} />
+              <SpectrumGrid result={displayResult} analysis={displayAnalysis} sampleLabel={result?.sampleLabel} flicker={flicker} layout="landscape" width={chartRegionW} height={chartRegionH} />
             ) : null
+          ) : portrait ? (
+            // Upright tablet: the same swipeable pages as on a phone (spectrum, CIE, R-values, flicker), sized to this region.
+            <ContentWidthContext.Provider value={chartRegionW + 62}>
+              <SpectrumTab result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} sampleLabel={result?.sampleLabel} flicker={flicker} pagerResetKey={pagerResetKey} />
+            </ContentWidthContext.Provider>
           ) : (
           <SpectrumTab result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} sampleLabel={result?.sampleLabel} flicker={flicker} pagerResetKey={pagerResetKey} />
           )}

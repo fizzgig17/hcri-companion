@@ -16,7 +16,7 @@ import { useLog } from '../contexts/LogContext';
 import { buildTm30Html, buildTm30PdfHtml, TM30_PDF_PAGE, Tm30Input } from '../utils/tm30Report';
 import { withBackgroundDisconnectSuppressed } from '../ble/backgroundDisconnectGuard';
 
-export default function Tm30ReportScreen({ route }: any) {
+export default function Tm30ReportScreen({ route, panel }: any) {
   const { colors } = useTheme();
   const { appendLog } = useLog();
   const insets = useSafeAreaInsets();
@@ -71,7 +71,7 @@ export default function Tm30ReportScreen({ route }: any) {
       borderTopColor: colors.cardBorder,
       paddingHorizontal: 16,
       paddingTop: 10,
-      paddingBottom: Math.max(insets.bottom, 10) + 4,
+      paddingBottom: panel ? 12 : Math.max(insets.bottom, 10) + 4,
     },
     btn: { backgroundColor: colors.accent, borderRadius: 10, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' },
     btnText: { color: '#fff', fontSize: 15, fontWeight: '700' },

@@ -47,6 +47,8 @@ interface Props {
   readingNote?: string;
   /** The reading on screen was captured with a spectrum reading (it goes up/out with that reading). */
   fromReading?: boolean;
+  /** Space kept clear at the right of the header row (the tablet grid puts a drag handle there). */
+  reserveRight?: number;
   reading: FlickerReading | null;
   running: boolean;
   history: FlickerHistoryPoint[];
@@ -88,8 +90,8 @@ function fmtElapsed(ms: number): string {
 }
 
 const RISK_TEXT = { none: 'No Risk', low: 'Low Risk', high: 'High Risk' } as const;
-const RISK_COLOR = { none: '#2e8b4f', low: '#c47f00', high: '#cc2828' } as const;
-const RISK_TINT = { none: 'rgba(46,139,79,0.16)', low: 'rgba(196,127,0,0.18)', high: 'rgba(204,40,40,0.16)' } as const;
+export const RISK_COLOR = { none: '#2e8b4f', low: '#c47f00', high: '#cc2828' } as const;
+export const RISK_TINT = { none: 'rgba(46,139,79,0.16)', low: 'rgba(196,127,0,0.18)', high: 'rgba(204,40,40,0.16)' } as const;
 
 /** Dominant period of the waveform in samples (smallest lag with near-best autocorrelation), or null if it's flat. */
 function detectPeriod(norm: number[]): number | null {
@@ -114,16 +116,16 @@ function detectPeriod(norm: number[]): number | null {
   return null;
 }
 
-function fmtMs(ms: number): string {
+export function fmtMs(ms: number): string {
   if (ms >= 1000) return `${+(ms / 1000).toFixed(ms >= 10000 ? 0 : 1)} s`;
   return `${+ms.toFixed(ms >= 100 ? 0 : ms >= 10 ? 1 : 2)} ms`;
 }
 
 // IEEE 1789-style bands (the same ones the risk tip uses): [freq, percent] polylines, stepped at 8 and 90 Hz.
-const HIGH_LINE: [number, number][] = [[1, 0.2], [8, 0.2], [90, 2.25], [90, 7.2], [2000, 160]];
-const LOW_LINE: [number, number][] = [[1, 0.1], [8, 0.1], [8, 0.08], [90, 0.9], [90, 3], [2000, 66.6]];
+export const HIGH_LINE: [number, number][] = [[1, 0.2], [8, 0.2], [90, 2.25], [90, 7.2], [2000, 160]];
+export const LOW_LINE: [number, number][] = [[1, 0.1], [8, 0.1], [8, 0.08], [90, 0.9], [90, 3], [2000, 66.6]];
 
-export default function FlickerChart({ reading, running, history, settings, upload, target, onStart, onStop, canSampleReading, redoLabel, readingNote, fromReading, width, height }: Props) {
+export default function FlickerChart({ reading, running, history, settings, upload, target, onStart, onStop, canSampleReading, redoLabel, readingNote, fromReading, reserveRight, width, height }: Props) {
   const [snap, setSnap] = useState<FlickerReading | null>(null);
   const [showUpload, setShowUpload] = useState(false);
   const [upTitle, setUpTitle] = useState('');
@@ -158,7 +160,7 @@ export default function FlickerChart({ reading, running, history, settings, uplo
   }, [reading]);
 
   const styles = StyleSheet.create({
-    head: { flexDirection: 'row', alignItems: 'center', height: HEAD_H },
+    head: { flexDirection: 'row', alignItems: 'center', height: HEAD_H, paddingRight: reserveRight ?? 0 },
     seg: { flexDirection: 'row', borderWidth: 1, borderColor: '#C5C9D3', borderRadius: 6, overflow: 'hidden' },
     segBtn: { paddingHorizontal: 8, paddingVertical: 3 },
     segOn: { backgroundColor: LINE },

@@ -67,14 +67,25 @@ function SingleColumn(Screen: React.ComponentType<any>, maxWidth: number = WIDE_
   singleColumnCache.set(Screen, Wrapped);
   return Wrapped;
 }
-// Tablets: Settings opens as a panel over Home (with an X) rather than replacing the page.
-function SettingsOverlay({ navigation, route }: any) {
-  return (
-    <OverlayPanel title="Settings" closeHint="Close settings" onClose={() => navigation.goBack()}>
-      <SettingsScreen navigation={navigation} route={route} panel />
-    </OverlayPanel>
-  );
+// Tablets: these screens open as a window over the page behind (with an X) instead of replacing it. On phones the
+// screen is used exactly as before. `panel` tells the screen it is inside the window.
+function overlayScreen(Screen: React.ComponentType<any>, titleFor: (route: any) => string, closeHint: string, maxWidth = 1280): React.ComponentType<any> {
+  const Wrapped = (props: any) => {
+    const mode = useLayoutMode();
+    if (mode === 'compact') return <Screen {...props} />;
+    return (
+      <OverlayPanel title={titleFor(props.route)} closeHint={closeHint} onClose={() => props.navigation.goBack()} maxWidth={maxWidth}>
+        <Screen {...props} panel />
+      </OverlayPanel>
+    );
+  };
+  Wrapped.displayName = `Overlay(${Screen.displayName || Screen.name || 'Screen'})`;
+  return Wrapped;
 }
+const SettingsOverlay = overlayScreen(SettingsScreen, () => 'Settings', 'Close settings');
+const ReadingOverlay = overlayScreen(ReadingDetailScreen, (route) => route?.params?.reading?.label || 'Reading', 'Close reading');
+const Tm30Overlay = overlayScreen(Tm30ReportScreen, () => 'TM-30 report', 'Close TM-30 report', 1100);
+const CompareOverlay = overlayScreen(CompareScreen, () => 'Compare readings', 'Close compare');
 const Tab = createBottomTabNavigator();
 
 // The three top-level destinations -- Home (take/view the current
@@ -154,6 +165,9 @@ function Tabs() {
 function Navigation() {
   const { colors, scheme } = useTheme();
   const mode = useLayoutMode();
+  // On tablets these screens are windows over the page behind (see overlayScreen above).
+  const popup = mode !== 'compact';
+  const popupOptions = { presentation: 'transparentModal' as const, headerShown: false, animation: 'fade' as const };
   useEffect(() => {
     loadHapticTapsPreference().then(setTapHapticsEnabled).catch(() => {});
     loadHapticResultsPreference().then(setResultHapticsEnabled).catch(() => {});
@@ -177,11 +191,11 @@ function Navigation() {
             reading") sits on top of the tabs as a full-screen push, the
             same relationship it had to Home before. */}
         <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
-        <Stack.Screen name="ReadingDetail" component={SingleColumn(ReadingDetailScreen, 1100)} options={{ title: 'Reading' }} />
-        <Stack.Screen name="Tm30Report" component={Tm30ReportScreen} options={{ title: 'TM-30 Report' }} />
-        <Stack.Screen name="Photo" component={PhotoScreen} options={{ presentation: 'transparentModal', headerShown: false, animation: 'fade' }} />
-        <Stack.Screen name="SettingsOverlay" component={SettingsOverlay} options={{ presentation: 'transparentModal', headerShown: false, animation: 'fade' }} />
-        <Stack.Screen name="Compare" component={CompareScreen} options={{ title: 'Compare readings' }} />
+        <Stack.Screen name="ReadingDetail" component={ReadingOverlay} options={popup ? popupOptions : { title: 'Reading' }} />
+        <Stack.Screen name="Tm30Report" component={Tm30Overlay} options={popup ? popupOptions : { title: 'TM-30 Report' }} />
+        <Stack.Screen name="Photo" component={PhotoScreen} options={popupOptions} />
+        <Stack.Screen name="SettingsOverlay" component={SettingsOverlay} options={popupOptions} />
+        <Stack.Screen name="Compare" component={CompareOverlay} options={popup ? popupOptions : { title: 'Compare readings' }} />
       </Stack.Navigator>
     </NavigationContainer>
     </View>

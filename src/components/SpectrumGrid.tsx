@@ -52,6 +52,11 @@ interface Props {
   flicker?: FlickerProps;
   /** 'landscape': big chart on top, others underneath. 'portrait': big chart left, others down the right. */
   layout?: 'landscape' | 'portrait';
+  /** Whether the chosen big chart is remembered between launches. The main page: yes. A saved reading opened from
+   *  History: no -- it always starts with the spectrum big and never changes what the main page remembers. */
+  persist?: boolean;
+  /** Called while a chart is being dragged (so a parent ScrollView can stop scrolling meanwhile). */
+  onDragChange?: (dragging: boolean) => void;
   /** Exact size of the region to fill. */
   width: number;
   height: number;
@@ -119,15 +124,16 @@ const handleStyles = StyleSheet.create({
   glyph: { fontSize: 20, lineHeight: 22 },
 });
 
-export default function SpectrumGrid({ result, analysis, sampleLabel, flicker, layout = 'landscape', width, height }: Props) {
+export default function SpectrumGrid({ result, analysis, sampleLabel, flicker, layout = 'landscape', persist = true, onDragChange, width, height }: Props) {
   const { colors } = useTheme();
   const hasReading = analysis.x > 0 || analysis.y > 0;
   const [topPref, setTopPref] = useState<ChartId>('spectrum');
   const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
+    if (!persist) return;
     loadChartTopPreference().then((v) => { if (v && CHART_IDS.has(v)) setTopPref(v as ChartId); }).catch(() => {});
-  }, []);
+  }, [persist]);
 
   const available: ChartId[] = useMemo(
     () => (hasReading ? (['spectrum', 'cie', 'rvalues', ...(flicker ? ['flicker'] : [])] as ChartId[]) : ['spectrum']),
@@ -140,7 +146,7 @@ export default function SpectrumGrid({ result, analysis, sampleLabel, flicker, l
   const promote = (id: ChartId) => {
     if (id === bigId) return;
     setTopPref(id);
-    saveChartTopPreference(id).catch(() => {});
+    if (persist) saveChartTopPreference(id).catch(() => {});
   };
 
   const styles = StyleSheet.create({
@@ -194,6 +200,7 @@ export default function SpectrumGrid({ result, analysis, sampleLabel, flicker, l
             redoLabel={flicker.redoLabel}
             readingNote={flicker.readingNote}
             fromReading={flicker.fromReading}
+            reserveRight={isBig ? 0 : 36}
             width={w}
             height={h}
           />
@@ -218,7 +225,7 @@ export default function SpectrumGrid({ result, analysis, sampleLabel, flicker, l
           rect={rects[id]}
           bigRect={bigRect}
           onPromote={promote}
-          onDragChange={setDragging}
+          onDragChange={(d) => { setDragging(d); onDragChange?.(d); }}
           style={cardStyle(id)}
           handleColor={id === 'cie' || id === 'flicker' ? '#666' : colors.muted}
         >

@@ -32,7 +32,8 @@ interface ThemeContextValue {
   statusColors: Record<string, string>;
 }
 
-const ThemeContext = createContext<ThemeContextValue | null>(null);
+export const ThemeContext = createContext<ThemeContextValue | null>(null);
+export type { ThemeContextValue };
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // react-native's own Appearance API -- no new dependency. Can briefly be
