@@ -1652,8 +1652,9 @@ export default function HomeScreen({ navigation }: any) {
           onResetConnection={resetConnection}
           onCancelConnect={cancelConnect}
           liveSupported={deviceSupportsLive(deviceName)}
-          flickerSupported={deviceSupportsFlicker(deviceName) && mode !== 'live'}
-          sampleHasFlicker={!!(result?.sampleLabel && result.flicker)}
+          // The landscape dashboard already shows the flicker chart, so it needs no Flicker button.
+          flickerSupported={layoutMode !== 'dashboard' && deviceSupportsFlicker(deviceName) && mode !== 'live'}
+          sampleHasFlicker={layoutMode !== 'dashboard' && !!(result?.sampleLabel && result.flicker)}
           activeMode={mode}
           onToggleLive={toggleLive}
           onToggleFlicker={() => setFlickerFocus((n) => n + 1)}
