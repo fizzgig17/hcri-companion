@@ -1,7 +1,8 @@
 # .github/workflows/ios-testflight.yml
 #
 # Builds a SIGNED release of the iOS app and uploads it to TestFlight (App Store Connect).
-# Manual for now (Actions tab -> "Upload iOS build to TestFlight" -> Run workflow). Once one upload has worked,
+# Manual for now (Actions tab -> "Upload iOS build to TestFlight" -> Run workflow; choose the branch: master = production site,
+# develop = dev.hcri.io). Once one upload has worked,
 # add `push: branches: [master]` under `on:` below to upload on every push to master.
 #
 # One-time setup (needs an active, paid Apple Developer Program membership):
@@ -66,8 +67,12 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
 
-      - name: Point build at www.hcri.io
-        run: echo "export const HCRI_API_BASE = 'https://www.hcri.io';" > src/hcri/apiConfig.ts
+      # master builds talk to production; any other branch (develop) talks to dev.hcri.io and shows the DEV BUILD strip.
+      - name: Point build at the right hCRI.io site
+        run: |
+          if [ "${GITHUB_REF_NAME}" = "master" ]; then BASE='https://www.hcri.io'; else BASE='https://dev.hcri.io'; fi
+          echo "Building against $BASE"
+          echo "export const HCRI_API_BASE = '$BASE';" > src/hcri/apiConfig.ts
 
       - name: Stamp git commit id into the build
         run: echo "export const GIT_COMMIT = '${GITHUB_SHA::7}';" > src/gitCommit.ts
