@@ -26,7 +26,7 @@ import HintPressable from '../../components/HintPressable';
 import Svg, { Polyline, Path } from 'react-native-svg';
 import CollapsibleSection from '../../components/CollapsibleSection';
 import { useTheme } from '../../contexts/ThemeContext';
-import { SavedReading } from '../../storage/readingHistory';
+import { SavedReading, HISTORY_LIMIT, HISTORY_WARN_AT } from '../../storage/readingHistory';
 
 const ICON_CLOUD = 'M16 16l-4-4-4 4M12 12v9M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3';
 const ICON_TRASH = 'M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6';
@@ -656,6 +656,7 @@ export default function HistoryTab({
     selectBarIconText: { fontSize: 10, fontWeight: '600', marginTop: 1 },
     selectBarButton: { marginTop: 0, marginLeft: 8, flex: 1, paddingHorizontal: 8, paddingVertical: 10 },
 
+    limitNote: { color: colors.muted, fontSize: 12, lineHeight: 17, marginBottom: 10 },
     dateGroup: { marginBottom: 2 },
     todayLabel: {
       color: colors.mutedFaint,
@@ -687,6 +688,11 @@ export default function HistoryTab({
 
   return (
     <View>
+      {history.length >= HISTORY_WARN_AT && (
+        <Text style={styles.limitNote}>
+          History keeps your most recent {HISTORY_LIMIT} readings. When it's full, the oldest uploaded readings are removed first; readings you haven't uploaded are kept.
+        </Text>
+      )}
       <View style={styles.headerRow}>
         <Text style={styles.headerTitle}>
           {selectMode

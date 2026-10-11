@@ -27,7 +27,7 @@ import { uploadReadingToHcri, uploadFlickerToHcri } from '../hcri/uploadFlickerT
 import { getReportLink } from '../hcri/getReportLink';
 import { fetchSampleReading } from '../hcri/fetchSampleReading';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
-import { loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference, loadTestReportIdPreference } from '../storage/preferences';
+import { loadAutoConnectPreference, loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference, loadTestReportIdPreference } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
 import { addReading, loadHistory, recordUpload, setReadingFlicker, updateReadingLed } from '../storage/readingHistory';
 import { fetchLedSuggestion, LedDetails, LedSuggestion } from '../hcri/ledApi';
@@ -321,7 +321,10 @@ export default function HomeScreen({ navigation }: any) {
     setLedPickerOpen(false);
     if (!id) return;
     setCurrentLeds(d);
-    await updateReadingLed(id, { ...ledPatch(d), ledSynced: false, ledDismissed: !d.some(hasLed), ledCleared: !d.some(hasLed) }).catch(() => {});
+    await updateReadingLed(id, { ...ledPatch(d), ledSynced: false, ledDismissed: !d.some(hasLed), ledCleared: !d.some(hasLed) }).catch((e: any) => {
+      appendLog(`Failed to save LED details: ${e?.message ?? e}`);
+      Alert.alert('LED details not saved', "They couldn't be saved on this device. Try again.");
+    });
     syncLedForReading(id);
   }, [currentReadingId]);
 
@@ -443,6 +446,29 @@ export default function HomeScreen({ navigation }: any) {
     );
   }, []);
 
+  // iOS: Bluetooth permission refused for this app (Android folds this into its own permission prompts).
+  const showBluetoothDeniedAlert = useCallback(() => {
+    if (bluetoothAlertOpenRef.current) return;
+    bluetoothAlertOpenRef.current = true;
+    const done = () => {
+      bluetoothAlertOpenRef.current = false;
+    };
+    Alert.alert(
+      'Bluetooth access is off',
+      'hCRI Companion needs Bluetooth permission to find your meter. Allow it in Settings, then tap Connect to Meter.',
+      [
+        { text: 'Open Settings', onPress: () => { done(); Linking.openSettings(); } },
+        { text: 'OK', style: 'cancel', onPress: done },
+      ],
+      { cancelable: true, onDismiss: done }
+    );
+  }, []);
+
+  // Shown on the Main status line while disconnected because Bluetooth is off or denied (null otherwise).
+  const [btBlocked, setBtBlocked] = useState<string | null>(null);
+  const btBlockedText = (state: string): string | null =>
+    state === 'PoweredOff' ? 'Bluetooth is off' : state === 'Unauthorized' ? 'Bluetooth access is off' : null;
+
   /**
    * `preferLastDeviceOnMultiple`: used by the "app came back to the
    * foreground after we auto-disconnected it" path below, NOT by a fresh
@@ -462,6 +488,23 @@ export default function HomeScreen({ navigation }: any) {
     async (opts?: { preferLastDeviceOnMultiple?: boolean; promptIfBluetoothOff?: boolean }) => {
       const run = ++connectRunRef.current;          // a Cancel bumps this, so a stale run stops touching state
       const stale = () => run !== connectRunRef.current;
+      // Check Bluetooth BEFORE showing "Connecting…", so a phone with Bluetooth off or denied never flickers
+      // through a connect attempt it can't complete. Only the launch and the Connect button ask for the prompt.
+      if (opts?.promptIfBluetoothOff) {
+        const btState = await getConnection().getBluetoothState();
+        if (stale()) return;
+        const blocked = btBlockedText(btState);
+        setBtBlocked(blocked);
+        if (blocked) {
+          appendLog(`Bluetooth ${btState} -- prompting.`);
+          if (btState === 'PoweredOff') showBluetoothOffAlert();
+          else showBluetoothDeniedAlert();
+          setStatus('disconnected');
+          return;
+        }
+      } else {
+        setBtBlocked(null);
+      }
       setConnectStage('Starting Bluetooth…');
       // Clear a test reading in the same batch as the status change, so it
       // never gets a rendered frame beside the "Connecting…" button.
@@ -475,19 +518,6 @@ export default function HomeScreen({ navigation }: any) {
       setStatus('connecting');
       try {
         const conn = getConnection();
-        // Only the two "the person is actively trying to connect" entry
-        // points ask for this (app launch and the Connect to Meter button)
-        // -- NOT the foreground-return auto-reconnect, which would otherwise
-        // pop this up every time they switch back to the app with Bluetooth
-        // off. Anything other than a definite 'PoweredOff' (including an
-        // 'Unknown' while permissions are still being granted) just carries
-        // on into the normal flow below.
-        if (opts?.promptIfBluetoothOff && (await conn.getBluetoothState()) === 'PoweredOff') {
-          appendLog('Bluetooth is off -- prompting.');
-          showBluetoothOffAlert();
-          setStatus('disconnected');
-          return;
-        }
         // Clears any BLE connection to the meter left over from a previous
         // app/JS session (see MeterConnection.resetStaleConnection() for why
         // this is needed -- it's what used to require a power cycle after
@@ -554,7 +584,7 @@ export default function HomeScreen({ navigation }: any) {
         setStatus('disconnected');
       }
     },
-    [appendLog, getConnection, showBluetoothOffAlert]
+    [appendLog, getConnection, showBluetoothOffAlert, showBluetoothDeniedAlert]
   );
 
   /** The Cancel tap while "Connecting…": stop the scan/connect and go back to Not Connected right away. */
@@ -671,7 +701,10 @@ export default function HomeScreen({ navigation }: any) {
   // meter is in range it should pop up the picker same as a manual tap
   // would, not silently guess.
   useEffect(() => {
-    connect({ promptIfBluetoothOff: true });
+    // The "Auto-connect to meter" setting (Settings) turns this off; Connect to Meter still works.
+    loadAutoConnectPreference().then((on) => {
+      if (on && statusRef.current === 'disconnected') connect({ promptIfBluetoothOff: true });
+    });
     // Intentionally run once on mount only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -828,6 +861,7 @@ export default function HomeScreen({ navigation }: any) {
         // failed -- the reading is still shown/usable, it just didn't get
         // added to History this time.
         appendLog(`Failed to save reading to history: ${e.message}`);
+        Alert.alert('Not saved to History', 'The reading is shown here, but it could not be added to History on this device. Upload it now if you want to keep it.');
       }
     } catch (e: any) {
       appendLog(`Measurement failed: ${e.message}`);
@@ -1177,26 +1211,34 @@ export default function HomeScreen({ navigation }: any) {
         // tap, a reconnect from a previous foreground event) or try to
         // "reconnect" something that's already connected.
         if (statusRef.current === 'disconnected') {
-          appendLog('App back in foreground -- reconnecting to meter...');
-          // 'connecting' right away, even though the actual scan is about
-          // to be held off for a moment (see FOREGROUND_RECONNECT_DELAY_MS
-          // above) -- otherwise the status row would just keep showing
-          // "Disconnected" for that whole delay, looking like nothing was
-          // happening rather than like a reconnect already in progress.
-          setStatus('connecting');
-          setTimeout(() => {
-            // Status could have changed during the delay (the person
-            // backgrounded again, or tapped Connect/Disconnect themselves)
-            // -- only actually follow through if it's still exactly the
-            // "waiting to reconnect" state this timer was set up for.
-            if (statusRef.current !== 'connecting') return;
-            // preferLastDeviceOnMultiple: true -- this is a reconnect, not a
-            // fresh choice, so if more than one meter happens to be in range
-            // right now, silently go back to the one that was connected
-            // before backgrounding rather than popping up a picker the
-            // person didn't ask for (see connect()'s own comment on this).
-            connect({ preferLastDeviceOnMultiple: true });
-          }, FOREGROUND_RECONNECT_DELAY_MS);
+          (async () => {
+            // Skip silently (no "Connecting…" flicker) when auto-connect is off or Bluetooth can't be used.
+            if (!(await loadAutoConnectPreference())) return;
+            const btState = await getConnection().getBluetoothState();
+            const blocked = btBlockedText(btState);
+            setBtBlocked(blocked);
+            if (blocked || statusRef.current !== 'disconnected') return;
+            appendLog('App back in foreground -- reconnecting to meter...');
+            // 'connecting' right away, even though the actual scan is about
+            // to be held off for a moment (see FOREGROUND_RECONNECT_DELAY_MS
+            // above) -- otherwise the status row would just keep showing
+            // "Disconnected" for that whole delay, looking like nothing was
+            // happening rather than like a reconnect already in progress.
+            setStatus('connecting');
+            setTimeout(() => {
+              // Status could have changed during the delay (the person
+              // backgrounded again, or tapped Connect/Disconnect themselves)
+              // -- only actually follow through if it's still exactly the
+              // "waiting to reconnect" state this timer was set up for.
+              if (statusRef.current !== 'connecting') return;
+              // preferLastDeviceOnMultiple: true -- this is a reconnect, not a
+              // fresh choice, so if more than one meter happens to be in range
+              // right now, silently go back to the one that was connected
+              // before backgrounding rather than popping up a picker the
+              // person didn't ask for (see connect()'s own comment on this).
+              connect({ preferLastDeviceOnMultiple: true });
+            }, FOREGROUND_RECONNECT_DELAY_MS);
+          })();
         }
         return;
       }
@@ -1245,7 +1287,7 @@ export default function HomeScreen({ navigation }: any) {
       });
     });
     return () => subscription.remove();
-  }, [appendLog, connect, disconnect]);
+  }, [appendLog, connect, disconnect, getConnection]);
 
   const upload = useCallback(async () => {
     if (!result) return;
@@ -1475,7 +1517,7 @@ export default function HomeScreen({ navigation }: any) {
       <View style={styles.mainArea}>
           <MainTab
             status={status}
-            connectStage={status === 'connecting' ? connectStage : null}
+            connectStage={status === 'connecting' ? connectStage : status === 'disconnected' ? btBlocked : null}
             isBusy={isBusy}
             result={result}
             analysis={analysis}
@@ -1526,7 +1568,7 @@ export default function HomeScreen({ navigation }: any) {
           />
       </View>
       ) : (
-      <ScrollView ref={scrollRef} style={styles.scrollArea} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView automaticallyAdjustKeyboardInsets ref={scrollRef} style={styles.scrollArea} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {activeTab === 'data' && (
           <DataTab
             result={result}

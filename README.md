@@ -1,100 +1,57 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# hCRI Companion
 
-# Getting Started
+A React Native app (Android and iPhone) that connects over Bluetooth Low Energy to a Hopoocolor HPCS
+spectrometer, or to a Torch Bearer through the [ESP32 bridge](https://github.com/fizzgig17/hcri-esp32-bridge),
+computes CCT, Duv, CRI, R1-R15 and TM-30 on the phone with the same math as [hCRI.io](https://www.hcri.io), and
+uploads readings to your hCRI.io account. User manual: <https://www.hcri.io/companion/manual/>.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+# Development
 
-## Step 1: Start Metro
-
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
-
-To start the Metro dev server, run the following command from the root of your React Native project:
-
-```sh
-# Using npm
-npm start
-
-# OR using Yarn
-yarn start
-```
-
-## Step 2: Build and run your app
-
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
-
-### Android
+Requirements: Node 22.11+, the [React Native environment](https://reactnative.dev/docs/set-up-your-environment),
+Android Studio (Android) and Xcode with CocoaPods (iOS).
 
 ```sh
-# Using npm
-npm run android
-
-# OR using Yarn
-yarn android
+npm install
+npm start            # Metro
+npm run android      # or: npm run ios
+npx tsc --noEmit     # type check
 ```
 
-### iOS
-
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
+iOS, first time and after native dependency changes:
 
 ```sh
 bundle install
+cd ios && bundle exec pod install && cd ..
 ```
 
-Then, and every time you update your native dependencies, run:
+## Pointing a build at dev.hcri.io
 
-```sh
-bundle exec pod install
-```
+Production (`https://www.hcri.io`) is the checked-in default. To test against the dev site, copy
+`src/hcri/apiConfig.local.ts.example` to `src/hcri/apiConfig.local.ts` (untracked) and set `HCRI_API_BASE`.
+A dev build shows a "DEV BUILD" strip at the top. CI overwrites `apiConfig.ts` itself, so CI builds are unaffected.
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+## Running on your own iPhone
 
-```sh
-# Using npm
-npm run ios
+Copy `ios/Config/Local.xcconfig.example` to `ios/Config/Local.xcconfig` (untracked) and set your Apple
+`DEVELOPMENT_TEAM` (the 10-character Team ID). A free personal team can install on a device for 7 days at a time; TestFlight needs
+the paid Apple Developer Program.
 
-# OR using Yarn
-yarn ios
-```
+## Branches and CI
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+- `develop` is the working branch; `master` is the release branch.
+- Pushes to `develop` and `master` run the iOS build check (`ios-build.yml`). `ios-testflight.yml` is a manual
+  workflow that needs the App Store Connect secrets.
+- Pushes to `master` build the Android release (`deploy-master.yml`); see "Publishing to Google Play" below.
+- Versioning: bump `versionCode`/`versionName` in `android/app/build.gradle`, `MARKETING_VERSION` and
+  `CURRENT_PROJECT_VERSION` in the Xcode project, `APP_VERSION` in `src/buildInfo.ts`, and write `whatsnew/whatsnew-en-US`.
+  Update the manual on hcri.io for each release.
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+## Where things are
 
-## Step 3: Modify your app
-
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+- `src/ble/` meter connections (HPCS models, Torch Bearer, Live and Flicker)
+- `src/hcri/` hCRI.io API calls (upload, flicker, LED lists, links, tokens; all network calls go through `fetchWithTimeout`)
+- `src/storage/` History and preferences (History keeps the latest 100 readings; unuploaded readings are protected up to 200)
+- `src/screens/`, `src/components/` UI (main tabs live in `src/screens/tabs/`)
 
 # Flicker
 

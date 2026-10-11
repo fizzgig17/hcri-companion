@@ -138,7 +138,7 @@ export default function FlickerSettingsModal({ visible, onClose, api }: { visibl
                 <Text style={styles.label}>Gear (range){s.gear !== undefined && GEARS[s.gear] ? `: ${GEARS[s.gear]}` : ''}</Text>
                 <View style={styles.autoWrap}>
                   <Text style={styles.autoTxt}>Auto</Text>
-                  <Switch value={!!s.autoGear} onValueChange={(v) => change('autoGear', v)} disabled={!api.canEdit || busy} />
+                  <Switch accessibilityLabel="Auto gear" value={!!s.autoGear} onValueChange={(v) => change('autoGear', v)} disabled={!api.canEdit || busy} />
                 </View>
               </View>
               <View style={styles.chips}>
@@ -150,7 +150,7 @@ export default function FlickerSettingsModal({ visible, onClose, api }: { visibl
                 </Text>
                 <View style={styles.autoWrap}>
                   <Text style={styles.autoTxt}>Auto</Text>
-                  <Switch value={!!s.autoRate} onValueChange={(v) => change('autoRate', v)} disabled={!api.canEdit || busy} />
+                  <Switch accessibilityLabel="Auto sample rate" value={!!s.autoRate} onValueChange={(v) => change('autoRate', v)} disabled={!api.canEdit || busy} />
                 </View>
               </View>
               <View style={styles.chips}>

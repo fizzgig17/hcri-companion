@@ -17,6 +17,7 @@
 
 import { HCRI_API_BASE } from './apiConfig';
 import { maskSecret } from '../utils/maskSecret';
+import fetchWithTimeout from './fetchWithTimeout';
 
 function shareUrl(reportId: number): string {
   return `${HCRI_API_BASE}/index.php/api/v1/reports/${reportId}/share`;
@@ -55,7 +56,7 @@ export async function getReportLink(
 
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await fetchWithTimeout(url, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
     });

@@ -35,6 +35,10 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>hCRI Companion does not read your photos. This text is required because a library included in the app can reference the photo library.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>hCRI Companion does not save to your photos. This text is required because a library included in the app can reference the photo library.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>hCRI Companion uses Bluetooth to connect to your spectrometer (Hopoocolor HPCS meters or a Torch Bearer bridge) and take readings.</string>
 	<key>RCTNewArchEnabled</key>

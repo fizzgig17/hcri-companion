@@ -6,6 +6,7 @@
 
 import { HCRI_API_BASE } from './apiConfig';
 import { MeterResult } from '../ble/parseResult';
+import fetchWithTimeout from './fetchWithTimeout';
 
 const BASE = `${HCRI_API_BASE}/index.php/api/v1`;
 
@@ -16,7 +17,7 @@ export interface LedSuggestion { brand: string; model: string; cct: string | nul
 export async function fetchLedSuggestion(spectrum: MeterResult['spectrum'], token: string, title?: string): Promise<LedSuggestion | null | undefined> {
   if (!token || !spectrum?.length) return undefined;
   try {
-    const res = await fetch(`${BASE}/led_suggest`, {
+    const res = await fetchWithTimeout(`${BASE}/led_suggest`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ wls: spectrum.map((p) => p.nm), vals: spectrum.map((p) => p.value), title: title?.trim() || undefined }),
@@ -41,7 +42,7 @@ export async function fetchLedSuggestion(spectrum: MeterResult['spectrum'], toke
 export async function saveLedDetails(reportId: number, leds: LedDetails[], token: string): Promise<boolean> {
   try {
     const first = leds[0] ?? {};
-    const res = await fetch(`${BASE}/reports/${reportId}/led`, {
+    const res = await fetchWithTimeout(`${BASE}/reports/${reportId}/led`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({

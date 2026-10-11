@@ -6,6 +6,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { HCRI_API_BASE } from './apiConfig';
+import fetchWithTimeout from './fetchWithTimeout';
 
 const KEY = 'hcri.io.ledLists.v1';
 const CHECK_EVERY_MS = 24 * 60 * 60 * 1000;
@@ -49,7 +50,7 @@ export async function refreshLedLists(force = false): Promise<LedLists> {
   try {
     const headers: Record<string, string> = {};
     if (cur?.etag && cur.lists.brands.length) headers['If-None-Match'] = cur.etag;
-    const res = await fetch(URL, { headers });
+    const res = await fetchWithTimeout(URL, { headers });
     if (res.status === 304 && cur) {
       memo = { ...cur, checkedAt: Date.now() };
     } else if (res.ok) {

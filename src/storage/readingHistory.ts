@@ -28,6 +28,28 @@ const STORAGE_KEY = 'hcri.io.readingHistory.v1';
 // relying on this as permanent storage rather than "recent session
 // history" -- upload anything you want to keep forever to hCRI.io instead.
 const MAX_HISTORY = 100;
+/** Absolute ceiling when most of the overflow is readings that were never uploaded (they're kept so nothing unsaved is lost silently). */
+const MAX_HISTORY_HARD = 200;
+/** History tab shows a heads-up from this many readings on. */
+export const HISTORY_WARN_AT = 90;
+export const HISTORY_LIMIT = MAX_HISTORY;
+
+/**
+ * Trims to MAX_HISTORY, newest first. Readings already uploaded (they have a report link) are dropped
+ * oldest-first; a reading that was never uploaded is only dropped when the list would otherwise pass
+ * MAX_HISTORY_HARD, so a long run without uploading doesn't silently discard data.
+ */
+export function trimHistory(list: SavedReading[]): SavedReading[] {
+  let over = list.length - MAX_HISTORY;
+  if (over <= 0) return list;
+  const drop = new Set<number>();
+  for (let i = list.length - 1; i >= 0 && over > 0; i--) {
+    if (list[i].reportId != null) { drop.add(i); over--; }
+  }
+  let out = list.filter((_, i) => !drop.has(i));
+  if (out.length > MAX_HISTORY_HARD) out = out.slice(0, MAX_HISTORY_HARD);
+  return out;
+}
 
 export interface SavedReading {
   id: string;
@@ -111,7 +133,7 @@ export async function addReading(result: MeterResult, label: string): Promise<Sa
   const analysis = analyzeSpectrum(result.spectrum);
   const entry: SavedReading = { id: makeId(), label, savedAt: Date.now(), result, analysis };
   const existing = await loadHistory();
-  const next = [entry, ...existing].slice(0, MAX_HISTORY);
+  const next = trimHistory([entry, ...existing]);
   await saveAll(next);
   return entry;
 }
