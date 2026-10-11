@@ -136,7 +136,8 @@ export default function SpectrumGrid({ result, analysis, sampleLabel, flicker, l
   }, [persist]);
 
   const available: ChartId[] = useMemo(
-    () => (hasReading ? (['spectrum', 'cie', 'rvalues', ...(flicker ? ['flicker'] : [])] as ChartId[]) : ['spectrum']),
+    // Before the first reading there is only the spectrum, plus the (blank) flicker chart when the connected meter can do flicker.
+    () => (hasReading ? (['spectrum', 'cie', 'rvalues', ...(flicker ? ['flicker'] : [])] as ChartId[]) : (['spectrum', ...(flicker ? ['flicker'] : [])] as ChartId[])),
     [hasReading, flicker],
   );
   const order = useMemo(() => chartOrder(topPref, available), [topPref, available]);
