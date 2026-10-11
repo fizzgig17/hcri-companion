@@ -25,7 +25,9 @@ export const WIDE_SINGLE_COLUMN_WIDTH = 720;
 export type LayoutMode = 'compact' | 'stacked' | 'dashboard';
 
 export function layoutModeFor(width: number, height: number): LayoutMode {
-  if (width >= 960 && height >= 560) return 'dashboard';
+  // Orientation decides between the two wide modes: a 12.9"/13" iPad held upright is 1024-1032 wide, which
+  // is past the dashboard width, but it is a portrait window and wants History below, not beside.
+  if (width >= 960 && height >= 560 && width > height) return 'dashboard';
   if (width >= 640 && height >= 760) return 'stacked';
   return 'compact';
 }
