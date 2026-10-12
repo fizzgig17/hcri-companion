@@ -187,6 +187,19 @@ export async function loadSideTabPreference(): Promise<'history' | 'data'> {
   return raw === 'data' ? 'data' : 'history';
 }
 
+// Which tab that column opens on: the last one used ('remember') or always History / Data.
+export type SideTabMode = 'remember' | 'history' | 'data';
+const SIDE_TAB_MODE_KEY = 'hcri.io.pref.sideTabMode';
+
+export async function loadSideTabModePreference(): Promise<SideTabMode> {
+  const raw = await AsyncStorage.getItem(SIDE_TAB_MODE_KEY);
+  return raw === 'history' || raw === 'data' ? raw : 'remember';
+}
+
+export async function saveSideTabModePreference(mode: SideTabMode): Promise<void> {
+  await AsyncStorage.setItem(SIDE_TAB_MODE_KEY, mode);
+}
+
 export async function saveSideTabPreference(tab: 'history' | 'data'): Promise<void> {
   await AsyncStorage.setItem(SIDE_TAB_KEY, tab);
 }

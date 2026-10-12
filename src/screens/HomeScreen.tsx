@@ -27,7 +27,7 @@ import { uploadReadingToHcri, uploadFlickerToHcri } from '../hcri/uploadFlickerT
 import { getReportLink } from '../hcri/getReportLink';
 import { fetchSampleReading } from '../hcri/fetchSampleReading';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
-import { loadAutoConnectPreference, loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference, loadTestReportIdPreference, loadSideTabPreference, saveSideTabPreference } from '../storage/preferences';
+import { loadAutoConnectPreference, loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference, loadTestReportIdPreference, loadSideTabPreference, saveSideTabPreference, loadSideTabModePreference } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
 import { addReading, loadHistory, recordUpload, setReadingFlicker, updateReadingLed } from '../storage/readingHistory';
 import { fetchLedSuggestion, LedDetails, LedSuggestion } from '../hcri/ledApi';
@@ -111,7 +111,18 @@ export default function HomeScreen({ navigation }: any) {
   const gridCharts = layoutMode === 'dashboard' && winW - sideW >= MIN_GRID_WIDTH;
   const dataBesideHistory = layoutMode === 'stacked' || square;
   const [sideTab, setSideTab] = useState<'history' | 'data'>('history');
-  useEffect(() => { loadSideTabPreference().then(setSideTab).catch(() => {}); }, []);
+  // Opens on the last tab used, or always History / Data, per the Settings choice; re-applied only when that choice changes.
+  const sideTabModeRef = useRef<string | null>(null);
+  useEffect(() => {
+    const apply = async () => {
+      const mode = await loadSideTabModePreference();
+      if (mode === sideTabModeRef.current) return;
+      sideTabModeRef.current = mode;
+      setSideTab(mode === 'remember' ? await loadSideTabPreference() : mode);
+    };
+    apply().catch(() => {});
+    return navigation.addListener('focus', () => { apply().catch(() => {}); });
+  }, [navigation]);
   const changeSideTab = (t: 'history' | 'data') => { setSideTab(t); saveSideTabPreference(t).catch(() => {}); };
   useEffect(() => { if (dataBesideHistory) setActiveTab((t) => (t === 'data' ? 'main' : t)); }, [dataBesideHistory]);
   const { colors } = useTheme();
@@ -1680,7 +1691,7 @@ export default function HomeScreen({ navigation }: any) {
             });
           }}
           onShowPhoto={
-            Platform.OS === 'ios' && Platform.isPad
+            (Platform.OS === 'ios' && Platform.isPad) || (Platform.OS === 'android' && layoutMode !== 'compact')
               ? () => {
                   if (!result || !analysis) return;
                   navigation.navigate('Photo', {
