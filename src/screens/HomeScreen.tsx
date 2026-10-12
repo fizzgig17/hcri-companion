@@ -1691,7 +1691,7 @@ export default function HomeScreen({ navigation }: any) {
             });
           }}
           onShowPhoto={
-            (Platform.OS === 'ios' && Platform.isPad) || (Platform.OS === 'android' && layoutMode !== 'compact')
+            (Platform.OS === 'ios' && Platform.isPad) || layoutMode !== 'compact'
               ? () => {
                   if (!result || !analysis) return;
                   navigation.navigate('Photo', {
