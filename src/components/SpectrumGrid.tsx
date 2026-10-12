@@ -14,7 +14,7 @@
 // nothing scrolls, nothing is clipped, and a card being dragged can float over the others.
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Animated, PanResponder } from 'react-native';
+import { View, Text, StyleSheet, Animated, PanResponder, Pressable } from 'react-native';
 import SpectrumChart, { SPECTRUM_HEADER_H } from './SpectrumChart';
 import ChromaticityChart from './ChromaticityChart';
 import RValuesBarChart from './RValuesBarChart';
@@ -127,6 +127,19 @@ function DraggableCard({ id, rect, bigRect, onPromote, onDragChange, children, s
   );
 }
 
+function DotsGlyph({ color }: { color: string }) {
+  return (
+    <View style={handleStyles.dots}>
+      {[0, 1, 2].map((r) => (
+        <View key={r} style={handleStyles.dotRow}>
+          <View style={[handleStyles.dot, { backgroundColor: color }]} />
+          <View style={[handleStyles.dot, { backgroundColor: color }]} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 const handleStyles = StyleSheet.create({
   handle: { position: 'absolute', top: 2, right: 2, width: 34, height: 30, alignItems: 'center', justifyContent: 'center' },
   dots: { gap: 3 },
@@ -211,7 +224,7 @@ export default function SpectrumGrid({ result, analysis, sampleLabel, flicker, l
             redoLabel={flicker.redoLabel}
             readingNote={flicker.readingNote}
             fromReading={flicker.fromReading}
-            reserveRight={isBig ? 0 : 36}
+            reserveRight={36}
             width={w}
             height={h}
           />
@@ -228,6 +241,18 @@ export default function SpectrumGrid({ result, analysis, sampleLabel, flicker, l
         style={[{ position: 'absolute', left: bigRect.x, top: bigRect.y, width: bigRect.w, height: bigRect.h }, ...(cardStyle(bigId) as any[]), { padding: 10 }, dragging && styles.dropHint]}
       >
         {body(bigId, bigRect, true)}
+        {/* The big chart gets a handle too: tap it to swap in the next chart. */}
+        {order.length > 1 && (
+          <Pressable
+            onPress={() => promote(order[1])}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel="Swap to the next chart"
+            style={handleStyles.handle}
+          >
+            <DotsGlyph color={bigId === 'cie' || bigId === 'flicker' ? '#666' : colors.muted} />
+          </Pressable>
+        )}
       </View>
       {order.slice(1).map((id) => (
         <DraggableCard

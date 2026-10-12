@@ -20,7 +20,8 @@ export function gridRects(order: ChartId[], width: number, height: number, layou
     out[big] = { x: 0, y: 0, w: width, h: height };
     return out;
   }
-  if (layout === 'portrait') {
+  // Exactly two charts: side by side in either orientation.
+  if (layout === 'portrait' || small.length === 1) {
     const bigW = Math.round(width * 0.58);
     const colW = width - bigW - GAP;
     const cardH = (height - GAP * (small.length - 1)) / small.length;
