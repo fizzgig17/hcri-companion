@@ -7,7 +7,8 @@
 import React from 'react';
 import { Text, StyleSheet, Platform } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { APP_VERSION, BUILD_DATE } from '../buildInfo';
+import { APP_VERSION, BUILD_DATE, ANDROID_BUILD_NUMBER } from '../buildInfo';
+import { IOS_BUILD_NUMBER } from '../buildNumber';
 import { GIT_COMMIT } from '../gitCommit';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
 
@@ -18,12 +19,13 @@ export default function VersionStamp() {
     month: 'short',
     day: 'numeric',
   });
+  const buildNumber = Platform.OS === 'ios' ? IOS_BUILD_NUMBER : String(ANDROID_BUILD_NUMBER);
   const styles = StyleSheet.create({
     text: { color: colors.mutedFaint, fontSize: 11, textAlign: 'center', marginBottom: 18 },
   });
   return (
     <Text style={styles.text}>
-      hCRI Companion v{APP_VERSION}
+      hCRI Companion v{APP_VERSION}{buildNumber ? ` (${buildNumber})` : ''}
       {/* Android's version is a date (YYYY.M.D.N), so a separate build date would only repeat it. */}
       {Platform.OS === 'ios' ? ` · Built ${builtOn}` : ''}
       {IS_DEV_BUILD ? ` · ${GIT_COMMIT}` : ''}

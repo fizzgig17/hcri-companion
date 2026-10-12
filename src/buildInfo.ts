@@ -22,6 +22,8 @@
 import { Platform } from 'react-native';
 
 export const ANDROID_VERSION = '2026.10.11.2';
+// Keep equal to versionCode in android/app/build.gradle.
+export const ANDROID_BUILD_NUMBER = 33;
 export const ANDROID_BUILD_DATE = '2026-10-11';
 export const IOS_VERSION = '1.28';
 export const IOS_BUILD_DATE = '2026-10-11';
