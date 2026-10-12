@@ -7,7 +7,7 @@
 // Opened with navigation.navigate('Photo', { input }).
 
 import React, { useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, Platform, Alert, NativeModules } from 'react-native';
 import RNFS from 'react-native-fs';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { WebView } from 'react-native-webview';
@@ -49,6 +49,19 @@ export default function PhotoScreen({ route }: any) {
   const pickPhoto = async () => {
     appendLog('Photo: opening the photo picker');
     try {
+      // Preferred: the system "choose an app" list (Gallery, Google Photos, Files). Falls back to the system photo picker.
+      const g = NativeModules.GalleryPicker;
+      if (g?.pick) {
+        try {
+          const r = await g.pick();
+          if (!r) { appendLog('Photo: picker closed without a choice'); return; }
+          appendLog(`Photo: loaded ${Math.round(r.base64.length / 1024)} KB from the chooser, handing it to the page`);
+          webRef.current?.injectJavaScript(deliverPhotoJs(r.base64, r.type, r.name));
+          return;
+        } catch (e: any) {
+          appendLog(`Photo: chooser failed (${e?.message ?? e}), using the photo picker`);
+        }
+      }
       const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 1, includeBase64: true, maxWidth: 1600, maxHeight: 1600, quality: 0.8 });
       if (res.didCancel) { appendLog('Photo: picker closed without a choice'); return; }
       if (res.errorCode) {
