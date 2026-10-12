@@ -50,3 +50,20 @@ export function chartOrder(top: ChartId, available: ChartId[]): ChartId[] {
   return [t, ...CANONICAL.filter((id) => available.includes(id) && id !== t)];
 }
 
+
+/** The remembered full order, limited to the charts available now (missing ones follow in the fixed order). */
+export function normalizeOrder(saved: ChartId[], available: ChartId[]): ChartId[] {
+  const kept = saved.filter((id, i) => available.includes(id) && saved.indexOf(id) === i);
+  return [...kept, ...CANONICAL.filter((id) => available.includes(id) && !kept.includes(id))];
+}
+
+/** Puts chart `a` where `b` is and `b` where `a` was. */
+export function swapCharts(order: ChartId[], a: ChartId, b: ChartId): ChartId[] {
+  const i = order.indexOf(a);
+  const j = order.indexOf(b);
+  if (i < 0 || j < 0 || i === j) return order;
+  const out = [...order];
+  out[i] = b;
+  out[j] = a;
+  return out;
+}

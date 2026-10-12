@@ -25,8 +25,8 @@ import { SpectralAnalysis } from '../utils/spectralAnalysis';
 import type { FlickerReading } from '../ble/liveSessions';
 import type { FlickerSettingsApi } from './FlickerSettingsModal';
 import type { FlickerUploadApi } from './FlickerChart';
-import { chartOrder, gridRects, CHART_IDS, ChartId, Rect } from '../chartGrid';
-import { loadChartTopPreference, saveChartTopPreference } from '../storage/preferences';
+import { chartOrder, gridRects, normalizeOrder, swapCharts, CANONICAL, CHART_IDS, ChartId, Rect } from '../chartGrid';
+import { loadChartTopPreference, loadChartOrderPreference, saveChartOrderPreference } from '../storage/preferences';
 
 type FlickerProps = {
   reading: FlickerReading | null;
@@ -65,17 +65,17 @@ interface Props {
 // Each card has padding 10 and a 1px border on every side.
 const CARD_CHROME = 22;
 
-function DraggableCard({ id, rect, bigRect, onPromote, onDragChange, children, style, handleColor, isBig, targets }: {
-  id: ChartId; rect: Rect; bigRect: Rect; onPromote: (id: ChartId) => void; onDragChange: (dragging: boolean) => void;
-  /** The big chart: dragging it onto a small card (targets) swaps that card in; a tap swaps in the first one. */
-  isBig?: boolean; targets?: { id: ChartId; rect: Rect }[];
+function DraggableCard({ id, rect, onSwap, onTap, onDragChange, children, style, handleColor, targets }: {
+  id: ChartId; rect: Rect; onSwap: (a: ChartId, b: ChartId) => void; onTap: (id: ChartId) => void; onDragChange: (dragging: boolean) => void;
   children: React.ReactNode; style: any; handleColor: string;
+  /** Every other chart's slot: dropping this chart on one swaps the two. */
+  targets: { id: ChartId; rect: Rect }[];
 }) {
   const pan = useRef(new Animated.ValueXY()).current;
   const [dragging, setDragging] = useState(false);
   // The responder is created once; keep the latest geometry and callbacks where it can read them.
-  const live = useRef({ rect, bigRect, onPromote, onDragChange, id, isBig, targets });
-  live.current = { rect, bigRect, onPromote, onDragChange, id, isBig, targets };
+  const live = useRef({ rect, onSwap, onTap, onDragChange, id, targets });
+  live.current = { rect, onSwap, onTap, onDragChange, id, targets };
 
   const responder = useRef(
     PanResponder.create({
@@ -85,22 +85,16 @@ function DraggableCard({ id, rect, bigRect, onPromote, onDragChange, children, s
       onPanResponderGrant: () => { setDragging(true); live.current.onDragChange(true); },
       onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
       onPanResponderRelease: (_e, g) => {
-        const { rect: r, bigRect: b, onPromote: promote, id: cid } = live.current;
+        const { rect: r, id: cid, targets: ts } = live.current;
         const cx = r.x + r.w / 2 + g.dx;
         const cy = r.y + r.h / 2 + g.dy;
         const moved = Math.hypot(g.dx, g.dy) > 8;
-        const inBig = cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h;
         setDragging(false);
         live.current.onDragChange(false);
         pan.setValue({ x: 0, y: 0 });
-        if (live.current.isBig) {
-          const ts = live.current.targets ?? [];
-          const hit = ts.find((t) => cx >= t.rect.x && cx <= t.rect.x + t.rect.w && cy >= t.rect.y && cy <= t.rect.y + t.rect.h);
-          if (hit) promote(hit.id);
-          else if (!moved && ts[0]) promote(ts[0].id);
-          return;
-        }
-        if (inBig || !moved) promote(cid);   // dropped on the big chart, or just tapped the handle
+        const hit = ts.find((t) => cx >= t.rect.x && cx <= t.rect.x + t.rect.w && cy >= t.rect.y && cy <= t.rect.y + t.rect.h);
+        if (hit) live.current.onSwap(cid, hit.id);
+        else if (!moved) live.current.onTap(cid);
       },
       onPanResponderTerminate: () => { setDragging(false); live.current.onDragChange(false); pan.setValue({ x: 0, y: 0 }); },
     }),
@@ -119,7 +113,7 @@ function DraggableCard({ id, rect, bigRect, onPromote, onDragChange, children, s
         {...responder.panHandlers}
         hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         accessibilityRole="button"
-        accessibilityLabel={isBig ? "Drag onto a small chart to swap places" : "Drag to the large chart to enlarge this chart"}
+        accessibilityLabel="Drag onto another chart to swap places"
         style={handleStyles.handle}
       >
         {/* Drawn from Views, not a glyph: the braille character has no font on iOS and the handle vanished. */}
@@ -159,12 +153,19 @@ const handleStyles = StyleSheet.create({
 export default function SpectrumGrid({ result, analysis, sampleLabel, flicker, layout = 'landscape', persist = true, onDragChange, width, height }: Props) {
   const { colors } = useTheme();
   const hasReading = analysis.x > 0 || analysis.y > 0;
-  const [topPref, setTopPref] = useState<ChartId>('spectrum');
+  const [savedOrder, setSavedOrder] = useState<ChartId[]>(CANONICAL);
   const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
     if (!persist) return;
-    loadChartTopPreference().then((v) => { if (v && CHART_IDS.has(v)) setTopPref(v as ChartId); }).catch(() => {});
+    (async () => {
+      const ord = await loadChartOrderPreference();
+      const valid = (ord ?? []).filter((x) => CHART_IDS.has(x)) as ChartId[];
+      if (valid.length) { setSavedOrder(normalizeOrder(valid, CANONICAL)); return; }
+      // Older versions only remembered which chart was on top.
+      const top = await loadChartTopPreference();
+      if (top && CHART_IDS.has(top)) setSavedOrder(chartOrder(top as ChartId, CANONICAL));
+    })().catch(() => {});
   }, [persist]);
 
   const available: ChartId[] = useMemo(
@@ -172,14 +173,21 @@ export default function SpectrumGrid({ result, analysis, sampleLabel, flicker, l
     () => (hasReading ? (['spectrum', 'cie', 'rvalues', ...(flicker ? ['flicker'] : [])] as ChartId[]) : (['spectrum', ...(flicker ? ['flicker'] : [])] as ChartId[])),
     [hasReading, flicker],
   );
-  const order = useMemo(() => chartOrder(topPref, available), [topPref, available]);
+  const order = useMemo(() => normalizeOrder(savedOrder, available), [savedOrder, available]);
   const rects = useMemo(() => gridRects(order, width, height, layout), [order, width, height, layout]);
   const bigId = order[0];
 
-  const promote = (id: ChartId) => {
-    if (id === bigId) return;
-    setTopPref(id);
-    if (persist) saveChartTopPreference(id).catch(() => {});
+  const swap = (a: ChartId, b: ChartId) => {
+    const next = swapCharts(order, a, b);
+    if (next === order) return;
+    // Keep the charts that aren't available right now (e.g. flicker before a reading) at their remembered places after these.
+    const full = [...next, ...savedOrder.filter((id) => !next.includes(id))];
+    setSavedOrder(full);
+    if (persist) saveChartOrderPreference(full).catch(() => {});
+  };
+  // A tap on the handle: a small chart swaps with the big one; the big one swaps with the next.
+  const tap = (id: ChartId) => {
+    if (id === bigId) { if (order[1]) swap(id, order[1]); } else swap(id, bigId);
   };
 
   const styles = StyleSheet.create({
@@ -244,44 +252,29 @@ export default function SpectrumGrid({ result, analysis, sampleLabel, flicker, l
   const cardStyle = (id: ChartId) => [styles.card, (id === 'cie' || id === 'flicker') && styles.whiteCard];
   const bigRect = rects[bigId];
 
-  const targets = order.slice(1).map((id) => ({ id, rect: rects[id] }));
+  const slotsFor = (id: ChartId) => order.filter((o) => o !== id).map((o) => ({ id: o, rect: rects[o] }));
+  const handleFor = (id: ChartId) => (id === 'cie' || id === 'flicker' ? '#666' : colors.muted);
+
   return (
     <View style={{ width, height }}>
-      {order.length > 1 ? (
-        <DraggableCard
-          key={`big-${bigId}`}
-          id={bigId}
-          rect={bigRect}
-          bigRect={bigRect}
-          isBig
-          targets={targets}
-          onPromote={promote}
-          onDragChange={(d) => { setDragging(d); onDragChange?.(d); }}
-          style={[...(cardStyle(bigId) as any[]), { padding: 10 }]}
-          handleColor={bigId === 'cie' || bigId === 'flicker' ? '#666' : colors.muted}
-        >
-          {body(bigId, bigRect, true)}
-        </DraggableCard>
-      ) : (
+      {order.length === 1 && (
         <View style={[{ position: 'absolute', left: bigRect.x, top: bigRect.y, width: bigRect.w, height: bigRect.h }, ...(cardStyle(bigId) as any[]), { padding: 10 }]}>
           {body(bigId, bigRect, true)}
         </View>
       )}
-      {dragging && (
-        <View pointerEvents="none" style={[{ position: 'absolute', left: bigRect.x, top: bigRect.y, width: bigRect.w, height: bigRect.h, borderRadius: 12 }, styles.dropHint]} />
-      )}
-      {order.slice(1).map((id) => (
+      {order.length > 1 && order.map((id, i) => (
         <DraggableCard
           key={id}
           id={id}
           rect={rects[id]}
-          bigRect={bigRect}
-          onPromote={promote}
+          targets={slotsFor(id)}
+          onSwap={swap}
+          onTap={tap}
           onDragChange={(d) => { setDragging(d); onDragChange?.(d); }}
-          style={cardStyle(id)}
-          handleColor={id === 'cie' || id === 'flicker' ? '#666' : colors.muted}
+          style={[...(cardStyle(id) as any[]), i === 0 && { padding: 10 }]}
+          handleColor={handleFor(id)}
         >
-          {body(id, rects[id], false)}
+          {body(id, rects[id], i === 0)}
         </DraggableCard>
       ))}
     </View>
