@@ -7,10 +7,12 @@
 // Opened with navigation.navigate('Photo', { input }).
 
 import React, { useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform, Alert } from 'react-native';
+import RNFS from 'react-native-fs';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { WebView } from 'react-native-webview';
 import { useTheme } from '../contexts/ThemeContext';
+import { useLog } from '../contexts/LogContext';
 import type { Tm30Input } from '../utils/tm30Report';
 import { buildPhotoHtml } from '../photo/photoHtml';
 
@@ -20,7 +22,7 @@ import { buildPhotoHtml } from '../photo/photoHtml';
 const ANDROID_PICK_HOOK = `(function(){
   var orig = HTMLInputElement.prototype.click;
   HTMLInputElement.prototype.click = function(){
-    if (this.type === 'file') { window.__hcriFileInput = this; window.ReactNativeWebView.postMessage('pickPhoto'); return; }
+    if (this.type === 'file' && window.ReactNativeWebView) { window.__hcriFileInput = this; window.ReactNativeWebView.postMessage('pickPhoto'); return; }
     return orig.apply(this, arguments);
   };
 })(); true;`;
@@ -43,13 +45,31 @@ export default function PhotoScreen({ route }: any) {
   const { colors } = useTheme();
   const input: Tm30Input = route.params.input;
   const webRef = useRef<any>(null);
+  const { appendLog } = useLog();
   const pickPhoto = async () => {
+    appendLog('Photo: opening the photo picker');
     try {
-      const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 1, includeBase64: true, maxWidth: 2000, maxHeight: 2000, quality: 0.9 });
+      const res = await launchImageLibrary({ mediaType: 'photo', selectionLimit: 1, includeBase64: true, maxWidth: 1600, maxHeight: 1600, quality: 0.8 });
+      if (res.didCancel) { appendLog('Photo: picker closed without a choice'); return; }
+      if (res.errorCode) {
+        appendLog(`Photo: picker error ${res.errorCode}: ${res.errorMessage ?? ''}`);
+        Alert.alert('Could not open your photos', res.errorMessage || String(res.errorCode));
+        return;
+      }
       const a = res.assets?.[0];
-      if (!a?.base64) return;
-      webRef.current?.injectJavaScript(deliverPhotoJs(a.base64, a.type || 'image/jpeg', a.fileName || 'photo.jpg'));
-    } catch {}
+      let b64 = a?.base64;
+      if (!b64 && a?.uri) b64 = await RNFS.readFile(a.uri.replace(/^file:\/\//, ''), 'base64');
+      if (!a || !b64) {
+        appendLog('Photo: the picker returned no image data');
+        Alert.alert('Could not load that photo', 'The photo picker did not return an image.');
+        return;
+      }
+      appendLog(`Photo: loaded ${a.type ?? 'image'} ${Math.round(b64.length / 1024)} KB, handing it to the page`);
+      webRef.current?.injectJavaScript(deliverPhotoJs(b64, a.type || 'image/jpeg', a.fileName || 'photo.jpg'));
+    } catch (e: any) {
+      appendLog(`Photo: picking failed: ${e?.message ?? e}`);
+      Alert.alert('Could not load that photo', String(e?.message ?? e));
+    }
   };
   const built = useMemo(() => {
     try {
