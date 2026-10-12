@@ -283,6 +283,9 @@ function startLagMonitor(log: LogFn): () => void {
  * capture, reads the statistics and the waveform once, then stops. Never throws and is bounded to a few
  * seconds: on any problem it logs and returns null so the normal reading is unaffected.
  */
+/** Captures fetched and thrown away before the one an instant flicker reading keeps. */
+const FLICKER_ONCE_WARMUP_CYCLES = 1;
+
 export async function captureFlickerOnce(conn: MeterConnection, log: LogFn): Promise<FlickerReading | null> {
   const never = () => false;
   const t0 = Date.now();
@@ -315,6 +318,16 @@ export async function captureFlickerOnce(conn: MeterConnection, log: LogFn): Pro
       log('Flicker capture: the meter never reported a capture ready -- skipped');
       return null;
     }
+    // The first capture after switching into flicker mode can still be settling (range / sensor), which showed up as a
+    // waveform that changed shape between instant readings. Fetch and discard a warm-up capture or two, then keep the next.
+    for (let w = 0; w < FLICKER_ONCE_WARMUP_CYCLES; w++) {
+      const ws = await request(conn, CMD_FLICKER_STATS, 0x3c, 1500, 1, (m) => m.body.length >= 18, never, log);
+      if (ws) await request(conn, CMD_FLICKER_WAVE, 0x3a, 2000, 1, (m) => m.body.length >= FLICKER_WAVE_SAMPLES * 2, never, log);
+      await sleep(FLICKER_CYCLE_GAP_MS);
+    }
+    // The range can change once flicker mode is running; report the one the kept capture was taken at.
+    const gearAfter = await request(conn, [0x8c, 0x36], 0x36, 800, 1, () => true, never, log);
+    if (gearAfter && gearAfter.body.length >= 3) gear = fromBcd(gearAfter.body[2]);
     const stats = await request(conn, CMD_FLICKER_STATS, 0x3c, 1500, 2, (m) => m.body.length >= 18, never, log);
     const wave = stats
       ? await request(conn, CMD_FLICKER_WAVE, 0x3a, 2000, 2, (m) => m.body.length >= FLICKER_WAVE_SAMPLES * 2, never, log)
