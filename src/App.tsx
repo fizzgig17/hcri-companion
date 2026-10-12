@@ -12,7 +12,7 @@
 // HomeScreen/SettingsScreen with a bit of local state instead.
 
 import React, { useEffect } from 'react';
-import { StatusBar, View, useWindowDimensions } from 'react-native';
+import { StatusBar, View, Text, Pressable, useWindowDimensions } from 'react-native';
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -194,7 +194,16 @@ function Navigation() {
         <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
         <Stack.Screen name="ReadingDetail" component={ReadingOverlay} options={popup ? popupOptions : { title: 'Reading' }} />
         <Stack.Screen name="Tm30Report" component={Tm30Overlay} options={popup ? popupOptions : { title: 'TM-30 Report' }} />
-        <Stack.Screen name="Photo" component={PhotoOverlay} options={popup ? popupOptions : { title: 'See it on a photo' }} />
+        <Stack.Screen name="Photo" component={PhotoOverlay} options={popup ? popupOptions : ({ navigation }: any) => ({
+          title: 'See it on a photo',
+          gestureEnabled: false, // the divider is dragged near the screen edge; a back-swipe there closed the photo
+          headerBackVisible: false,
+          headerRight: () => (
+            <Pressable onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Close photo" hitSlop={12} style={{ paddingHorizontal: 8 }}>
+              <Text style={{ fontSize: 24, color: scheme === 'light' ? '#111' : '#fff' }}>✕</Text>
+            </Pressable>
+          ),
+        })} />
         <Stack.Screen name="SettingsOverlay" component={SettingsOverlay} options={popupOptions} />
         <Stack.Screen name="Compare" component={CompareOverlay} options={popup ? popupOptions : { title: 'Compare readings' }} />
       </Stack.Navigator>
