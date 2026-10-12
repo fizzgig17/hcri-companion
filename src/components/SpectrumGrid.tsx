@@ -86,8 +86,10 @@ function DraggableCard({ id, rect, onSwap, onTap, onDragChange, children, style,
       onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
       onPanResponderRelease: (_e, g) => {
         const { rect: r, id: cid, targets: ts } = live.current;
-        const cx = r.x + r.w / 2 + g.dx;
-        const cy = r.y + r.h / 2 + g.dy;
+        // Where the finger ended up (the handle sits in the card's top-right corner), not the card's centre: a big card's
+        // centre would have to travel across the whole grid to reach another slot.
+        const cx = r.x + r.w - 19 + g.dx;
+        const cy = r.y + 17 + g.dy;
         const moved = Math.hypot(g.dx, g.dy) > 8;
         setDragging(false);
         live.current.onDragChange(false);

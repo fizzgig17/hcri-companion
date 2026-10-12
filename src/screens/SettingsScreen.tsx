@@ -51,6 +51,9 @@ import {
   saveStayConnectedInBackgroundPreference,
   loadTbCorrectionPreference,
   loadFlickerWithReadingPreference,
+  loadSideTabModePreference,
+  saveSideTabModePreference,
+  type SideTabMode,
   saveFlickerWithReadingPreference,
   loadLedSuggestionsPreference,
   loadAutoConnectPreference,
@@ -141,6 +144,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   const [testReportId, setTestReportId] = useState('');
   const [tbCorrection, setTbCorrection] = useState(true);
   const [flickerWithReading, setFlickerWithReading] = useState(false);
+  const [sideTabMode, setSideTabMode] = useState<SideTabMode>('remember');
   const [ledSuggestions, setLedSuggestions] = useState(true);
   const [autoConnect, setAutoConnect] = useState(true);
   // Which measurements show on the Main tab's result card, and in what
@@ -192,6 +196,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
     loadTestReportIdPreference().then(setTestReportId);
     loadTbCorrectionPreference().then(setTbCorrection);
     loadFlickerWithReadingPreference().then(setFlickerWithReading);
+    loadSideTabModePreference().then(setSideTabMode).catch(() => {});
     loadLedSuggestionsPreference().then(setLedSuggestions);
     loadAutoConnectPreference().then(setAutoConnect);
     loadStatDisplayPrefs().then(setStatPrefs);
@@ -251,6 +256,10 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   const toggleLedSuggestions = async (value: boolean) => {
     setLedSuggestions(value);
     await saveLedSuggestionsPreference(value);
+  };
+  const chooseSideTabMode = (m: SideTabMode) => {
+    setSideTabMode(m);
+    saveSideTabModePreference(m).catch(() => {});
   };
   const toggleFlickerWithReading = async (value: boolean) => {
     setFlickerWithReading(value);
@@ -736,6 +745,21 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
             );
           })}
         </View>
+      </View>
+
+      <View style={styles.appearanceSection}>
+        <Text style={styles.appearanceLabel}>Unfolded foldable: side panel opens on</Text>
+        <View style={styles.modeSegment}>
+          {([['remember', 'Last used'], ['history', 'History'], ['data', 'Data']] as [SideTabMode, string][]).map(([value, label]) => {
+            const active = sideTabMode === value;
+            return (
+              <TouchableOpacity key={value} style={[styles.modeOption, active && styles.modeOptionActive]} onPress={() => chooseSideTabMode(value)}>
+                <Text style={[styles.modeOptionText, active && styles.modeOptionTextActive]}>{label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <Text style={[styles.toggleHint, { marginTop: 6 }]}>On a nearly square unfolded screen the right-hand column switches between History and Data.</Text>
       </View>
 
       <View style={styles.toggleRow}>
