@@ -4,7 +4,18 @@
 
 import { calcTm30, interpolateSpd5nm } from '../utils/rfRg';
 import type { Tm30Input } from '../utils/tm30Report';
-import { PHOTO_SCRIPT } from './photoScript';
+import { PHOTO_SCRIPT as BASE_SCRIPT } from './photoScript';
+
+// Phone tweaks on top of the generated site script (guarded, so a regenerated script just skips any that no longer match):
+// keep the divider off the screen edges (where the OS back-swipe lives) and make the grip bigger and easier to catch.
+function tuneScript(s: string): string {
+  return s
+    .replace('r.width * 100, 3, 97)', 'r.width * 100, 8, 92)')
+    .replace('width:30px;height:30px;border-radius:50%', 'width:46px;height:46px;border-radius:50%')
+    .replace('color:#05070d;font-size:14px', 'color:#05070d;font-size:20px')
+    .replace('width:2px;background:rgba(255,255,255,.9)', 'width:3px;background:rgba(255,255,255,.95)');
+}
+const PHOTO_SCRIPT = tuneScript(BASE_SCRIPT);
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -25,7 +36,7 @@ export function buildPhotoHtml(input: Tm30Input, c: { bg: string; text: string; 
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <style>
   html,body{margin:0;background:${c.bg};color:${c.text};font-family:-apple-system,Roboto,Helvetica,Arial,sans-serif;-webkit-text-size-adjust:100%}
-  .page{max-width:1100px;margin:0 auto;padding:18px 20px 40px}
+  .page{max-width:1100px;margin:0 auto;padding:18px 28px 40px}
   h1{font-size:20px;margin:0 0 4px}
   .sub{font-size:14px;color:${c.dim};margin:0 0 6px;text-align:center}
   .help{font-size:13px;line-height:1.55;color:${c.dim};margin:0 auto 16px;max-width:760px;text-align:center}
