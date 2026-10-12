@@ -43,3 +43,13 @@ describe('gridRects', () => {
     expect(gridRects(['spectrum'], 700, 400, 'portrait').spectrum).toEqual({ x: 0, y: 0, w: 700, h: 400 });
   });
 });
+
+describe('two charts', () => {
+  it('sit side by side in landscape', () => {
+    const r = gridRects(['spectrum', 'flicker'], 1000, 600, 'landscape');
+    expect(r.spectrum.y).toBe(0);
+    expect(r.flicker.y).toBe(0);
+    expect(r.flicker.x).toBeGreaterThan(r.spectrum.w);
+    expect(r.flicker.h).toBe(600);
+  });
+});

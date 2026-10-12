@@ -93,7 +93,9 @@ jobs:
           echo "export const HCRI_API_BASE = '$BASE';" > src/hcri/apiConfig.ts
 
       - name: Stamp git commit id into the build
-        run: echo "export const GIT_COMMIT = '${GITHUB_SHA::7}';" > src/gitCommit.ts
+        run: |
+          echo "export const GIT_COMMIT = '${GITHUB_SHA::7}';" > src/gitCommit.ts
+          echo "export const IOS_BUILD_NUMBER = '${{ github.run_number }}';" > src/buildNumber.ts
 
       - name: Cache CocoaPods
         uses: actions/cache@v4
