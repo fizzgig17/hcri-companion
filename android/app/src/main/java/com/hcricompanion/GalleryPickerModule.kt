@@ -62,7 +62,7 @@ class GalleryPickerModule(private val ctx: ReactApplicationContext) : ReactConte
 
   @ReactMethod
   fun pick(promise: Promise) {
-    val activity = currentActivity
+    val activity = ctx.currentActivity
     if (activity == null) { promise.reject("E_NO_ACTIVITY", "No active screen"); return }
     pending?.resolve(null)
     pending = promise
