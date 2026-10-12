@@ -1,4 +1,4 @@
-import { chartOrder, gridRects } from '../src/chartGrid';
+import { chartOrder, gridRects, normalizeOrder, swapCharts } from '../src/chartGrid';
 
 const ALL = ['spectrum', 'cie', 'rvalues', 'flicker'] as const;
 
@@ -51,5 +51,16 @@ describe('two charts', () => {
     expect(r.flicker.y).toBe(0);
     expect(r.flicker.x).toBeGreaterThan(r.spectrum.w);
     expect(r.flicker.h).toBe(600);
+  });
+});
+
+describe('free ordering', () => {
+  it('swaps any two positions', () => {
+    expect(swapCharts(['spectrum', 'cie', 'rvalues', 'flicker'], 'spectrum', 'rvalues')).toEqual(['rvalues', 'cie', 'spectrum', 'flicker']);
+    expect(swapCharts(['spectrum', 'cie'], 'cie', 'cie')).toEqual(['spectrum', 'cie']);
+  });
+  it('keeps the remembered order for what is available and appends the rest', () => {
+    expect(normalizeOrder(['flicker', 'rvalues', 'spectrum', 'cie'], ['spectrum', 'flicker'])).toEqual(['flicker', 'spectrum']);
+    expect(normalizeOrder(['cie'], ['spectrum', 'cie', 'rvalues'])).toEqual(['cie', 'spectrum', 'rvalues']);
   });
 });

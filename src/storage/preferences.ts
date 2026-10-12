@@ -162,6 +162,23 @@ export async function saveChartTopPreference(id: string): Promise<void> {
   await AsyncStorage.setItem(CHART_TOP_KEY, id);
 }
 
+// Landscape chart grid: the full remembered order of the charts (top/big chart first).
+const CHART_ORDER_KEY = 'hcri.io.pref.chartOrder';
+
+export async function loadChartOrderPreference(): Promise<string[] | null> {
+  try {
+    const raw = await AsyncStorage.getItem(CHART_ORDER_KEY);
+    const v = raw ? JSON.parse(raw) : null;
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveChartOrderPreference(order: string[]): Promise<void> {
+  await AsyncStorage.setItem(CHART_ORDER_KEY, JSON.stringify(order));
+}
+
 // Square windows (unfolded foldables): which panel the right-hand column shows ('history' | 'data').
 const SIDE_TAB_KEY = 'hcri.io.pref.sideTab';
 

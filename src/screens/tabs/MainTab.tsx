@@ -475,11 +475,6 @@ export default function MainTab({
             chartRegionW > 0 && chartRegionH > 0 ? (
               <SpectrumGrid result={displayResult} analysis={displayAnalysis} sampleLabel={result?.sampleLabel} flicker={flicker} layout="landscape" width={chartRegionW} height={chartRegionH} />
             ) : null
-          ) : portrait && !hasReading && !!flicker ? (
-            // Upright tablet with only two charts (spectrum + blank flicker): side by side, draggable like the grid.
-            chartRegionW > 0 && chartRegionH > 0 ? (
-              <SpectrumGrid result={displayResult} analysis={displayAnalysis} sampleLabel={result?.sampleLabel} flicker={flicker} layout="portrait" width={chartRegionW} height={chartRegionH} />
-            ) : null
           ) : portrait ? (
             // Upright tablet: the same swipeable pages as on a phone (spectrum, CIE, R-values, flicker), sized to this region.
             <ContentWidthContext.Provider value={chartRegionW + 62}>
