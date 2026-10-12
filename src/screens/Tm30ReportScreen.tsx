@@ -16,7 +16,7 @@ import { useLog } from '../contexts/LogContext';
 import { buildTm30Html, buildTm30PdfHtml, TM30_PDF_PAGE, Tm30Input } from '../utils/tm30Report';
 import { withBackgroundDisconnectSuppressed } from '../ble/backgroundDisconnectGuard';
 
-export default function Tm30ReportScreen({ route, panel }: any) {
+export default function Tm30ReportScreen({ route, navigation, panel }: any) {
   const { colors } = useTheme();
   const { appendLog } = useLog();
   const insets = useSafeAreaInsets();
@@ -75,6 +75,8 @@ export default function Tm30ReportScreen({ route, panel }: any) {
     },
     btn: { backgroundColor: colors.accent, borderRadius: 10, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' },
     btnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+    btnSecondary: { flex: 1, backgroundColor: 'transparent', borderWidth: 1.5, borderColor: colors.accent },
+    btnTextSecondary: { color: colors.accent, fontSize: 15, fontWeight: '700' },
   });
 
   return (
@@ -93,10 +95,21 @@ export default function Tm30ReportScreen({ route, panel }: any) {
         />
       )}
       <View style={styles.dock}>
-        <TouchableOpacity style={[styles.btn, (sharing || !!built.error) && { opacity: 0.5 }]} onPress={sharePdf} disabled={sharing || !!built.error} accessibilityRole="button" accessibilityLabel="Share PDF">
-          {sharing && <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />}
-          <Text style={styles.btnText}>{sharing ? 'Creating PDF…' : 'Share PDF'}</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <TouchableOpacity
+            style={[styles.btn, styles.btnSecondary, !!built.error && { opacity: 0.5 }]}
+            onPress={() => navigation?.navigate('Photo', { input })}
+            disabled={!!built.error}
+            accessibilityRole="button"
+            accessibilityLabel="See it on a photo"
+          >
+            <Text style={styles.btnTextSecondary}>See it on a photo</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.btn, { flex: 1 }, (sharing || !!built.error) && { opacity: 0.5 }]} onPress={sharePdf} disabled={sharing || !!built.error} accessibilityRole="button" accessibilityLabel="Share PDF">
+            {sharing && <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />}
+            <Text style={styles.btnText}>{sharing ? 'Creating PDF…' : 'Share PDF'}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );

@@ -10,7 +10,6 @@ import React, { useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { WebView } from 'react-native-webview';
-import OverlayPanel from '../components/OverlayPanel';
 import { useTheme } from '../contexts/ThemeContext';
 import type { Tm30Input } from '../utils/tm30Report';
 import { buildPhotoHtml } from '../photo/photoHtml';
@@ -40,7 +39,7 @@ function deliverPhotoJs(base64: string, mime: string, name: string): string {
   })(); true;`;
 }
 
-export default function PhotoScreen({ route, navigation }: any) {
+export default function PhotoScreen({ route }: any) {
   const { colors } = useTheme();
   const input: Tm30Input = route.params.input;
   const webRef = useRef<any>(null);
@@ -67,7 +66,6 @@ export default function PhotoScreen({ route, navigation }: any) {
   });
 
   return (
-    <OverlayPanel title="See it on a photo" closeHint="Close photo" onClose={() => navigation.goBack()} maxWidth={1180}>
       <View style={styles.container}>
         {built.error ? (
           <Text style={styles.err}>{built.error}</Text>
@@ -84,6 +82,5 @@ export default function PhotoScreen({ route, navigation }: any) {
           />
         )}
       </View>
-    </OverlayPanel>
   );
 }

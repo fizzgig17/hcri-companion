@@ -85,6 +85,7 @@ function overlayScreen(Screen: React.ComponentType<any>, titleFor: (route: any) 
 const SettingsOverlay = overlayScreen(SettingsScreen, () => 'Settings', 'Close settings');
 const ReadingOverlay = overlayScreen(ReadingDetailScreen, (route) => route?.params?.reading?.label || 'Reading', 'Close reading');
 const Tm30Overlay = overlayScreen(Tm30ReportScreen, () => 'TM-30 report', 'Close TM-30 report', 1100);
+const PhotoOverlay = overlayScreen(PhotoScreen, () => 'See it on a photo', 'Close photo', 1180);
 const CompareOverlay = overlayScreen(CompareScreen, () => 'Compare readings', 'Close compare');
 const Tab = createBottomTabNavigator();
 
@@ -193,7 +194,7 @@ function Navigation() {
         <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
         <Stack.Screen name="ReadingDetail" component={ReadingOverlay} options={popup ? popupOptions : { title: 'Reading' }} />
         <Stack.Screen name="Tm30Report" component={Tm30Overlay} options={popup ? popupOptions : { title: 'TM-30 Report' }} />
-        <Stack.Screen name="Photo" component={PhotoScreen} options={popupOptions} />
+        <Stack.Screen name="Photo" component={PhotoOverlay} options={popup ? popupOptions : { title: 'See it on a photo' }} />
         <Stack.Screen name="SettingsOverlay" component={SettingsOverlay} options={popupOptions} />
         <Stack.Screen name="Compare" component={CompareOverlay} options={popup ? popupOptions : { title: 'Compare readings' }} />
       </Stack.Navigator>
