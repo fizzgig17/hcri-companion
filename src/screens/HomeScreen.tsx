@@ -887,6 +887,7 @@ export default function HomeScreen({ navigation }: any) {
   }, [appendLog]);
 
   const [calibrating, setCalibrating] = useState(false);
+  const calibratingRef = useRef(false);
   // What the bridge says about the meter behind it (ColorMunki dial position and calibration), kept live for the main button.
   const [tbMeter, setTbMeter] = useState<TbMeterStatus | null>(null);
   useEffect(() => {
@@ -911,11 +912,15 @@ export default function HomeScreen({ navigation }: any) {
         if (ms && ms.kind === TB_KIND_COLORMUNKI && ms.dialKnown && ms.dial === MUNKI_DIAL_CALIBRATION) {
           // ColorMunki with the dial on its calibration position: this press calibrates; no reading comes back.
           setCalibrating(true);
+          calibratingRef.current = true;
           try {
             await connRef.current.calibrateTorchBearer();
-          } finally {
+          } catch (err) {
             setCalibrating(false);
+            throw err; // calibratingRef stays true so the failure alert says "Calibration failed"
           }
+          setCalibrating(false);
+          calibratingRef.current = false;
           appendLog('ColorMunki calibrated');
           hapticSuccess();
           setStatus('connected');
@@ -934,7 +939,9 @@ export default function HomeScreen({ navigation }: any) {
       }
       await acceptReading(r);
     } catch (e: any) {
-      appendLog(`Measurement failed: ${e.message}`);
+      const wasCal = calibratingRef.current;
+      calibratingRef.current = false;
+      appendLog(`${wasCal ? 'Calibration' : 'Measurement'} failed: ${e.message}`);
       setStatus('connected');
       hapticFailure();
       // Root cause of "it shows the same reading every time" (2026-09-28):
@@ -947,7 +954,7 @@ export default function HomeScreen({ navigation }: any) {
       // failed reading indistinguishable from a genuine duplicate one.
       // A real Alert here is the fix -- it's the one place in this flow
       // the person is guaranteed to actually see, right when it happens.
-      Alert.alert('Measurement failed', e.message ?? 'The meter did not respond in time. Try again.');
+      Alert.alert(wasCal ? 'Calibration failed' : 'Measurement failed', e.message ?? 'The meter did not respond in time. Try again.');
     }
   }, [appendLog]);
 
@@ -1711,7 +1718,7 @@ export default function HomeScreen({ navigation }: any) {
             copyingLink={copyingLink}
             onCopyLink={copyReportLink}
             statIds={statIds}
-            connectedDeviceName={deviceName}
+            connectedDeviceName={tbMeter && tbMeter.kind === TB_KIND_COLORMUNKI ? 'ColorMunki' : deviceName}
             connectedDeviceId={status === 'connected' || status === 'measuring' ? connRef.current?.getDeviceId() ?? null : null}
             battery={battery}
             uploadTitle={uploadTitle}

@@ -87,6 +87,7 @@ export function colorMunkiFailMessage(reason: number): string {
     case 1: return 'The light is too bright for the ColorMunki. Move it further away or dim it, then try again.';
     case 2: return 'The ColorMunki did not answer. Check it is still plugged in, then try again.';
     case 3: return 'Calibrate first: turn the ColorMunki dial to the calibration position and press Calibrate.';
+    case 6: return 'Calibration failed. Check the ColorMunki is still plugged in and the dial is on the calibration position, then try again.';
     case 5: return 'Turn the ColorMunki dial to Ambient to take a reading (or to Calibration to calibrate).';
     default: return 'The ColorMunki could not finish. Try again.';
   }
