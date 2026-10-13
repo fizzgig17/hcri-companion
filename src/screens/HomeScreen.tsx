@@ -27,7 +27,7 @@ import { uploadReadingToHcri, uploadFlickerToHcri } from '../hcri/uploadFlickerT
 import { getReportLink } from '../hcri/getReportLink';
 import { fetchSampleReading } from '../hcri/fetchSampleReading';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
-import { loadAutoConnectPreference, loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference, loadTestReportIdPreference, loadSideTabPreference, saveSideTabPreference, loadSideTabModePreference } from '../storage/preferences';
+import { loadAutoConnectPreference, loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference, loadTestReportIdPreference, loadSideTabPreference, saveSideTabPreference, loadSideTabModePreference, saveFoldableSeen } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
 import { addReading, loadHistory, recordUpload, setReadingFlicker, updateReadingLed } from '../storage/readingHistory';
 import { fetchLedSuggestion, LedDetails, LedSuggestion } from '../hcri/ledApi';
@@ -107,6 +107,7 @@ export default function HomeScreen({ navigation }: any) {
   // the usual tablet History strip so it stays readable. Narrow left panes swipe through the charts instead of
   // drawing them all at once.
   const square = layoutMode === 'dashboard' && isSquareWindow(winW, winH);
+  useEffect(() => { if (isSquareWindow(winW, winH)) saveFoldableSeen().catch(() => {}); }, [winW, winH]);
   const sideW = layoutMode !== 'dashboard' ? 0 : square ? sideColumnWidth(winW) : 320;
   const gridCharts = layoutMode === 'dashboard' && winW - sideW >= MIN_GRID_WIDTH;
   const dataBesideHistory = layoutMode === 'stacked' || square;
