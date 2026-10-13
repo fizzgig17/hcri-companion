@@ -23,9 +23,10 @@ import {
 } from './protocol';
 import type { BatteryStatus } from './protocol';
 import {
-  TB_SERVICE_UUID, TB_CMD_UUID, TB_RESULT_UUID, TB_STATUS_UUID, TB_CMD_SCAN_B64, TB_CMD_RESEND_B64, TB_STATE_ERROR, TB_STATE_SCANNING,
+  TB_SERVICE_UUID, TB_CMD_UUID, TB_RESULT_UUID, TB_STATUS_UUID, TB_CMD_SCAN_B64, TB_CMD_RESEND_B64, TB_CMD_FLIP_ON_B64, TB_CMD_FLIP_OFF_B64, TB_STATE_ERROR, TB_STATE_SCANNING,
   isTorchBearerName, TbReassembler, tbToMeterResult, tbSummarySignature, parseTbSummary,
 } from './torchBearer';
+import { getTbFlip, onTbFlip } from './tbDisplay';
 import type { MeterResult } from './parseResult';
 import {
   saveLastDeviceId,
@@ -262,6 +263,7 @@ export class MeterConnection {
   private abortRequested = false;
   private tbMode = false;
   private tbSubs: Subscription[] = [];
+  private tbFlipUnsub: (() => void) | null = null;
   private tbReassembler = new TbReassembler();
   private tbWaiter: { resolve: (r: MeterResult) => void; reject: (e: Error) => void } | null = null;
   // A scan started from the bridge's own button (not by this app): started() when it begins, result() with the finished reading.
@@ -592,6 +594,14 @@ export class MeterConnection {
     this.characteristicUuid = TB_CMD_UUID;
     saveLastDeviceId(connected.id).catch((e) => this.log(`Failed to persist last device id: ${e}`));
 
+    // Screen orientation: send the Settings choice now (if there is one) and again whenever it changes.
+    this.tbFlipUnsub?.();
+    this.tbFlipUnsub = onTbFlip((f) => {
+      this.sendTorchBearerFlip(f).catch(() => {});
+    });
+    const wantFlip = getTbFlip();
+    if (wantFlip !== null) this.sendTorchBearerFlip(wantFlip).catch(() => {});
+
     this.tbSubs.forEach((x) => x.remove());
     this.tbReassembler.reset();
     this.tbSubs = [
@@ -648,6 +658,8 @@ export class MeterConnection {
       this.characteristic = null;
       this.tbSubs.forEach((x) => x.remove());
       this.tbSubs = [];
+      this.tbFlipUnsub?.();
+      this.tbFlipUnsub = null;
       if (this.tbWaiter) {
         const w = this.tbWaiter;
         this.tbWaiter = null;
@@ -695,6 +707,17 @@ export class MeterConnection {
    * Asks the bridge to send its last reading again. The app calls this when it comes back to the foreground, to pick up
    * a reading taken with the bridge's button while the phone was not listening; a reading the app already has is ignored.
    */
+  /** Tells a connected Torch Bearer which way up to draw its screen (it keeps the choice itself). Older firmware ignores the command. */
+  private async sendTorchBearerFlip(flipped: boolean): Promise<void> {
+    if (!this.isTorchBearer() || !this.characteristic) return;
+    try {
+      this.log(`Torch Bearer: display ${flipped ? 'turned 180 degrees' : 'standard way up'}`, true);
+      await this.characteristic.writeWithResponse(flipped ? TB_CMD_FLIP_ON_B64 : TB_CMD_FLIP_OFF_B64);
+    } catch (e: any) {
+      this.log(`Could not set the Torch Bearer display orientation: ${describeBleError(e)}`);
+    }
+  }
+
   async requestTorchBearerLastReading(): Promise<void> {
     if (!this.isTorchBearer() || !this.characteristic || this.tbWaiter) return;
     this.log('Torch Bearer: asking for the last reading (catching up)', true);
@@ -1104,6 +1127,8 @@ export class MeterConnection {
     this.siblingSubscriptions = [];
     this.tbSubs.forEach((x) => x.remove());
     this.tbSubs = [];
+    this.tbFlipUnsub?.();
+    this.tbFlipUnsub = null;
     this.tbMode = false;
     if (this.device) {
       await this.device.cancelConnection().catch(() => {});

@@ -36,6 +36,10 @@ export const TB_CMD_SCAN_B64 = 'AQ==';
 /** Base64 of the single byte 0x02 -- "send the last reading again". */
 export const TB_CMD_RESEND_B64 = 'Ag==';
 
+/** Base64 of 0x03 0x00 / 0x03 0x01 -- "set the display orientation" (1 = turned 180 degrees). Needs bridge firmware that knows 0x03; older firmware ignores it. */
+export const TB_CMD_FLIP_OFF_B64 = 'AwA=';
+export const TB_CMD_FLIP_ON_B64 = 'AwE=';
+
 /** Bridge status states (status characteristic, byte 0). */
 export const TB_STATE_SCANNING = 1;
 export const TB_STATE_ERROR = 3;

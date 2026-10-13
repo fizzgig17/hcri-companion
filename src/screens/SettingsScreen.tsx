@@ -51,6 +51,8 @@ import {
   loadStayConnectedInBackgroundPreference,
   saveStayConnectedInBackgroundPreference,
   loadTbCorrectionPreference,
+  loadTbFlipPreference,
+  saveTbFlipPreference,
   loadFlickerWithReadingPreference,
   loadSideTabModePreference,
   loadFoldableSeen,
@@ -65,6 +67,7 @@ import {
   saveTbCorrectionPreference,
 } from '../storage/preferences';
 import { setTbCorrectionEnabled } from '../ble/tbCorrection';
+import { setTbFlip } from '../ble/tbDisplay';
 import {
   StatDisplayPrefs,
   loadStatDisplayPrefs,
@@ -146,6 +149,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   const [verboseLogging, setVerboseLogging] = useState(false);
   const [testReportId, setTestReportId] = useState('');
   const [tbCorrection, setTbCorrection] = useState(true);
+  const [tbFlipped, setTbFlipped] = useState(false);
   const [flickerWithReading, setFlickerWithReading] = useState(false);
   const [sideTabMode, setSideTabMode] = useState<SideTabMode>('remember');
   const [ledSuggestions, setLedSuggestions] = useState(true);
@@ -202,6 +206,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
     loadVerboseLoggingPreference().then(setVerboseLogging);
     loadTestReportIdPreference().then(setTestReportId);
     loadTbCorrectionPreference().then(setTbCorrection);
+    loadTbFlipPreference().then((v) => setTbFlipped(v === true));
     loadFlickerWithReadingPreference().then(setFlickerWithReading);
     loadSideTabModePreference().then(setSideTabMode).catch(() => {});
     loadLedSuggestionsPreference().then(setLedSuggestions);
@@ -271,6 +276,12 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   const toggleFlickerWithReading = async (value: boolean) => {
     setFlickerWithReading(value);
     await saveFlickerWithReadingPreference(value);
+  };
+
+  const toggleTbFlip = async (value: boolean) => {
+    setTbFlipped(value);
+    setTbFlip(value); // sent to a connected Torch Bearer right away, and to the next one that connects
+    await saveTbFlipPreference(value);
   };
 
   const toggleTbCorrection = async (value: boolean) => {
@@ -835,6 +846,18 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
           </Text>
         </View>
         <Switch accessibilityLabel="Torch Bearer correction" value={tbCorrection} onValueChange={toggleTbCorrection} trackColor={{ true: colors.accent }} />
+      </View>
+
+      <View style={styles.toggleRow}>
+        <View style={styles.toggleTextWrap}>
+          <Text style={styles.toggleLabel}>Flip Torch Bearer screen</Text>
+          <Text style={styles.toggleHint}>
+            Turns the Torch Bearer's screen 180° so it reads upright the other way round (the arrow then points to the
+            button at the bottom left). Takes effect on the bridge right away while it is connected, and it keeps the
+            setting. Needs the latest bridge firmware.
+          </Text>
+        </View>
+        <Switch accessibilityLabel="Flip Torch Bearer screen" value={tbFlipped} onValueChange={toggleTbFlip} trackColor={{ true: colors.accent }} />
       </View>
 
       <View style={styles.toggleRow}>
