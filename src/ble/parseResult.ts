@@ -32,6 +32,8 @@ export interface MeterResult {
   sampleLabel?: string;
   /** Set to 'torchbearer' on a reading from the Torch Bearer bridge (spectrum-only device): the HPCS-specific peak/dark ADC signal doesn't exist there, so the UI leaves those out. */
   source?: 'torchbearer';
+  /** Set when the reading came from a ColorMunki behind the bridge (10 nm optical bands, interpolated to 1 nm by the bridge); the Torch Bearer correction is not applied to it. */
+  meterModel?: 'colormunki';
   /** Torch Bearer only: the spectrometer's own exposure status on the final frame -- 0 normal, 1 over-exposed, 2 under-exposed. */
   tbStatus?: number;
   /** Torch Bearer only: true when the HPCS-matching spectral correction (ble/tbCorrection.ts) was applied to this spectrum, false for the raw spectrum. */

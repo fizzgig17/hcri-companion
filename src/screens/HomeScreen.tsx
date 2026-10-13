@@ -27,7 +27,7 @@ import { uploadReadingToHcri, uploadFlickerToHcri } from '../hcri/uploadFlickerT
 import { getReportLink } from '../hcri/getReportLink';
 import { fetchSampleReading } from '../hcri/fetchSampleReading';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
-import { loadAutoConnectPreference, loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference, loadTestReportIdPreference, loadSideTabPreference, saveSideTabPreference, loadSideTabModePreference, saveFoldableSeen } from '../storage/preferences';
+import { loadAutoConnectPreference, loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference, loadTestReportIdPreference, loadMunkiCalHoursPreference, loadMunkiBridgeIds, saveMunkiBridgeId, loadSideTabPreference, saveSideTabPreference, loadSideTabModePreference, saveFoldableSeen } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
 import { addReading, loadHistory, recordUpload, setReadingFlicker, updateReadingLed } from '../storage/readingHistory';
 import { fetchLedSuggestion, LedDetails, LedSuggestion } from '../hcri/ledApi';
@@ -39,6 +39,7 @@ import { IS_DEV_BUILD } from '../hcri/buildTarget';
 import { shareDebugLog } from '../utils/shareLog';
 import { shareSingleReadingCsv } from '../utils/shareCsv';
 import { hapticSuccess, hapticFailure } from '../utils/haptics';
+import { getMunkiCalHours, setMunkiCalHours, munkiButtonMode, TB_KIND_COLORMUNKI, MUNKI_DIAL_CALIBRATION, type TbMeterStatus } from '../ble/torchBearer';
 import { enableKeepAwake, disableKeepAwake } from '../utils/keepAwake';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLayoutMode, isSquareWindow, sideColumnWidth, MIN_GRID_WIDTH } from '../layout';
@@ -421,7 +422,7 @@ export default function HomeScreen({ navigation }: any) {
   // scan sessions like that, which is why reconnecting only ever worked
   // again after a full app restart (a fresh process resets the throttle).
   // Readings started with the button on the Torch Bearer itself (see the effect after acceptReading).
-  const tbButtonRef = useRef<{ started: () => void; result: (r: MeterResult) => void }>({ started: () => {}, result: () => {} });
+  const tbButtonRef = useRef<{ started: () => void; result: (r: MeterResult) => void; idle: () => void }>({ started: () => {}, result: () => {}, idle: () => {} });
   const getConnection = useCallback((): MeterConnection => {
     if (!connRef.current) {
       connRef.current = new MeterConnection(appendLog, () => {
@@ -439,6 +440,7 @@ export default function HomeScreen({ navigation }: any) {
       connRef.current.setTorchBearerButtonHandlers({
         started: () => tbButtonRef.current.started(),
         result: (r) => tbButtonRef.current.result(r),
+        idle: () => tbButtonRef.current.idle(),
       });
     }
     return connRef.current;
@@ -884,6 +886,31 @@ export default function HomeScreen({ navigation }: any) {
       }
   }, [appendLog]);
 
+  const [calibrating, setCalibrating] = useState(false);
+  const calibratingRef = useRef(false);
+  // What the bridge says about the meter behind it (ColorMunki dial position and calibration), kept live for the main button.
+  const [tbMeter, setTbMeter] = useState<TbMeterStatus | null>(null);
+  // Re-evaluates the ColorMunki calibration age once a minute (and picks up the Settings limit when this screen is shown).
+  const [calClock, setCalClock] = useState(Date.now());
+  const [munkiBridgeIds, setMunkiBridgeIds] = useState<Record<string, boolean>>({});
+  useEffect(() => { loadMunkiBridgeIds().then(setMunkiBridgeIds); }, []);
+  useEffect(() => {
+    const id = connRef.current?.getDeviceId?.();
+    if (!tbMeter || !id) return;
+    saveMunkiBridgeId(id, tbMeter.kind === TB_KIND_COLORMUNKI).then(setMunkiBridgeIds).catch(() => {});
+  }, [tbMeter?.kind]);
+  useEffect(() => {
+    loadMunkiCalHoursPreference().then((h) => { setMunkiCalHours(h); setCalClock(Date.now()); }).catch(() => {});
+    const id = setInterval(() => setCalClock(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
+  useEffect(() => {
+    const c = connRef.current;
+    if (!c || !c.isTorchBearer()) { setTbMeter(null); return; }
+    setTbMeter(c.getTbMeterStatus());
+    return c.onTbMeterStatus(setTbMeter);
+  }, [status]);
+
   const measure = useCallback(async () => {
     if (!connRef.current) return;
     setLiveUnsaved(null);
@@ -895,6 +922,24 @@ export default function HomeScreen({ navigation }: any) {
       // rather than shown as a blank chart with nonsense stats.
       let r: MeterResult;
       if (connRef.current.isTorchBearer()) {
+        const ms = connRef.current.getTbMeterStatus();
+        if (ms && ms.kind === TB_KIND_COLORMUNKI && ms.dialKnown && ms.dial === MUNKI_DIAL_CALIBRATION) {
+          // ColorMunki with the dial on its calibration position: this press calibrates; no reading comes back.
+          setCalibrating(true);
+          calibratingRef.current = true;
+          try {
+            await connRef.current.calibrateTorchBearer();
+          } catch (err) {
+            setCalibrating(false);
+            throw err; // calibratingRef stays true so the failure alert says "Calibration failed"
+          }
+          setCalibrating(false);
+          calibratingRef.current = false;
+          appendLog('ColorMunki calibrated');
+          hapticSuccess();
+          setStatus('connected');
+          return;
+        }
         // Torch Bearer (ESP32 bridge): one write starts a scan, the whole spectrum comes back.
         r = await connRef.current.takeTorchBearerReading();
       } else {
@@ -908,7 +953,9 @@ export default function HomeScreen({ navigation }: any) {
       }
       await acceptReading(r);
     } catch (e: any) {
-      appendLog(`Measurement failed: ${e.message}`);
+      const wasCal = calibratingRef.current;
+      calibratingRef.current = false;
+      appendLog(`${wasCal ? 'Calibration' : 'Measurement'} failed: ${e.message}`);
       setStatus('connected');
       hapticFailure();
       // Root cause of "it shows the same reading every time" (2026-09-28):
@@ -921,7 +968,7 @@ export default function HomeScreen({ navigation }: any) {
       // failed reading indistinguishable from a genuine duplicate one.
       // A real Alert here is the fix -- it's the one place in this flow
       // the person is guaranteed to actually see, right when it happens.
-      Alert.alert('Measurement failed', e.message ?? 'The meter did not respond in time. Try again.');
+      Alert.alert(wasCal ? 'Calibration failed' : 'Measurement failed', e.message ?? 'The meter did not respond in time. Try again.');
     }
   }, [appendLog]);
 
@@ -934,6 +981,13 @@ export default function HomeScreen({ navigation }: any) {
       if (statusRef.current === 'connected') { setLiveUnsaved(null); setPagerResetKey({}); setStatus('measuring'); }
       if (tbButtonTimer.current) clearTimeout(tbButtonTimer.current);
       tbButtonTimer.current = setTimeout(() => { setStatus((s) => (s === 'measuring' ? 'connected' : s)); }, 45000); // no reading arrived
+    },
+    // The bridge went back to ready without a reading (a ColorMunki calibration with its button, or a refusal).
+    idle: () => {
+      if (!tbButtonTimer.current) return;
+      clearTimeout(tbButtonTimer.current);
+      tbButtonTimer.current = null;
+      setStatus((s) => (s === 'measuring' ? 'connected' : s));
     },
     result: (r: MeterResult) => {
       if (tbButtonTimer.current) { clearTimeout(tbButtonTimer.current); tbButtonTimer.current = null; }
@@ -1504,6 +1558,15 @@ export default function HomeScreen({ navigation }: any) {
   }, [log]);
 
   const isBusy = status === 'connecting' || status === 'measuring' || status === 'uploading';
+  // ColorMunki behind the bridge: the centre button follows the dial. Calibration position -> an orange "Calibrate"; Ambient
+  // (once calibrated) -> "Take reading"; any other position (or not calibrated) -> disabled, with a note above it.
+  const munkiMain: { override?: { caption: string; tint?: string; disabled?: boolean }; note?: string } = (() => {
+    if (!tbMeter || tbMeter.kind !== TB_KIND_COLORMUNKI || (status !== 'connected' && status !== 'uploading')) return {};
+    const mode = munkiButtonMode(tbMeter, getMunkiCalHours(), calClock);
+    if (mode.kind === 'calibrate') return { override: { caption: 'Calibrate', tint: '#E8922E' }, note: 'Dial is on calibration: press Calibrate, keep the instrument still.' };
+    if (mode.kind === 'blocked') return { override: { caption: mode.caption, disabled: true }, note: mode.note };
+    return {};
+  })();
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
@@ -1658,6 +1721,7 @@ export default function HomeScreen({ navigation }: any) {
             disconnect={disconnect}
             resetConnection={resetConnection}
             devicePickerDevices={multiMeterCandidates}
+            munkiBridgeIds={munkiBridgeIds}
             devicePickerVisible={devicePickerVisible}
             onOpenDevicePicker={openDevicePicker}
             onSelectDevice={selectDeviceFromPicker}
@@ -1669,7 +1733,7 @@ export default function HomeScreen({ navigation }: any) {
             copyingLink={copyingLink}
             onCopyLink={copyReportLink}
             statIds={statIds}
-            connectedDeviceName={deviceName}
+            connectedDeviceName={tbMeter && tbMeter.kind === TB_KIND_COLORMUNKI ? 'ColorMunki' : deviceName}
             connectedDeviceId={status === 'connected' || status === 'measuring' ? connRef.current?.getDeviceId() ?? null : null}
             battery={battery}
             uploadTitle={uploadTitle}
@@ -1711,6 +1775,9 @@ export default function HomeScreen({ navigation }: any) {
           isSample={!!result?.sampleLabel}
           connect={() => connect({ promptIfBluetoothOff: true })}
           measure={measure}
+          mainOverride={munkiMain.override}
+          meterNote={munkiMain.note}
+          busyCaption={calibrating ? 'Calibrating…' : undefined}
           disconnect={disconnect}
           onShowTestReading={showTestReading}
           loadingTestReading={loadingTestReading}

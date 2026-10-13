@@ -242,3 +242,37 @@ export async function loadThemeModePreference(): Promise<ThemeMode> {
 export async function saveThemeModePreference(mode: ThemeMode): Promise<void> {
   await AsyncStorage.setItem(THEME_MODE_KEY, mode);
 }
+
+// ColorMunki: hours after which the dark calibration counts as stale and the Take reading button asks for a new one.
+// 0 = never. Default 1.
+const MUNKI_CAL_HOURS_KEY = 'hcri.io.pref.colorMunkiCalHours';
+
+export async function loadMunkiCalHoursPreference(): Promise<number> {
+  const raw = await AsyncStorage.getItem(MUNKI_CAL_HOURS_KEY);
+  const n = raw === null ? 1 : Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : 1;
+}
+
+export async function saveMunkiCalHoursPreference(hours: number): Promise<void> {
+  await AsyncStorage.setItem(MUNKI_CAL_HOURS_KEY, String(hours));
+}
+
+// Which bridges (by BLE id) have been seen running as a ColorMunki, so the meter picker can label them before connecting.
+const MUNKI_BRIDGES_KEY = 'hcri.io.pref.colorMunkiBridges';
+
+export async function loadMunkiBridgeIds(): Promise<Record<string, boolean>> {
+  try {
+    const raw = await AsyncStorage.getItem(MUNKI_BRIDGES_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function saveMunkiBridgeId(id: string, isMunki: boolean): Promise<Record<string, boolean>> {
+  const cur = await loadMunkiBridgeIds();
+  if (!!cur[id] === isMunki) return cur;
+  const next = { ...cur, [id]: isMunki };
+  await AsyncStorage.setItem(MUNKI_BRIDGES_KEY, JSON.stringify(next));
+  return next;
+}

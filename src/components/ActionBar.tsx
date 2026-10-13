@@ -62,6 +62,11 @@ interface Props {
   connect: () => void;
   onCancelConnect?: () => void;
   measure: () => void;
+  /** ColorMunki behind the bridge: replaces the centre button's caption/colour/enabled state, and a note shows above the bar. */
+  mainOverride?: { caption: string; tint?: string; disabled?: boolean };
+  meterNote?: string;
+  /** Caption while busy, when it is not a reading ("Calibrating…"). */
+  busyCaption?: string;
   disconnect: () => void;
   onShowTestReading: () => void;
   loadingTestReading: boolean;
@@ -117,10 +122,11 @@ export default function ActionBar(p: Props) {
     sideLabel: { color: colors.muted, fontSize: 10.5, marginTop: 3, fontWeight: '600' },
     sideLabelAccent: { color: colors.accent },
     disabled: { opacity: 0.45 },
+    note: { color: colors.muted, fontSize: 12.5, fontWeight: '600', textAlign: 'center', paddingHorizontal: 10, marginTop: 2, marginBottom: 6 },
   });
 
   const { status } = p;
-  const busyLabel = status === 'connecting' ? 'Connecting…' : status === 'measuring' ? 'Measuring…' : null;
+  const busyLabel = status === 'connecting' ? 'Connecting…' : status === 'measuring' ? (p.busyCaption ?? 'Measuring…') : null;
   const uploadDisabled = p.uploading || !p.hasReading || p.isSample;
   const connected = status === 'connected' || status === 'uploading';
   const idle = p.activeMode === 'idle';
@@ -163,10 +169,10 @@ export default function ActionBar(p: Props) {
 
 
   // The big round centre button: icon, or a spinner while busy.
-  const mainButton = (icon: IconName, caption: string, onPress?: () => void, onLongPress?: () => void) => (
+  const mainButton = (icon: IconName, caption: string, onPress?: () => void, onLongPress?: () => void, tint?: string) => (
     <View style={styles.center}>
       <TouchableOpacity
-        style={[styles.ring, !onPress && styles.disabled]}
+        style={[styles.ring, tint && { borderColor: tint + '88' }, !onPress && styles.disabled]}
         onPress={onPress && (() => { hapticTap(); onPress(); })}
         onLongPress={onLongPress && (() => { hapticTap(); onLongPress(); })}
         disabled={!onPress}
@@ -174,16 +180,17 @@ export default function ActionBar(p: Props) {
         accessibilityRole="button"
         accessibilityLabel={caption}
       >
-        <View style={[styles.inner, icon === 'play' && { paddingLeft: 3 }]}>
+        <View style={[styles.inner, tint && { backgroundColor: tint + 'D9' }, icon === 'play' && { paddingLeft: 3 }]}>
           {busyLabel ? <ActivityIndicator color="#fff" /> : <Icon name={icon} size={icon === 'play' ? 26 : 24} color="#fff" />}
         </View>
       </TouchableOpacity>
-      <Text style={styles.caption} numberOfLines={1} adjustsFontSizeToFit>{caption}</Text>
+      <Text style={[styles.caption, tint && { color: tint }]} numberOfLines={1} adjustsFontSizeToFit>{caption}</Text>
     </View>
   );
 
   return (
     <View style={styles.wrap}>
+      {connected && p.meterNote ? <Text style={styles.note}>{p.meterNote}</Text> : null}
       <View style={styles.bar}>
         <View style={[styles.slot, styles.slotLeft]}>
           {connected && <SideButton icon="power" label="Disconnect" onPress={p.disconnect} />}
@@ -217,7 +224,9 @@ export default function ActionBar(p: Props) {
         {busyLabel && (status === 'connecting'
           ? mainButton('bluetooth', 'Tap to cancel', p.onCancelConnect)
           : mainButton('play', busyLabel))}
-        {connected && mainButton('play', 'Take reading', idle ? p.measure : undefined)}
+        {connected && (p.mainOverride
+          ? mainButton('play', p.mainOverride.caption, p.mainOverride.disabled || !idle ? undefined : p.measure, undefined, p.mainOverride.tint)
+          : mainButton('play', 'Take reading', idle ? p.measure : undefined))}
 
         <View style={[styles.slot, styles.slotRight]}>
           {connected && p.liveSupported && (
