@@ -52,6 +52,8 @@ import {
   loadTbCorrectionPreference,
   loadFlickerWithReadingPreference,
   loadSideTabModePreference,
+  loadFoldableSeen,
+  saveFoldableSeen,
   saveSideTabModePreference,
   type SideTabMode,
   saveFlickerWithReadingPreference,
@@ -165,7 +167,10 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   const tokenScrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const kbHeight = useKeyboardHeight(true);
   const { width: winW, height: winH } = useWindowDimensions();
-  const unfolded = isSquareWindow(winW, winH); // only an unfolded foldable gets the side panel, so only it shows the setting
+  const [foldableSeen, setFoldableSeen] = useState(false);
+  const unfolded = isSquareWindow(winW, winH);
+  const isFoldable = unfolded || foldableSeen; // a device that has ever been unfolded keeps the foldable-only settings, folded or not
+  useEffect(() => { loadFoldableSeen().then(setFoldableSeen).catch(() => {}); }, []);
   const insets = useSafeAreaInsets();
   const layoutMode = useLayoutMode();
   const wide = layoutMode !== 'compact';
@@ -748,7 +753,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
         </View>
       </View>
 
-      {unfolded && (
+      {isFoldable && (
       <View style={styles.appearanceSection}>
         <Text style={styles.appearanceLabel}>Unfolded foldable: side panel opens on</Text>
         <View style={styles.modeSegment}>

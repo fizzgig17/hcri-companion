@@ -200,6 +200,18 @@ export async function saveSideTabModePreference(mode: SideTabMode): Promise<void
   await AsyncStorage.setItem(SIDE_TAB_MODE_KEY, mode);
 }
 
+// Set the first time the window is ever nearly square (an unfolded foldable), so Settings can show the foldable-only
+// options on that device even while it is folded.
+const FOLDABLE_SEEN_KEY = 'hcri.io.foldableSeen';
+
+export async function loadFoldableSeen(): Promise<boolean> {
+  return (await AsyncStorage.getItem(FOLDABLE_SEEN_KEY)) === '1';
+}
+
+export async function saveFoldableSeen(): Promise<void> {
+  await AsyncStorage.setItem(FOLDABLE_SEEN_KEY, '1');
+}
+
 export async function saveSideTabPreference(tab: 'history' | 'data'): Promise<void> {
   await AsyncStorage.setItem(SIDE_TAB_KEY, tab);
 }
