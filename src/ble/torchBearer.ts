@@ -104,7 +104,7 @@ export type MunkiButtonMode =
   | { kind: 'measure' }
   | { kind: 'blocked'; caption: string; note: string };
 
-let munkiCalHours = 4;
+let munkiCalHours = 1;
 /** Settings > ColorMunki calibration limit in hours (0 = never expires). */
 export function setMunkiCalHours(h: number): void { munkiCalHours = h; }
 export function getMunkiCalHours(): number { return munkiCalHours; }

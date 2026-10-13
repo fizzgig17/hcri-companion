@@ -153,7 +153,8 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   const [testReportId, setTestReportId] = useState('');
   const [tbCorrection, setTbCorrection] = useState(true);
   const [tbFlipped, setTbFlipped] = useState(false);
-  const [munkiHours, setMunkiHours] = useState('4');
+  const [munkiHours, setMunkiHours] = useState('1');
+  const [help, setHelp] = useState<{ title: string; text: string } | null>(null);
   const [flickerWithReading, setFlickerWithReading] = useState(false);
   const [sideTabMode, setSideTabMode] = useState<SideTabMode>('remember');
   const [ledSuggestions, setLedSuggestions] = useState(true);
@@ -555,6 +556,48 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
     toggleLabel: { color: colors.text, fontSize: 14, fontWeight: '600', marginBottom: 4 },
     toggleHint: { color: colors.muted, fontSize: 12, lineHeight: 16 },
 
+    sectionHeader: {
+      marginTop: 28,
+      marginBottom: 2,
+      color: colors.muted,
+      fontSize: 12,
+      fontWeight: '700',
+      letterSpacing: 0.8,
+      textTransform: 'uppercase',
+    },
+    sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', marginTop: 28, marginBottom: 6 },
+    sectionHeaderInline: {
+      color: colors.muted,
+      fontSize: 12,
+      fontWeight: '700',
+      letterSpacing: 0.8,
+      textTransform: 'uppercase',
+    },
+    settingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.cardBorder,
+    },
+    settingLabelWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', marginRight: 12 },
+    settingLabel: { color: colors.text, fontSize: 14, fontWeight: '600', flexShrink: 1 },
+    settingBlock: { paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.cardBorder },
+    settingBlockLabelRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+    helpCircle: {
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      borderWidth: 1.5,
+      borderColor: colors.muted,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginLeft: 8,
+    },
+    helpMark: { color: colors.muted, fontSize: 12, fontWeight: '700', lineHeight: 15 },
+    helpBody: { color: colors.text, fontSize: 14, lineHeight: 20 },
+
     statsSection: {
       marginTop: 28,
       paddingTop: 20,
@@ -575,6 +618,32 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
     aboutTitle: { color: colors.text, fontSize: 14, fontWeight: '600', marginBottom: 12 },
   });
 
+  // Every setting is a single line: its name, a small (?) that opens the explanation, and the control.
+  const helpButton = (title: string, text: string) => (
+    <TouchableOpacity
+      onPress={() => setHelp({ title, text })}
+      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      accessibilityRole="button"
+      accessibilityLabel={`About ${title}`}
+    >
+      <View style={styles.helpCircle}>
+        <Text style={styles.helpMark}>?</Text>
+      </View>
+    </TouchableOpacity>
+  );
+  const settingRow = (label: string, helpText: string, control: React.ReactNode) => (
+    <View style={styles.settingRow}>
+      <View style={styles.settingLabelWrap}>
+        <Text style={styles.settingLabel}>{label}</Text>
+        {helpButton(label, helpText)}
+      </View>
+      {control}
+    </View>
+  );
+  const switchRow = (label: string, helpText: string, value: boolean, onChange: (v: boolean) => void) =>
+    settingRow(label, helpText, <Switch accessibilityLabel={label} value={value} onValueChange={onChange} trackColor={{ true: colors.accent }} />);
+  const sectionHeader = (title: string) => <Text style={styles.sectionHeader}>{title}</Text>;
+
   // The Settings page in two parts so tablets can lay them out as columns (see `columns`).
   const settingsLeft = (
     <>
@@ -583,6 +652,16 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
           a few fixes behind develop. See buildInfo.ts for how this stays
           in sync with the native versionName/versionCode. */}
       <VersionStamp />
+
+      <View style={[styles.sectionHeaderRow, { marginTop: 8 }]}>
+        <Text style={styles.sectionHeaderInline}>hCRI.io account</Text>
+        {helpButton(
+          'hCRI.io account',
+          hasSaved
+            ? 'Your credentials are saved on this device. To use a different account or key, forget the current credentials first. “Forget Credentials” only removes the token from this device; deleting the account itself is done on hcri.io.'
+            : "Enter your hCRI.io username and API token, then tap Save. Don't have a token? Tap 🔑 to sign in with your hCRI.io username and password and create one."
+        )}
+      </View>
 
       {hasSaved ? (
         // Locked view: credentials are already saved, so the fields are
@@ -604,9 +683,6 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
           <View style={styles.lockedField}>
             <Text style={styles.lockedFieldText}>{maskSecret(loadedToken)}</Text>
           </View>
-          <Text style={styles.hint}>
-            To use a different account or key, forget the current credentials first.
-          </Text>
 
           <View style={styles.saveButtonWrap}>
             <PrimaryButton title="Forget Credentials" onPress={forget} variant="danger" style={styles.noTopMargin} />
@@ -659,9 +735,6 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
               <Text style={styles.generateTokenIcon}>🔑</Text>
             </TouchableOpacity>
           </View>
-          <Text style={styles.generateTokenHint}>
-            Don't have a token? Tap 🔑 to sign in with your hCRI.io username and password and create one.
-          </Text>
         </>
       )}
 
@@ -773,8 +846,12 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
         </TouchableOpacity>
       </Modal>
 
-      <View style={styles.appearanceSection}>
-        <Text style={styles.appearanceLabel}>Appearance</Text>
+      {sectionHeader('Display')}
+      <View style={styles.settingBlock}>
+        <View style={styles.settingBlockLabelRow}>
+          <Text style={styles.settingLabel}>Appearance</Text>
+          {helpButton('Appearance', 'Light, dark, or follow the phone\'s setting.')}
+        </View>
         <View style={styles.modeSegment}>
           {THEME_MODE_OPTIONS.map((opt) => {
             const active = mode === opt.value;
@@ -792,8 +869,11 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
       </View>
 
       {isFoldable && (
-      <View style={styles.appearanceSection}>
-        <Text style={styles.appearanceLabel}>Unfolded foldable: side panel opens on</Text>
+      <View style={styles.settingBlock}>
+        <View style={styles.settingBlockLabelRow}>
+          <Text style={styles.settingLabel}>Foldable side panel opens on</Text>
+          {helpButton('Foldable side panel', 'On a nearly square unfolded screen the right-hand column switches between History and Data. Choose which one it opens on, or have it remember the last one you used.')}
+        </View>
         <View style={styles.modeSegment}>
           {([['remember', 'Last used'], ['history', 'History'], ['data', 'Data']] as [SideTabMode, string][]).map(([value, label]) => {
             const active = sideTabMode === value;
@@ -804,72 +884,22 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
             );
           })}
         </View>
-        <Text style={[styles.toggleHint, { marginTop: 6 }]}>On a nearly square unfolded screen the right-hand column switches between History and Data.</Text>
       </View>
       )}
 
-      <View style={styles.toggleRow}>
-        <View style={styles.toggleTextWrap}>
-          <Text style={styles.toggleLabel}>Button taps</Text>
-          <Text style={styles.toggleHint}>A short tick when you press a button in the bar at the bottom of the Main screen.</Text>
-        </View>
-        <Switch accessibilityLabel="Button taps" value={hapticTaps} onValueChange={toggleHapticTaps} trackColor={{ true: colors.accent }} />
-      </View>
-      <View style={styles.toggleRow}>
-        <View style={styles.toggleTextWrap}>
-          <Text style={styles.toggleLabel}>Reading and upload results</Text>
-          <Text style={styles.toggleHint}>A buzz when a reading or upload finishes, and a double buzz when one fails.</Text>
-        </View>
-        <Switch accessibilityLabel="Reading and upload results" value={hapticResults} onValueChange={toggleHapticResults} trackColor={{ true: colors.accent }} />
-      </View>
+      {sectionHeader('Connection')}
+      {switchRow('Auto-connect to meter', 'On by default. The app looks for your meter when it opens and when you switch back to it, and skips the attempt while Bluetooth is off. Turn off to connect only when you tap Connect to Meter.', autoConnect, toggleAutoConnect)}
+      {switchRow('Stay connected in background', "Keeps the meter connected when you switch away from the app or lock the screen, so coming back doesn't need a fresh reconnect. Turn off to disconnect the meter whenever the app isn't in the foreground instead (saves the meter's battery, at the cost of reconnecting every time).", stayConnectedInBackground, toggleStayConnectedInBackground)}
+      {switchRow('Keep screen awake while connected', 'Prevents the screen from locking during a session with the meter connected. Uses more battery.', keepAwake, toggleKeepAwake)}
 
-      <View style={styles.toggleRow}>
-        <View style={styles.toggleTextWrap}>
-          <Text style={styles.toggleLabel}>Keep screen awake while connected</Text>
-          <Text style={styles.toggleHint}>
-            Prevents the screen from locking during a session with the meter connected. Uses more battery.
-          </Text>
-        </View>
-        <Switch accessibilityLabel="Keep screen awake while connected" value={keepAwake} onValueChange={toggleKeepAwake} trackColor={{ true: colors.accent }} />
-      </View>
+      {sectionHeader('Torch Bearer')}
+      {switchRow('Spectrum correction', "Adjusts the Torch Bearer's spectrum so its CCT, Duv and color-rendering numbers line up with the HPCS meter (it reads a few percent high in CCT without it). Leave on for normal use; turn off to see the raw, uncorrected spectrum. Applies to new scans, and saved CSVs say which one was used.", tbCorrection, toggleTbCorrection)}
+      {switchRow('Flip screen', "Turns the Torch Bearer's screen 180° so it reads upright the other way round (the arrow then points to the button at the bottom left). Takes effect on the bridge right away while it is connected, and it keeps the setting. Needs the latest bridge firmware.", tbFlipped, toggleTbFlip)}
 
-      <View style={styles.toggleRow}>
-        <View style={styles.toggleTextWrap}>
-          <Text style={styles.toggleLabel}>Stay connected in background</Text>
-          <Text style={styles.toggleHint}>
-            Keeps the meter connected when you switch away from the app or lock the screen, so coming back
-            doesn't need a fresh reconnect. Turn off to disconnect the meter whenever the app isn't in the
-            foreground instead (saves the meter's battery, at the cost of reconnecting every time).
-          </Text>
-        </View>
-        <Switch accessibilityLabel="Stay connected in background"
-          value={stayConnectedInBackground}
-          onValueChange={toggleStayConnectedInBackground}
-          trackColor={{ true: colors.accent }}
-        />
-      </View>
-
-      <View style={styles.toggleRow}>
-        <View style={styles.toggleTextWrap}>
-          <Text style={styles.toggleLabel}>Torch Bearer correction</Text>
-          <Text style={styles.toggleHint}>
-            Adjusts the Torch Bearer's spectrum so its CCT, Duv and color-rendering numbers line up with the
-            HPCS meter (it reads a few percent high in CCT without it). Leave on for normal use; turn off to
-            see the raw, uncorrected spectrum. Applies to new scans, and saved CSVs say which one was used.
-          </Text>
-        </View>
-        <Switch accessibilityLabel="Torch Bearer correction" value={tbCorrection} onValueChange={toggleTbCorrection} trackColor={{ true: colors.accent }} />
-      </View>
-
-      <View style={styles.toggleRow}>
-        <View style={styles.toggleTextWrap}>
-          <Text style={styles.toggleLabel}>ColorMunki calibration limit (hours)</Text>
-          <Text style={styles.toggleHint}>
-            The ColorMunki's dark reference drifts as it warms up. Once the last calibration is older than this, the
-            Take reading button asks you to recalibrate first. 0 turns the check off. The bridge also forgets the
-            calibration whenever it is powered off.
-          </Text>
-        </View>
+      {sectionHeader('ColorMunki')}
+      {settingRow(
+        'Calibration limit (hours)',
+        "The ColorMunki's dark reference drifts as it warms up. Once the last calibration is older than this, the Take reading button asks you to recalibrate first. 0 turns the check off. The bridge also forgets the calibration whenever it is powered off.",
         <TextInput
           accessibilityLabel="ColorMunki calibration limit in hours"
           style={[styles.input, { width: 64, textAlign: 'center', marginTop: 0 }]}
@@ -881,74 +911,24 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
           returnKeyType="done"
           maxLength={5}
         />
-      </View>
+      )}
 
-      <View style={styles.toggleRow}>
-        <View style={styles.toggleTextWrap}>
-          <Text style={styles.toggleLabel}>Flip Torch Bearer screen</Text>
-          <Text style={styles.toggleHint}>
-            Turns the Torch Bearer's screen 180° so it reads upright the other way round (the arrow then points to the
-            button at the bottom left). Takes effect on the bridge right away while it is connected, and it keeps the
-            setting. Needs the latest bridge firmware.
-          </Text>
-        </View>
-        <Switch accessibilityLabel="Flip Torch Bearer screen" value={tbFlipped} onValueChange={toggleTbFlip} trackColor={{ true: colors.accent }} />
-      </View>
+      {sectionHeader('Readings')}
+      {switchRow('LED suggestions', "On by default. After a reading, hCRI.io suggests the LED (brand, model and CCT) from the shape of the spectrum and the reading's title, and you confirm it with one tap. Turn off to stop those requests and hide the suggestion cards. You can still add LED details yourself with the 💡 button.", ledSuggestions, toggleLedSuggestions)}
+      {switchRow('Capture flicker with each reading', 'After each reading, also take a one-shot flicker capture (frequency, percent flicker, flicker index and waveform). Adds a few seconds per reading and only works on meters that support flicker. Saved with the reading, shown on its Flicker page, included in shared CSVs, and uploaded with the reading to hCRI.io (attached to its report). Even when off, you can add a flicker sample to a reading from the Flicker tab before uploading it.', flickerWithReading, toggleFlickerWithReading)}
 
-      <View style={styles.toggleRow}>
-        <View style={styles.toggleTextWrap}>
-          <Text style={styles.toggleLabel}>Auto-connect to meter</Text>
-          <Text style={styles.toggleHint}>
-            On by default. The app looks for your meter when it opens and when you switch back to it, and skips the
-            attempt while Bluetooth is off. Turn off to connect only when you tap Connect to Meter.
-          </Text>
-        </View>
-        <Switch accessibilityLabel="Auto-connect to meter" value={autoConnect} onValueChange={toggleAutoConnect} trackColor={{ true: colors.accent }} />
-      </View>
+      {sectionHeader('Feedback')}
+      {switchRow('Button taps', 'A short tick when you press a button in the bar at the bottom of the Main screen.', hapticTaps, toggleHapticTaps)}
+      {switchRow('Reading and upload results', 'A buzz when a reading or upload finishes, and a double buzz when one fails.', hapticResults, toggleHapticResults)}
 
-      <View style={styles.toggleRow}>
-        <View style={styles.toggleTextWrap}>
-          <Text style={styles.toggleLabel}>LED suggestions</Text>
-          <Text style={styles.toggleHint}>
-            On by default. After a reading, hCRI.io suggests the LED (brand, model and CCT) from the shape of the
-            spectrum and the reading's title, and you confirm it with one tap. Turn off to stop those requests and hide
-            the suggestion cards. You can still add LED details yourself with the 💡 button.
-          </Text>
-        </View>
-        <Switch accessibilityLabel="LED suggestions" value={ledSuggestions} onValueChange={toggleLedSuggestions} trackColor={{ true: colors.accent }} />
-      </View>
-
-      <View style={styles.toggleRow}>
-        <View style={styles.toggleTextWrap}>
-          <Text style={styles.toggleLabel}>Capture flicker with each reading</Text>
-          <Text style={styles.toggleHint}>
-            After each reading, also take a one-shot flicker capture (frequency, percent flicker, flicker index
-            and waveform). Adds a few seconds per reading and only works on meters that support flicker. Saved
-            with the reading, shown on its Flicker page, included in shared CSVs, and uploaded with the reading to hCRI.io (attached to its report). Even when off, you can add a flicker sample to a reading from the Flicker tab before uploading it.
-          </Text>
-        </View>
-        <Switch accessibilityLabel="Capture flicker with each reading" value={flickerWithReading} onValueChange={toggleFlickerWithReading} trackColor={{ true: colors.accent }} />
-      </View>
-
-      <View style={styles.toggleRow}>
-        <View style={styles.toggleTextWrap}>
-          <Text style={styles.toggleLabel}>Verbose logging</Text>
-          <Text style={styles.toggleHint}>
-            Adds full wavelength-by-wavelength data and Bluetooth connection/transmission details to the
-            debug log, for troubleshooting a specific problem with Share Debug Log. Off by default -- the
-            standard log already covers connection and measurement status.
-          </Text>
-        </View>
-        <Switch accessibilityLabel="Verbose logging" value={verboseLogging} onValueChange={toggleVerboseLogging} trackColor={{ true: colors.accent }} />
-      </View>
-
+      {sectionHeader('Troubleshooting')}
+      {switchRow('Verbose logging', 'Adds full wavelength-by-wavelength data and Bluetooth connection/transmission details to the debug log, for troubleshooting a specific problem with Share Debug Log. Off by default -- the standard log already covers connection and measurement status.', verboseLogging, toggleVerboseLogging)}
       {IS_DEV_BUILD && (
-        <View style={{ marginBottom: 16 }}>
-          <Text style={styles.toggleLabel}>Test report number (developer)</Text>
-          <Text style={[styles.toggleHint, { marginBottom: 8 }]}>
-            “Show a test reading” loads this public report from {HCRI_API_HOST} instead of a random one, including its
-            first flicker reading if it has one. Leave blank for a random report.
-          </Text>
+        <View style={[styles.settingBlock, { marginBottom: 16 }]}>
+          <View style={styles.settingBlockLabelRow}>
+            <Text style={styles.settingLabel}>Test report number (developer)</Text>
+            {helpButton('Test report number', `“Show a test reading” loads this public report from ${HCRI_API_HOST} instead of a random one, including its first flicker reading if it has one. Leave blank for a random report.`)}
+          </View>
           <TextInput
             style={styles.input}
             value={testReportId}
@@ -964,20 +944,32 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
           />
         </View>
       )}
+
+      <Modal visible={help !== null} transparent animationType="fade" onRequestClose={() => setHelp(null)}>
+        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setHelp(null)}>
+          <TouchableOpacity style={styles.modalSheet} activeOpacity={1} onPress={() => {}}>
+            <Text style={styles.modalTitle}>{help?.title}</Text>
+            <Text style={styles.helpBody}>{help?.text}</Text>
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setHelp(null)}>
+              <Text style={styles.modalCancelText}>Close</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </>
   );
   const settingsRight = (
       <View style={styles.statsSection}>
         <View style={styles.statsHeaderRow}>
-          <Text style={styles.statsTitle}>Main Screen Measurements</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+            <Text style={styles.statsTitle}>Main Screen Measurements</Text>
+            {helpButton('Main Screen Measurements', 'Check which measurements show on the Main tab after a reading. Hold the ⠿ handle and drag a row to reorder it.')}
+          </View>
           <TouchableOpacity onPress={resetStatsToDefault}>
             <Text style={styles.statsResetLink}>Reset to Default</Text>
           </TouchableOpacity>
         </View>
-        <Text style={styles.statsHint}>
-          Check which measurements show on the Main tab after a reading. Hold the ⠿ handle and drag a row to
-          reorder it.
-        </Text>
+        <View style={{ height: 14 }} />
         <DraggableStatList
           order={statPrefs.order}
           enabled={statPrefs.enabled}
