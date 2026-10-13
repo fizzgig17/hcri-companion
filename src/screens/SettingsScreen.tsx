@@ -8,7 +8,7 @@ import { BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScrollView, View, Text, TextInput, Switch, TouchableOpacity, StyleSheet, Alert, Modal, Linking, Platform, useWindowDimensions } from 'react-native';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
-import { useLayoutMode, useContentWidth } from '../layout';
+import { useLayoutMode, useContentWidth, isSquareWindow } from '../layout';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IS_DEV_BUILD, HCRI_API_HOST } from '../hcri/buildTarget';
 import PrimaryButton from '../components/PrimaryButton';
@@ -164,7 +164,8 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   const [genTokenName, setGenTokenName] = useState(DEFAULT_GENERATED_TOKEN_NAME);
   const tokenScrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const kbHeight = useKeyboardHeight(true);
-  const { height: winH } = useWindowDimensions();
+  const { width: winW, height: winH } = useWindowDimensions();
+  const unfolded = isSquareWindow(winW, winH); // only an unfolded foldable gets the side panel, so only it shows the setting
   const insets = useSafeAreaInsets();
   const layoutMode = useLayoutMode();
   const wide = layoutMode !== 'compact';
@@ -747,6 +748,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
         </View>
       </View>
 
+      {unfolded && (
       <View style={styles.appearanceSection}>
         <Text style={styles.appearanceLabel}>Unfolded foldable: side panel opens on</Text>
         <View style={styles.modeSegment}>
@@ -761,6 +763,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
         </View>
         <Text style={[styles.toggleHint, { marginTop: 6 }]}>On a nearly square unfolded screen the right-hand column switches between History and Data.</Text>
       </View>
+      )}
 
       <View style={styles.toggleRow}>
         <View style={styles.toggleTextWrap}>
