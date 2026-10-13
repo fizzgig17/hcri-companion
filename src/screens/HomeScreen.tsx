@@ -27,7 +27,7 @@ import { uploadReadingToHcri, uploadFlickerToHcri } from '../hcri/uploadFlickerT
 import { getReportLink } from '../hcri/getReportLink';
 import { fetchSampleReading } from '../hcri/fetchSampleReading';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
-import { loadAutoConnectPreference, loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference, loadTestReportIdPreference, loadMunkiCalHoursPreference, loadSideTabPreference, saveSideTabPreference, loadSideTabModePreference, saveFoldableSeen } from '../storage/preferences';
+import { loadAutoConnectPreference, loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference, loadTestReportIdPreference, loadMunkiCalHoursPreference, loadMunkiBridgeIds, saveMunkiBridgeId, loadSideTabPreference, saveSideTabPreference, loadSideTabModePreference, saveFoldableSeen } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
 import { addReading, loadHistory, recordUpload, setReadingFlicker, updateReadingLed } from '../storage/readingHistory';
 import { fetchLedSuggestion, LedDetails, LedSuggestion } from '../hcri/ledApi';
@@ -892,6 +892,13 @@ export default function HomeScreen({ navigation }: any) {
   const [tbMeter, setTbMeter] = useState<TbMeterStatus | null>(null);
   // Re-evaluates the ColorMunki calibration age once a minute (and picks up the Settings limit when this screen is shown).
   const [calClock, setCalClock] = useState(Date.now());
+  const [munkiBridgeIds, setMunkiBridgeIds] = useState<Record<string, boolean>>({});
+  useEffect(() => { loadMunkiBridgeIds().then(setMunkiBridgeIds); }, []);
+  useEffect(() => {
+    const id = connRef.current?.getDeviceId?.();
+    if (!tbMeter || !id) return;
+    saveMunkiBridgeId(id, tbMeter.kind === TB_KIND_COLORMUNKI).then(setMunkiBridgeIds).catch(() => {});
+  }, [tbMeter?.kind]);
   useEffect(() => {
     loadMunkiCalHoursPreference().then((h) => { setMunkiCalHours(h); setCalClock(Date.now()); }).catch(() => {});
     const id = setInterval(() => setCalClock(Date.now()), 30000);
@@ -1714,6 +1721,7 @@ export default function HomeScreen({ navigation }: any) {
             disconnect={disconnect}
             resetConnection={resetConnection}
             devicePickerDevices={multiMeterCandidates}
+            munkiBridgeIds={munkiBridgeIds}
             devicePickerVisible={devicePickerVisible}
             onOpenDevicePicker={openDevicePicker}
             onSelectDevice={selectDeviceFromPicker}

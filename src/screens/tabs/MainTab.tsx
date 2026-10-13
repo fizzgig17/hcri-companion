@@ -81,6 +81,8 @@ interface Props {
   resetConnection: () => void;
   /** The candidates from the most recent scan that found more than one matching meter -- kept around (not cleared on connect) so the "switch meter" icon below can reopen the same list later without a fresh scan. Null means the last scan found 0 or 1 (the ordinary case), so there's nothing to switch between and the icon doesn't show at all. */
   devicePickerDevices: FoundDevice[] | null;
+  /** BLE ids of bridges last seen running as a ColorMunki (labels them in the picker before connecting). */
+  munkiBridgeIds?: Record<string, boolean>;
   /** Whether the picker overlay itself is open right now -- separate from devicePickerDevices (which outlives the overlay being dismissed, see above). True right after connect()'s scan finds more than one match, or after tapping the "switch meter" icon. */
   devicePickerVisible: boolean;
   /** Reopens the overlay using the already-known devicePickerDevices list (the "switch meter" icon) -- never triggers a fresh scan. */
@@ -171,6 +173,7 @@ export default function MainTab({
   disconnect,
   resetConnection,
   devicePickerDevices,
+  munkiBridgeIds,
   devicePickerVisible,
   onOpenDevicePicker,
   onSelectDevice,
@@ -614,7 +617,7 @@ export default function MainTab({
                 activeOpacity={0.6}
               >
                 <Text style={styles.deviceName}>
-                  {(d.id === connectedDeviceId && connectedDeviceName) || d.name || '(unnamed)'}
+                  {(d.id === connectedDeviceId && connectedDeviceName) || (munkiBridgeIds?.[d.id] ? 'ColorMunki' : null) || d.name || '(unnamed)'}
                   {d.id === connectedDeviceId ? '  ✓ connected' : ''}
                 </Text>
                 <Text style={styles.deviceMeta}>
