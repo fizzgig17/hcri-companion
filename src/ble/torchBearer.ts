@@ -33,6 +33,9 @@ export const TB_STATUS_UUID = '7a1c0004-5b2e-4f0a-9c3d-2e8f6b4a1d00';
 /** Base64 of the single byte 0x01 -- the "scan now" command. */
 export const TB_CMD_SCAN_B64 = 'AQ==';
 
+/** Base64 of the single byte 0x02 -- "send the last reading again". */
+export const TB_CMD_RESEND_B64 = 'Ag==';
+
 /** Bridge status states (status characteristic, byte 0). */
 export const TB_STATE_SCANNING = 1;
 export const TB_STATE_ERROR = 3;
@@ -51,6 +54,26 @@ export interface TbSummary {
   sum: number;
   npts: number;
   startNm: number;
+}
+
+/** Identifies one scan (the same values the bridge sends in its summary packet), so the same reading is never taken twice. */
+export function tbSummarySignature(s: TbSummary): string {
+  return `${s.status}|${s.peakNm}|${s.exposureMs}|${s.peakValue}|${s.sum}|${s.npts}|${s.startNm}`;
+}
+
+/** Parses a bridge summary packet (type 0x01), or null if it is not one. */
+export function parseTbSummary(p: Uint8Array): TbSummary | null {
+  if (p.length < 20 || p[0] !== 0x01) return null;
+  const dv = new DataView(p.buffer, p.byteOffset, p.byteLength);
+  return {
+    status: p[1],
+    peakNm: dv.getUint16(2, true),
+    exposureMs: dv.getFloat32(4, true),
+    peakValue: dv.getFloat32(8, true),
+    sum: dv.getFloat32(12, true),
+    npts: dv.getUint16(16, true),
+    startNm: dv.getUint16(18, true),
+  };
 }
 
 export interface TbScan {

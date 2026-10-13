@@ -1268,6 +1268,12 @@ export default function HomeScreen({ navigation }: any) {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
+        // A reading taken with the Torch Bearer's own button while the app was away: ask the bridge for its last one
+        // (the app ignores it if it already has it).
+        const tbConn = connRef.current;
+        if (tbConn?.isTorchBearer() && statusRef.current === 'connected') {
+          tbConn.requestTorchBearerLastReading().catch((e) => appendLog(`Could not catch up with the Torch Bearer: ${e?.message ?? e}`));
+        }
         // Coming back to the foreground -- always try to reconnect if
         // there's no meter connected right now, no matter WHY there isn't
         // one: this used to only fire when THIS app's own backgrounding
