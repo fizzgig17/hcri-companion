@@ -23,8 +23,8 @@ import {
 } from './protocol';
 import type { BatteryStatus } from './protocol';
 import {
-  TB_SERVICE_UUID, TB_CMD_UUID, TB_RESULT_UUID, TB_STATUS_UUID, TB_CMD_SCAN_B64, TB_STATE_ERROR,
-  isTorchBearerName, TbReassembler, tbToMeterResult,
+  TB_SERVICE_UUID, TB_CMD_UUID, TB_RESULT_UUID, TB_STATUS_UUID, TB_CMD_SCAN_B64, TB_CMD_RESEND_B64, TB_STATE_ERROR, TB_STATE_SCANNING,
+  isTorchBearerName, TbReassembler, tbToMeterResult, tbSummarySignature, parseTbSummary,
 } from './torchBearer';
 import type { MeterResult } from './parseResult';
 import {
@@ -264,6 +264,15 @@ export class MeterConnection {
   private tbSubs: Subscription[] = [];
   private tbReassembler = new TbReassembler();
   private tbWaiter: { resolve: (r: MeterResult) => void; reject: (e: Error) => void } | null = null;
+  // A scan started from the bridge's own button (not by this app): started() when it begins, result() with the finished reading.
+  // Signature of the newest scan the app already has (or that the bridge held when we connected), so a re-sent one is not taken twice.
+  private tbLastSig: string | null = null;
+  private tbButtonHandlers: { started?: () => void; result?: (r: MeterResult) => void } = {};
+
+  /** Lets the app accept a reading that was started by pressing the button on the Torch Bearer itself. */
+  public setTorchBearerButtonHandlers(h: { started?: () => void; result?: (r: MeterResult) => void }): void {
+    this.tbButtonHandlers = h;
+  }
 
   public serviceUuid: string = METER_SERVICE_UUID_PLACEHOLDER;
   public characteristicUuid: string = METER_CHARACTERISTIC_UUID_PLACEHOLDER;
@@ -565,6 +574,17 @@ export class MeterConnection {
       if (e instanceof Error && e.message.startsWith('The Torch Bearer bridge is on')) throw e;
       this.log(`Could not read the bridge status (continuing): ${describeBleError(e)}`);
     }
+    // Remember what the bridge already holds, so only a reading taken after this point counts as new.
+    this.tbLastSig = null;
+    try {
+      const held = await res.read();
+      if (held?.value) {
+        const sm = parseTbSummary(new Uint8Array(Buffer.from(held.value, 'base64')));
+        if (sm) this.tbLastSig = tbSummarySignature(sm);
+      }
+    } catch (e: any) {
+      this.log(`Could not read the bridge's last reading (continuing): ${describeBleError(e)}`, true);
+    }
     this.tbMode = true;
     this.device = connected;
     this.characteristic = cmd; // so isConnected() works unchanged
@@ -588,8 +608,16 @@ export class MeterConnection {
           if (scan && this.tbWaiter) {
             const w = this.tbWaiter;
             this.tbWaiter = null;
+            this.tbLastSig = tbSummarySignature(scan.summary);
             this.log(`Torch Bearer scan complete: ${scan.spectrum.length} points, exposure ${scan.summary.exposureMs.toFixed(1)} ms, status ${scan.summary.status}`);
             w.resolve(tbToMeterResult(scan, connected.name ?? connected.localName ?? 'Torch Bearer'));
+          } else if (scan && tbSummarySignature(scan.summary) === this.tbLastSig) {
+            this.log('Torch Bearer re-sent a reading the app already has -- ignoring it');
+          } else if (scan && this.tbButtonHandlers.result) {
+            // Nobody here asked for it: the button on the bridge started this scan, and the app takes the reading as its own.
+            this.tbLastSig = tbSummarySignature(scan.summary);
+            this.log(`Torch Bearer button scan complete: ${scan.spectrum.length} points, exposure ${scan.summary.exposureMs.toFixed(1)} ms`);
+            this.tbButtonHandlers.result(tbToMeterResult(scan, connected.name ?? connected.localName ?? 'Torch Bearer'));
           }
         } catch (e: any) {
           this.tbReassembler.reset();
@@ -604,6 +632,7 @@ export class MeterConnection {
         if (error || !char?.value) return;
         const arr = new Uint8Array(Buffer.from(char.value, 'base64'));
         this.log(`<- TB status: state ${arr[0]} try ${arr[1]}`, true);
+        if (arr[0] === TB_STATE_SCANNING && !this.tbWaiter) this.tbButtonHandlers.started?.();
         if (arr[0] === TB_STATE_ERROR && this.tbWaiter) {
           const w = this.tbWaiter;
           this.tbWaiter = null;
@@ -660,6 +689,16 @@ export class MeterConnection {
       throw e;
     }
     return result;
+  }
+
+  /**
+   * Asks the bridge to send its last reading again. The app calls this when it comes back to the foreground, to pick up
+   * a reading taken with the bridge's button while the phone was not listening; a reading the app already has is ignored.
+   */
+  async requestTorchBearerLastReading(): Promise<void> {
+    if (!this.isTorchBearer() || !this.characteristic || this.tbWaiter) return;
+    this.log('Torch Bearer: asking for the last reading (catching up)', true);
+    await this.characteristic.writeWithResponse(TB_CMD_RESEND_B64);
   }
 
   /**
