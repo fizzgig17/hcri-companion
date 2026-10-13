@@ -13,7 +13,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { IS_DEV_BUILD, HCRI_API_HOST } from '../hcri/buildTarget';
 import PrimaryButton from '../components/PrimaryButton';
 import HintPressable from '../components/HintPressable';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 import DraggableStatList from '../components/DraggableStatList';
 import {
   loadHcriCredentials,
@@ -585,17 +585,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
     settingLabel: { color: colors.text, fontSize: 14, fontWeight: '600', flexShrink: 1 },
     settingBlock: { paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.cardBorder },
     settingBlockLabelRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-    helpCircle: {
-      width: 20,
-      height: 20,
-      borderRadius: 10,
-      borderWidth: 1.5,
-      borderColor: colors.muted,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginLeft: 8,
-    },
-    helpMark: { color: colors.muted, fontSize: 12, fontWeight: '700', lineHeight: 15 },
+    helpCircle: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
     helpBody: { color: colors.text, fontSize: 14, lineHeight: 20 },
 
     statsSection: {
@@ -627,7 +617,11 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
       accessibilityLabel={`About ${title}`}
     >
       <View style={styles.helpCircle}>
-        <Text style={styles.helpMark}>?</Text>
+        <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={colors.muted} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <Circle cx={12} cy={12} r={10} />
+          <Path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+          <Path d="M12 17h.01" />
+        </Svg>
       </View>
     </TouchableOpacity>
   );
@@ -890,7 +884,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
       {sectionHeader('Connection')}
       {switchRow('Auto-connect to meter', 'On by default. The app looks for your meter when it opens and when you switch back to it, and skips the attempt while Bluetooth is off. Turn off to connect only when you tap Connect to Meter.', autoConnect, toggleAutoConnect)}
       {switchRow('Stay connected in background', "Keeps the meter connected when you switch away from the app or lock the screen, so coming back doesn't need a fresh reconnect. Turn off to disconnect the meter whenever the app isn't in the foreground instead (saves the meter's battery, at the cost of reconnecting every time).", stayConnectedInBackground, toggleStayConnectedInBackground)}
-      {switchRow('Keep screen awake while connected', 'Prevents the screen from locking during a session with the meter connected. Uses more battery.', keepAwake, toggleKeepAwake)}
+      {switchRow('Keep screen awake', 'Prevents the screen from locking during a session with the meter connected. Uses more battery.', keepAwake, toggleKeepAwake)}
 
       {sectionHeader('Torch Bearer')}
       {switchRow('Spectrum correction', "Adjusts the Torch Bearer's spectrum so its CCT, Duv and color-rendering numbers line up with the HPCS meter (it reads a few percent high in CCT without it). Leave on for normal use; turn off to see the raw, uncorrected spectrum. Applies to new scans, and saved CSVs say which one was used.", tbCorrection, toggleTbCorrection)}
