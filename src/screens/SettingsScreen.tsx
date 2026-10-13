@@ -65,9 +65,12 @@ import {
   saveAutoConnectPreference,
   saveLedSuggestionsPreference,
   saveTbCorrectionPreference,
+  loadMunkiCalHoursPreference,
+  saveMunkiCalHoursPreference,
 } from '../storage/preferences';
 import { setTbCorrectionEnabled } from '../ble/tbCorrection';
 import { setTbFlip } from '../ble/tbDisplay';
+import { setMunkiCalHours } from '../ble/torchBearer';
 import {
   StatDisplayPrefs,
   loadStatDisplayPrefs,
@@ -150,6 +153,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   const [testReportId, setTestReportId] = useState('');
   const [tbCorrection, setTbCorrection] = useState(true);
   const [tbFlipped, setTbFlipped] = useState(false);
+  const [munkiHours, setMunkiHours] = useState('4');
   const [flickerWithReading, setFlickerWithReading] = useState(false);
   const [sideTabMode, setSideTabMode] = useState<SideTabMode>('remember');
   const [ledSuggestions, setLedSuggestions] = useState(true);
@@ -206,6 +210,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
     loadVerboseLoggingPreference().then(setVerboseLogging);
     loadTestReportIdPreference().then(setTestReportId);
     loadTbCorrectionPreference().then(setTbCorrection);
+    loadMunkiCalHoursPreference().then((h) => setMunkiHours(String(h)));
     loadTbFlipPreference().then((v) => setTbFlipped(v === true));
     loadFlickerWithReadingPreference().then(setFlickerWithReading);
     loadSideTabModePreference().then(setSideTabMode).catch(() => {});
@@ -282,6 +287,14 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
     setTbFlipped(value);
     setTbFlip(value); // sent to a connected Torch Bearer right away, and to the next one that connects
     await saveTbFlipPreference(value);
+  };
+
+  const commitMunkiHours = async () => {
+    const n = Number(munkiHours.replace(',', '.'));
+    const h = Number.isFinite(n) && n >= 0 ? Math.min(n, 999) : 4;
+    setMunkiHours(String(h));
+    setMunkiCalHours(h);
+    await saveMunkiCalHoursPreference(h);
   };
 
   const toggleTbCorrection = async (value: boolean) => {
@@ -846,6 +859,28 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
           </Text>
         </View>
         <Switch accessibilityLabel="Torch Bearer correction" value={tbCorrection} onValueChange={toggleTbCorrection} trackColor={{ true: colors.accent }} />
+      </View>
+
+      <View style={styles.toggleRow}>
+        <View style={styles.toggleTextWrap}>
+          <Text style={styles.toggleLabel}>ColorMunki calibration limit (hours)</Text>
+          <Text style={styles.toggleHint}>
+            The ColorMunki's dark reference drifts as it warms up. Once the last calibration is older than this, the
+            Take reading button asks you to recalibrate first. 0 turns the check off. The bridge also forgets the
+            calibration whenever it is powered off.
+          </Text>
+        </View>
+        <TextInput
+          accessibilityLabel="ColorMunki calibration limit in hours"
+          style={[styles.input, { width: 64, textAlign: 'center', marginTop: 0 }]}
+          value={munkiHours}
+          onChangeText={setMunkiHours}
+          onEndEditing={commitMunkiHours}
+          onBlur={commitMunkiHours}
+          keyboardType="decimal-pad"
+          returnKeyType="done"
+          maxLength={5}
+        />
       </View>
 
       <View style={styles.toggleRow}>

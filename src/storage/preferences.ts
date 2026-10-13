@@ -242,3 +242,17 @@ export async function loadThemeModePreference(): Promise<ThemeMode> {
 export async function saveThemeModePreference(mode: ThemeMode): Promise<void> {
   await AsyncStorage.setItem(THEME_MODE_KEY, mode);
 }
+
+// ColorMunki: hours after which the dark calibration counts as stale and the Take reading button asks for a new one.
+// 0 = never. Default 4.
+const MUNKI_CAL_HOURS_KEY = 'hcri.io.pref.colorMunkiCalHours';
+
+export async function loadMunkiCalHoursPreference(): Promise<number> {
+  const raw = await AsyncStorage.getItem(MUNKI_CAL_HOURS_KEY);
+  const n = raw === null ? 4 : Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : 4;
+}
+
+export async function saveMunkiCalHoursPreference(hours: number): Promise<void> {
+  await AsyncStorage.setItem(MUNKI_CAL_HOURS_KEY, String(hours));
+}

@@ -562,8 +562,9 @@ export class MeterConnection {
   }
 
   private setTbMeterStatus(s: TbMeterStatus | null): void {
-    this.tbMeterStatus = s;
-    this.tbStatusListeners.forEach((cb) => cb(s));
+    const stamped = s ? { ...s, receivedAt: Date.now() } : null;
+    this.tbMeterStatus = stamped;
+    this.tbStatusListeners.forEach((cb) => cb(stamped));
   }
 
   isTorchBearer(): boolean {

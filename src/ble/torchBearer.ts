@@ -65,6 +65,10 @@ export interface TbMeterStatus {
   dialKnown: boolean;
   dial: number;
   calibrated: boolean;
+  /** ColorMunki: minutes since the dark calibration, as of the moment this status was sent (null = unknown or none). */
+  calAgeMin: number | null;
+  /** When the app received this status (Date.now()), so the age can be carried forward. Set by MeterConnection. */
+  receivedAt?: number;
 }
 
 export function parseTbStatus(p: Uint8Array): TbMeterStatus {
@@ -78,6 +82,7 @@ export function parseTbStatus(p: Uint8Array): TbMeterStatus {
     dialKnown: (flags & 0x80) !== 0,
     dial: flags & 0x03,
     calibrated: (flags & 0x04) !== 0,
+    calAgeMin: p.length > 9 && (p[8] | (p[9] << 8)) !== 0xffff ? p[8] | (p[9] << 8) : null,
   };
 }
 
@@ -99,12 +104,30 @@ export type MunkiButtonMode =
   | { kind: 'measure' }
   | { kind: 'blocked'; caption: string; note: string };
 
-export function munkiButtonMode(s: TbMeterStatus): MunkiButtonMode {
+let munkiCalHours = 4;
+/** Settings > ColorMunki calibration limit in hours (0 = never expires). */
+export function setMunkiCalHours(h: number): void { munkiCalHours = h; }
+export function getMunkiCalHours(): number { return munkiCalHours; }
+
+/** Minutes since the ColorMunki's dark calibration right now, carried forward from when the status arrived. */
+export function munkiCalAgeNowMin(s: TbMeterStatus, now: number = Date.now()): number | null {
+  if (s.calAgeMin == null) return null;
+  return s.calAgeMin + (s.receivedAt != null ? Math.max(0, now - s.receivedAt) / 60000 : 0);
+}
+
+/** maxAgeHours 0 (or omitted) = never expires. */
+export function munkiButtonMode(s: TbMeterStatus, maxAgeHours = 0, now: number = Date.now()): MunkiButtonMode {
   if (!s.dialKnown) return { kind: 'blocked', caption: 'Please wait', note: 'Reading the ColorMunki dial…' };
   if (s.dial === MUNKI_DIAL_CALIBRATION) return { kind: 'calibrate' };
   if (s.dial === MUNKI_DIAL_AMBIENT) {
     if (!s.calibrated) {
       return { kind: 'blocked', caption: 'Calibrate first', note: 'Not calibrated yet: turn the dial to the calibration position and press Calibrate.' };
+    }
+    const age = munkiCalAgeNowMin(s, now);
+    if (maxAgeHours > 0 && age != null && age > maxAgeHours * 60) {
+      const h = age / 60;
+      const ageText = h < 1 ? `${Math.round(age)} min` : `${h.toFixed(1)} h`;
+      return { kind: 'blocked', caption: 'Recalibrate', note: `Calibration is ${ageText} old (limit ${maxAgeHours} h): turn the dial to the calibration position and press Calibrate.` };
     }
     return { kind: 'measure' };
   }

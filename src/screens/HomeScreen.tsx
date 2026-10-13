@@ -27,7 +27,7 @@ import { uploadReadingToHcri, uploadFlickerToHcri } from '../hcri/uploadFlickerT
 import { getReportLink } from '../hcri/getReportLink';
 import { fetchSampleReading } from '../hcri/fetchSampleReading';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
-import { loadAutoConnectPreference, loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference, loadTestReportIdPreference, loadSideTabPreference, saveSideTabPreference, loadSideTabModePreference, saveFoldableSeen } from '../storage/preferences';
+import { loadAutoConnectPreference, loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference, loadTestReportIdPreference, loadMunkiCalHoursPreference, loadSideTabPreference, saveSideTabPreference, loadSideTabModePreference, saveFoldableSeen } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
 import { addReading, loadHistory, recordUpload, setReadingFlicker, updateReadingLed } from '../storage/readingHistory';
 import { fetchLedSuggestion, LedDetails, LedSuggestion } from '../hcri/ledApi';
@@ -39,7 +39,7 @@ import { IS_DEV_BUILD } from '../hcri/buildTarget';
 import { shareDebugLog } from '../utils/shareLog';
 import { shareSingleReadingCsv } from '../utils/shareCsv';
 import { hapticSuccess, hapticFailure } from '../utils/haptics';
-import { munkiButtonMode, TB_KIND_COLORMUNKI, MUNKI_DIAL_CALIBRATION, type TbMeterStatus } from '../ble/torchBearer';
+import { getMunkiCalHours, setMunkiCalHours, munkiButtonMode, TB_KIND_COLORMUNKI, MUNKI_DIAL_CALIBRATION, type TbMeterStatus } from '../ble/torchBearer';
 import { enableKeepAwake, disableKeepAwake } from '../utils/keepAwake';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLayoutMode, isSquareWindow, sideColumnWidth, MIN_GRID_WIDTH } from '../layout';
@@ -890,6 +890,13 @@ export default function HomeScreen({ navigation }: any) {
   const calibratingRef = useRef(false);
   // What the bridge says about the meter behind it (ColorMunki dial position and calibration), kept live for the main button.
   const [tbMeter, setTbMeter] = useState<TbMeterStatus | null>(null);
+  // Re-evaluates the ColorMunki calibration age once a minute (and picks up the Settings limit when this screen is shown).
+  const [calClock, setCalClock] = useState(Date.now());
+  useEffect(() => {
+    loadMunkiCalHoursPreference().then((h) => { setMunkiCalHours(h); setCalClock(Date.now()); }).catch(() => {});
+    const id = setInterval(() => setCalClock(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
   useEffect(() => {
     const c = connRef.current;
     if (!c || !c.isTorchBearer()) { setTbMeter(null); return; }
@@ -1548,7 +1555,7 @@ export default function HomeScreen({ navigation }: any) {
   // (once calibrated) -> "Take reading"; any other position (or not calibrated) -> disabled, with a note above it.
   const munkiMain: { override?: { caption: string; tint?: string; disabled?: boolean }; note?: string } = (() => {
     if (!tbMeter || tbMeter.kind !== TB_KIND_COLORMUNKI || (status !== 'connected' && status !== 'uploading')) return {};
-    const mode = munkiButtonMode(tbMeter);
+    const mode = munkiButtonMode(tbMeter, getMunkiCalHours(), calClock);
     if (mode.kind === 'calibrate') return { override: { caption: 'Calibrate', tint: '#E8922E' }, note: 'Dial is on calibration: press Calibrate, keep the instrument still.' };
     if (mode.kind === 'blocked') return { override: { caption: mode.caption, disabled: true }, note: mode.note };
     return {};

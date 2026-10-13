@@ -123,6 +123,22 @@ describe('ColorMunki status', () => {
     expect(munkiButtonMode(parseTbStatus(status(0, 0, 1, 0x80 | 0x04 | 2)))).toEqual({ kind: 'calibrate' });
   });
 
+  it('asks for a recalibration once the calibration is older than the limit', () => {
+    const b = new Uint8Array(10);
+    b.set(status(0, 0, 1, 0x80 | 0x04 | 3));
+    b[8] = 90; b[9] = 0; // 90 minutes old when sent
+    const s = parseTbStatus(b);
+    expect(s.calAgeMin).toBe(90);
+    expect(munkiButtonMode(s, 4, 0).kind).toBe('measure');
+    expect(munkiButtonMode(s, 1, 0)).toMatchObject({ kind: 'blocked', caption: 'Recalibrate' });
+    expect(munkiButtonMode(s, 0, 0).kind).toBe('measure'); // 0 = never expires
+    // carried forward from the moment it was received
+    const aged = { ...s, receivedAt: 0 };
+    expect(munkiButtonMode(aged, 2, 20 * 60000).kind).toBe('measure'); // 110 min
+    expect(munkiButtonMode(aged, 2, 40 * 60000).kind).toBe('blocked'); // 130 min
+    expect(parseTbStatus(status(0, 0, 1, 0x84)).calAgeMin).toBeNull(); // old 8-byte status: unknown, never expires
+  });
+
   it('allows a reading only on Ambient and only once calibrated', () => {
     expect(munkiButtonMode(parseTbStatus(status(0, 0, 1, 0x80 | 0x04 | 3)))).toEqual({ kind: 'measure' });
     expect(munkiButtonMode(parseTbStatus(status(0, 0, 1, 0x80 | 3))).kind).toBe('blocked');
