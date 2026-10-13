@@ -36,6 +36,7 @@ const DEFAULT_GENERATED_TOKEN_NAME = 'hCRI Companion Data Upload Token';
 // a logged-out visitor lands on the sign-in screen by default, and
 // "Forgot password?" is right there on it (see AuthScreen.jsx).
 const FORGOT_PASSWORD_URL = 'https://www.hcri.io/';
+const DELETE_ACCOUNT_URL = 'https://www.hcri.io/delete.php';
 import {
   loadKeepAwakePreference,
   loadHapticTapsPreference,
@@ -640,6 +641,16 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
         </>
       )}
 
+      {/* Accounts live on hCRI.io (the app only holds an optional API token), so account deletion is the website's
+          page; "Forget Credentials" above only removes the token from this device. */}
+      <TouchableOpacity
+        accessibilityRole="link"
+        onPress={() => Linking.openURL(DELETE_ACCOUNT_URL).catch(() => Alert.alert('Could not open the link', DELETE_ACCOUNT_URL))}
+        style={{ paddingVertical: 12 }}
+      >
+        <Text style={[styles.hint, { textDecorationLine: 'underline' }]}>Delete my hCRI.io account (opens hcri.io)</Text>
+      </TouchableOpacity>
+
       {/* "Generate token" modal -- logs in, creates a named API token, and
           saves it (same as tapping Save manually), then closes. Dismissing
           via the backdrop/Cancel just closes the overlay without creating
@@ -706,6 +717,9 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
             </View>
             <TouchableOpacity onPress={openForgotPassword} disabled={genBusy} style={styles.forgotPasswordLink}>
               <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={openForgotPassword} disabled={genBusy} style={styles.forgotPasswordLink}>
+              <Text style={styles.forgotPasswordText}>Need an account? Sign up at hcri.io</Text>
             </TouchableOpacity>
 
             <Text style={[styles.modalLabel, { marginTop: 8, marginBottom: 4 }]}>Token Name</Text>
