@@ -614,7 +614,7 @@ export default function MainTab({
                 activeOpacity={0.6}
               >
                 <Text style={styles.deviceName}>
-                  {d.name ?? '(unnamed)'}
+                  {(d.id === connectedDeviceId && connectedDeviceName) || d.name || '(unnamed)'}
                   {d.id === connectedDeviceId ? '  ✓ connected' : ''}
                 </Text>
                 <Text style={styles.deviceMeta}>
