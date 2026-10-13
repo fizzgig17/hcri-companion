@@ -23,7 +23,7 @@ import {
 } from './protocol';
 import type { BatteryStatus } from './protocol';
 import {
-  TB_SERVICE_UUID, TB_CMD_UUID, TB_RESULT_UUID, TB_STATUS_UUID, TB_CMD_SCAN_B64, TB_STATE_ERROR,
+  TB_SERVICE_UUID, TB_CMD_UUID, TB_RESULT_UUID, TB_STATUS_UUID, TB_CMD_SCAN_B64, TB_STATE_ERROR, TB_STATE_SCANNING,
   isTorchBearerName, TbReassembler, tbToMeterResult,
 } from './torchBearer';
 import type { MeterResult } from './parseResult';
@@ -264,6 +264,13 @@ export class MeterConnection {
   private tbSubs: Subscription[] = [];
   private tbReassembler = new TbReassembler();
   private tbWaiter: { resolve: (r: MeterResult) => void; reject: (e: Error) => void } | null = null;
+  // A scan started from the bridge's own button (not by this app): started() when it begins, result() with the finished reading.
+  private tbButtonHandlers: { started?: () => void; result?: (r: MeterResult) => void } = {};
+
+  /** Lets the app accept a reading that was started by pressing the button on the Torch Bearer itself. */
+  public setTorchBearerButtonHandlers(h: { started?: () => void; result?: (r: MeterResult) => void }): void {
+    this.tbButtonHandlers = h;
+  }
 
   public serviceUuid: string = METER_SERVICE_UUID_PLACEHOLDER;
   public characteristicUuid: string = METER_CHARACTERISTIC_UUID_PLACEHOLDER;
@@ -590,6 +597,10 @@ export class MeterConnection {
             this.tbWaiter = null;
             this.log(`Torch Bearer scan complete: ${scan.spectrum.length} points, exposure ${scan.summary.exposureMs.toFixed(1)} ms, status ${scan.summary.status}`);
             w.resolve(tbToMeterResult(scan, connected.name ?? connected.localName ?? 'Torch Bearer'));
+          } else if (scan && this.tbButtonHandlers.result) {
+            // Nobody here asked for it: the button on the bridge started this scan, and the app takes the reading as its own.
+            this.log(`Torch Bearer button scan complete: ${scan.spectrum.length} points, exposure ${scan.summary.exposureMs.toFixed(1)} ms`);
+            this.tbButtonHandlers.result(tbToMeterResult(scan, connected.name ?? connected.localName ?? 'Torch Bearer'));
           }
         } catch (e: any) {
           this.tbReassembler.reset();
@@ -604,6 +615,7 @@ export class MeterConnection {
         if (error || !char?.value) return;
         const arr = new Uint8Array(Buffer.from(char.value, 'base64'));
         this.log(`<- TB status: state ${arr[0]} try ${arr[1]}`, true);
+        if (arr[0] === TB_STATE_SCANNING && !this.tbWaiter) this.tbButtonHandlers.started?.();
         if (arr[0] === TB_STATE_ERROR && this.tbWaiter) {
           const w = this.tbWaiter;
           this.tbWaiter = null;

@@ -420,6 +420,8 @@ export default function HomeScreen({ navigation }: any) {
   // throttles/ignores scan requests once you rack up enough abandoned
   // scan sessions like that, which is why reconnecting only ever worked
   // again after a full app restart (a fresh process resets the throttle).
+  // Readings started with the button on the Torch Bearer itself (see the effect after acceptReading).
+  const tbButtonRef = useRef<{ started: () => void; result: (r: MeterResult) => void }>({ started: () => {}, result: () => {} });
   const getConnection = useCallback((): MeterConnection => {
     if (!connRef.current) {
       connRef.current = new MeterConnection(appendLog, () => {
@@ -433,6 +435,10 @@ export default function HomeScreen({ navigation }: any) {
         // result card.
         setStatus('disconnected');
         setDeviceName(null);
+      });
+      connRef.current.setTorchBearerButtonHandlers({
+        started: () => tbButtonRef.current.started(),
+        result: (r) => tbButtonRef.current.result(r),
       });
     }
     return connRef.current;
@@ -814,35 +820,17 @@ export default function HomeScreen({ navigation }: any) {
     Alert.alert('Test reading', `This is a sample from a public hCRI.io report, so it can't be ${what}. Take a real reading to do that.`);
   }, []);
 
-  const measure = useCallback(async () => {
-    if (!connRef.current) return;
-    setLiveUnsaved(null);
-    setPagerResetKey({}); // back to the Spectrum page right away (e.g. from Flicker)
-    setStatus('measuring');
-    try {
-      // An all-zero result (the meter handing back an empty buffer, seen on
-      // the first reading after connecting) is retried once automatically
-      // rather than shown as a blank chart with nonsense stats.
-      let r: MeterResult;
-      if (connRef.current.isTorchBearer()) {
-        // Torch Bearer (ESP32 bridge): one write starts a scan, the whole spectrum comes back.
-        r = await connRef.current.takeTorchBearerReading();
-      } else {
-        try {
-          r = await takeMeasurement(connRef.current, appendLog);
-        } catch (e: any) {
-          if (e?.name !== EMPTY_READING_ERROR) throw e;
-          appendLog('Meter returned an empty reading -- retrying once...');
-          r = await takeMeasurement(connRef.current, appendLog);
-        }
-      }
+  // Everything that happens to a finished reading: optional flicker snapshot, result card, auto-save to History.
+  // Shared by the Measure button and by a reading taken with the button on the Torch Bearer itself.
+  const acceptReading = useCallback(async (r0: MeterResult) => {
+    let r = r0;
       // Optional extra (Settings -> "Capture flicker with each reading", off by default): one flicker snapshot
       // after the spectrum, saved with the reading. Failure never affects the reading itself.
       // A new reading starts with a clean Flicker page (no leftover flicker from the previous light).
       setFlickerReading(null);
       setFlickerHistory([]);
       setFlickerFromReading(false);
-      if (!r.source && deviceSupportsFlicker(r.deviceName) && (await loadFlickerWithReadingPreference().catch(() => false))) {
+      if (!r.source && connRef.current && deviceSupportsFlicker(r.deviceName) && (await loadFlickerWithReadingPreference().catch(() => false))) {
         const f = await captureFlickerOnce(connRef.current, appendLog);
         if (f) {
           r = { ...r, flicker: f };
@@ -894,6 +882,31 @@ export default function HomeScreen({ navigation }: any) {
         appendLog(`Failed to save reading to history: ${e.message}`);
         Alert.alert('Not saved to History', 'The reading is shown here, but it could not be added to History on this device. Upload it now if you want to keep it.');
       }
+  }, [appendLog]);
+
+  const measure = useCallback(async () => {
+    if (!connRef.current) return;
+    setLiveUnsaved(null);
+    setPagerResetKey({}); // back to the Spectrum page right away (e.g. from Flicker)
+    setStatus('measuring');
+    try {
+      // An all-zero result (the meter handing back an empty buffer, seen on
+      // the first reading after connecting) is retried once automatically
+      // rather than shown as a blank chart with nonsense stats.
+      let r: MeterResult;
+      if (connRef.current.isTorchBearer()) {
+        // Torch Bearer (ESP32 bridge): one write starts a scan, the whole spectrum comes back.
+        r = await connRef.current.takeTorchBearerReading();
+      } else {
+        try {
+          r = await takeMeasurement(connRef.current, appendLog);
+        } catch (e: any) {
+          if (e?.name !== EMPTY_READING_ERROR) throw e;
+          appendLog('Meter returned an empty reading -- retrying once...');
+          r = await takeMeasurement(connRef.current, appendLog);
+        }
+      }
+      await acceptReading(r);
     } catch (e: any) {
       appendLog(`Measurement failed: ${e.message}`);
       setStatus('connected');
@@ -911,6 +924,33 @@ export default function HomeScreen({ navigation }: any) {
       Alert.alert('Measurement failed', e.message ?? 'The meter did not respond in time. Try again.');
     }
   }, [appendLog]);
+
+  // Pressing the button on the Torch Bearer takes a reading by itself; the bridge sends it to the app, which accepts it
+  // exactly like one taken with Measure (result card, History). Ignored while the app is busy with something else.
+  const tbButtonTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  tbButtonRef.current = {
+    started: () => {
+      if (statusRef.current !== 'connected' && statusRef.current !== 'measuring') return;
+      if (statusRef.current === 'connected') { setLiveUnsaved(null); setPagerResetKey({}); setStatus('measuring'); }
+      if (tbButtonTimer.current) clearTimeout(tbButtonTimer.current);
+      tbButtonTimer.current = setTimeout(() => { setStatus((s) => (s === 'measuring' ? 'connected' : s)); }, 45000); // no reading arrived
+    },
+    result: (r: MeterResult) => {
+      if (tbButtonTimer.current) { clearTimeout(tbButtonTimer.current); tbButtonTimer.current = null; }
+      if (statusRef.current === 'uploading' || statusRef.current === 'connecting') return;
+      appendLog('Reading taken with the button on the Torch Bearer');
+      (async () => {
+        try {
+          setStatus('measuring');
+          await acceptReading(r);
+        } catch (e: any) {
+          appendLog(`Could not accept the button reading: ${e?.message ?? e}`);
+        } finally {
+          setStatus('connected');
+        }
+      })();
+    },
+  };
 
   // ---- Live (continuous spectrum) and Flicker --------------------------------------------------
   // One long-running mode at a time. Live keeps replacing `result` with each refresh (never auto-saved);
