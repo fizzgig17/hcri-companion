@@ -23,7 +23,8 @@ import {
 } from './protocol';
 import type { BatteryStatus } from './protocol';
 import {
-  TB_SERVICE_UUID, TB_CMD_UUID, TB_RESULT_UUID, TB_STATUS_UUID, TB_CMD_SCAN_B64, TB_CMD_RESEND_B64, TB_CMD_FLIP_ON_B64, TB_CMD_FLIP_OFF_B64, TB_STATE_ERROR, TB_STATE_SCANNING,
+  TB_SERVICE_UUID, TB_CMD_UUID, TB_RESULT_UUID, TB_STATUS_UUID, TB_CMD_SCAN_B64, TB_CMD_RESEND_B64, TB_CMD_FLIP_ON_B64, TB_CMD_FLIP_OFF_B64, TB_STATE_ERROR, TB_STATE_SCANNING, TB_STATE_FAILED,
+  parseTbStatus, colorMunkiFailMessage, TB_KIND_COLORMUNKI, type TbMeterStatus,
   isTorchBearerName, TbReassembler, tbToMeterResult, tbSummarySignature, parseTbSummary,
 } from './torchBearer';
 import { getTbFlip, onTbFlip } from './tbDisplay';
@@ -269,10 +270,14 @@ export class MeterConnection {
   // A scan started from the bridge's own button (not by this app): started() when it begins, result() with the finished reading.
   // Signature of the newest scan the app already has (or that the bridge held when we connected), so a re-sent one is not taken twice.
   private tbLastSig: string | null = null;
-  private tbButtonHandlers: { started?: () => void; result?: (r: MeterResult) => void } = {};
+  private tbButtonHandlers: { started?: () => void; result?: (r: MeterResult) => void; idle?: () => void } = {};
+  // The bridge's status characteristic, decoded (kind of meter behind it, ColorMunki dial position and calibration).
+  private tbMeterStatus: TbMeterStatus | null = null;
+  private tbStatusListeners = new Set<(s: TbMeterStatus | null) => void>();
+  private tbCalWaiter: { resolve: () => void; reject: (e: Error) => void } | null = null;
 
   /** Lets the app accept a reading that was started by pressing the button on the Torch Bearer itself. */
-  public setTorchBearerButtonHandlers(h: { started?: () => void; result?: (r: MeterResult) => void }): void {
+  public setTorchBearerButtonHandlers(h: { started?: () => void; result?: (r: MeterResult) => void; idle?: () => void }): void {
     this.tbButtonHandlers = h;
   }
 
@@ -543,6 +548,24 @@ export class MeterConnection {
   }
 
   /** True when the connected device is a Torch Bearer bridge rather than an HPCS meter. */
+  /** The latest bridge status (null when not on a Torch Bearer bridge). kind 1 = a ColorMunki is behind it. */
+  getTbMeterStatus(): TbMeterStatus | null {
+    return this.tbMeterStatus;
+  }
+
+  /** Calls back whenever the bridge status changes (ColorMunki dial moved, calibration done...). Returns an unsubscribe function. */
+  onTbMeterStatus(cb: (s: TbMeterStatus | null) => void): () => void {
+    this.tbStatusListeners.add(cb);
+    return () => {
+      this.tbStatusListeners.delete(cb);
+    };
+  }
+
+  private setTbMeterStatus(s: TbMeterStatus | null): void {
+    this.tbMeterStatus = s;
+    this.tbStatusListeners.forEach((cb) => cb(s));
+  }
+
   isTorchBearer(): boolean {
     return this.tbMode && this.isConnected();
   }
@@ -567,6 +590,7 @@ export class MeterConnection {
       if (first?.value) {
         const st = new Uint8Array(Buffer.from(first.value, 'base64'));
         this.log(`Torch Bearer status on connect: state ${st[0]}`, true);
+        this.setTbMeterStatus(parseTbStatus(st));
         if (st[0] === TB_STATE_ERROR) {
           await connected.cancelConnection().catch(() => {});
           throw new Error('The Torch Bearer bridge is on, but no spectrometer is plugged into it. Plug the spectrometer in, then connect again.');
@@ -620,14 +644,14 @@ export class MeterConnection {
             this.tbWaiter = null;
             this.tbLastSig = tbSummarySignature(scan.summary);
             this.log(`Torch Bearer scan complete: ${scan.spectrum.length} points, exposure ${scan.summary.exposureMs.toFixed(1)} ms, status ${scan.summary.status}`);
-            w.resolve(tbToMeterResult(scan, connected.name ?? connected.localName ?? 'Torch Bearer'));
+            w.resolve(tbToMeterResult(scan, connected.name ?? connected.localName ?? 'Torch Bearer', this.tbMeterStatus?.kind ?? 0));
           } else if (scan && tbSummarySignature(scan.summary) === this.tbLastSig) {
             this.log('Torch Bearer re-sent a reading the app already has -- ignoring it');
           } else if (scan && this.tbButtonHandlers.result) {
             // Nobody here asked for it: the button on the bridge started this scan, and the app takes the reading as its own.
             this.tbLastSig = tbSummarySignature(scan.summary);
             this.log(`Torch Bearer button scan complete: ${scan.spectrum.length} points, exposure ${scan.summary.exposureMs.toFixed(1)} ms`);
-            this.tbButtonHandlers.result(tbToMeterResult(scan, connected.name ?? connected.localName ?? 'Torch Bearer'));
+            this.tbButtonHandlers.result(tbToMeterResult(scan, connected.name ?? connected.localName ?? 'Torch Bearer', this.tbMeterStatus?.kind ?? 0));
           }
         } catch (e: any) {
           this.tbReassembler.reset();
@@ -641,12 +665,36 @@ export class MeterConnection {
       sta.monitor((error, char) => {
         if (error || !char?.value) return;
         const arr = new Uint8Array(Buffer.from(char.value, 'base64'));
-        this.log(`<- TB status: state ${arr[0]} try ${arr[1]}`, true);
-        if (arr[0] === TB_STATE_SCANNING && !this.tbWaiter) this.tbButtonHandlers.started?.();
+        const st = parseTbStatus(arr);
+        this.log(`<- TB status: state ${st.state} try ${st.reason}${st.kind === TB_KIND_COLORMUNKI ? ` (ColorMunki dial ${st.dialKnown ? st.dial : '?'}, ${st.calibrated ? 'calibrated' : 'not calibrated'})` : ''}`, true);
+        this.setTbMeterStatus(st);
+        if (arr[0] === TB_STATE_SCANNING && !this.tbWaiter && !this.tbCalWaiter) this.tbButtonHandlers.started?.();
         if (arr[0] === TB_STATE_ERROR && this.tbWaiter) {
           const w = this.tbWaiter;
           this.tbWaiter = null;
           w.reject(new Error('The Torch Bearer could not scan -- check that the spectrometer is plugged into it.'));
+        }
+        if (arr[0] === TB_STATE_FAILED) {
+          const msg = colorMunkiFailMessage(st.reason);
+          if (this.tbWaiter) {
+            const w = this.tbWaiter;
+            this.tbWaiter = null;
+            w.reject(new Error(msg));
+          }
+          if (this.tbCalWaiter) {
+            const w = this.tbCalWaiter;
+            this.tbCalWaiter = null;
+            w.reject(new Error(msg));
+          }
+        }
+        // Back to ready: a ColorMunki calibration finished (and, for one started with the bridge's button, nothing else is coming).
+        if (arr[0] === 0 || arr[0] === TB_STATE_FAILED) {
+          if (this.tbCalWaiter && arr[0] === 0 && st.calibrated) {
+            const w = this.tbCalWaiter;
+            this.tbCalWaiter = null;
+            w.resolve();
+          }
+          if (!this.tbWaiter) this.tbButtonHandlers.idle?.();
         }
       }),
     ];
@@ -665,6 +713,12 @@ export class MeterConnection {
         this.tbWaiter = null;
         w.reject(new Error('Torch Bearer disconnected during the scan.'));
       }
+      if (this.tbCalWaiter) {
+        const w = this.tbCalWaiter;
+        this.tbCalWaiter = null;
+        w.reject(new Error('Torch Bearer disconnected during the calibration.'));
+      }
+      this.setTbMeterStatus(null);
       this.tbMode = false;
       this.onDisconnectedCallback();
     });
@@ -701,6 +755,35 @@ export class MeterConnection {
       throw e;
     }
     return result;
+  }
+
+  /**
+   * ColorMunki only: the same scan command, sent while the dial is on the calibration position, makes the bridge take its
+   * dark reference instead of a reading. Resolves when the bridge reports it is calibrated.
+   */
+  async calibrateTorchBearer(timeoutMs = 45000): Promise<void> {
+    if (!this.isTorchBearer() || !this.characteristic) throw new Error('Not connected to a ColorMunki');
+    if (this.tbCalWaiter || this.tbWaiter) throw new Error('The meter is already busy');
+    const done = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (this.tbCalWaiter) {
+          this.tbCalWaiter = null;
+          reject(new Error('Timed out waiting for the ColorMunki to calibrate.'));
+        }
+      }, timeoutMs);
+      this.tbCalWaiter = {
+        resolve: () => { clearTimeout(timer); resolve(); },
+        reject: (e) => { clearTimeout(timer); reject(e); },
+      };
+    });
+    this.log('ColorMunki: sending the calibrate command');
+    try {
+      await this.characteristic.writeWithResponse(TB_CMD_SCAN_B64);
+    } catch (e) {
+      this.tbCalWaiter = null;
+      throw e;
+    }
+    return done;
   }
 
   /**

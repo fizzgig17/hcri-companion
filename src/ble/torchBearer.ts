@@ -12,7 +12,10 @@
 //   ...0002 command (write): 01 = scan, 02 = resend last result
 //   ...0003 result  (notify): summary packet, then the full spectrum in chunks
 //   ...0004 status  (notify/read): [state u8][try u8][exposure_ms f32]
-//     state: 0 ready, 1 scanning, 2 done, 3 error (no USB / timeout), 4 done but not locked
+//     state: 0 ready, 1 scanning, 2 done, 3 error (no USB / timeout), 4 done but not locked,
+//            5 not done (ColorMunki: the reason is in the 'try' byte, see colorMunkiFailMessage)
+//     bytes 6-7 (newer firmware): meter kind (0 Torch Bearer, 1 ColorMunki) and ColorMunki flags:
+//       bit7 dial known, bits0-1 dial position (0 projector, 1 surface, 2 calibration, 3 ambient), bit2 dark calibration done
 // Result packets (all little-endian):
 //   01 | status u8 | peak_nm u16 | exposure_ms f32 | peak_val f32 | sum f32 | npts u16 | start_nm u16
 //   02 | npts u16 | start_nm u16 | step_nm u8 | total_bytes u16      (header; float32 values follow)
@@ -43,6 +46,69 @@ export const TB_CMD_FLIP_ON_B64 = 'AwE=';
 /** Bridge status states (status characteristic, byte 0). */
 export const TB_STATE_SCANNING = 1;
 export const TB_STATE_ERROR = 3;
+export const TB_STATE_FAILED = 5;
+
+export const TB_KIND_TORCH_BEARER = 0;
+export const TB_KIND_COLORMUNKI = 1;
+export const MUNKI_DIAL_PROJECTOR = 0;
+export const MUNKI_DIAL_SURFACE = 1;
+export const MUNKI_DIAL_CALIBRATION = 2;
+export const MUNKI_DIAL_AMBIENT = 3;
+
+/** The bridge's status characteristic, decoded. Older firmware sends only 6 bytes, so kind is 0 and the dial is unknown. */
+export interface TbMeterStatus {
+  state: number;
+  /** The 'try' byte: for state 5 on a ColorMunki, why it did not finish. */
+  reason: number;
+  exposureMs: number;
+  kind: number;
+  dialKnown: boolean;
+  dial: number;
+  calibrated: boolean;
+}
+
+export function parseTbStatus(p: Uint8Array): TbMeterStatus {
+  const dv = new DataView(p.buffer, p.byteOffset, p.byteLength);
+  const flags = p.length > 7 ? p[7] : 0;
+  return {
+    state: p[0] ?? 0,
+    reason: p[1] ?? 0,
+    exposureMs: p.length >= 6 ? dv.getFloat32(2, true) : 0,
+    kind: p.length > 6 ? p[6] : TB_KIND_TORCH_BEARER,
+    dialKnown: (flags & 0x80) !== 0,
+    dial: flags & 0x03,
+    calibrated: (flags & 0x04) !== 0,
+  };
+}
+
+/** Why a ColorMunki did not finish (the 'try' byte of a state 5 status). */
+export function colorMunkiFailMessage(reason: number): string {
+  switch (reason) {
+    case 1: return 'The light is too bright for the ColorMunki. Move it further away or dim it, then try again.';
+    case 2: return 'The ColorMunki did not answer. Check it is still plugged in, then try again.';
+    case 3: return 'Calibrate first: turn the ColorMunki dial to the calibration position and press Calibrate.';
+    case 5: return 'Turn the ColorMunki dial to Ambient to take a reading (or to Calibration to calibrate).';
+    default: return 'The ColorMunki could not finish. Try again.';
+  }
+}
+
+/** What the main button should do for the current ColorMunki dial position. */
+export type MunkiButtonMode =
+  | { kind: 'calibrate' }
+  | { kind: 'measure' }
+  | { kind: 'blocked'; caption: string; note: string };
+
+export function munkiButtonMode(s: TbMeterStatus): MunkiButtonMode {
+  if (!s.dialKnown) return { kind: 'blocked', caption: 'Please wait', note: 'Reading the ColorMunki dial…' };
+  if (s.dial === MUNKI_DIAL_CALIBRATION) return { kind: 'calibrate' };
+  if (s.dial === MUNKI_DIAL_AMBIENT) {
+    if (!s.calibrated) {
+      return { kind: 'blocked', caption: 'Calibrate first', note: 'Not calibrated yet: turn the dial to the calibration position and press Calibrate.' };
+    }
+    return { kind: 'measure' };
+  }
+  return { kind: 'blocked', caption: 'Turn dial', note: 'Turn the ColorMunki dial to Ambient to take a reading, or to Calibration to calibrate.' };
+}
 
 /** Matched by advertised name (the service UUID sits in the scan response, which not every phone stack merges in reliably). */
 export function isTorchBearerName(name: string | null | undefined): boolean {
@@ -177,11 +243,13 @@ export class TbReassembler {
  * only as good as the device's own units (W/m^2/nm, per the upstream
  * tobes-ui project); they have NOT been calibrated against a reference meter.
  */
-export function tbToMeterResult(scan: TbScan, deviceName: string): MeterResult {
+export function tbToMeterResult(scan: TbScan, deviceName: string, kind: number = TB_KIND_TORCH_BEARER): MeterResult {
   const { summary } = scan;
+  const isMunki = kind === TB_KIND_COLORMUNKI;
   // The bridge sends the raw spectrum; the app applies the HPCS-matching
   // correction (tbCorrection.ts) unless it's switched off in Settings.
-  const corrected = isTbCorrectionEnabled();
+  // The correction is fitted to the Torch Bearer against an HPCS; it must never be applied to a ColorMunki spectrum.
+  const corrected = !isMunki && isTbCorrectionEnabled();
   const spectrum = corrected ? applyTbCorrection(scan.spectrum) : scan.spectrum;
   const a = analyzeSpectrum(spectrum);
 
@@ -198,7 +266,7 @@ export function tbToMeterResult(scan: TbScan, deviceName: string): MeterResult {
   par *= 8.359e-3; // W/m^2/nm * nm -> umol/m^2/s (h*c*N_A = 0.11963 J*m/mol)
 
   return {
-    deviceName,
+    deviceName: isMunki ? 'ColorMunki' : deviceName,
     firmwareVersion: 0,
     cct: a.cct,
     ra: a.ra,
@@ -219,5 +287,6 @@ export function tbToMeterResult(scan: TbScan, deviceName: string): MeterResult {
     source: 'torchbearer',
     tbStatus: summary.status,
     tbCorrected: corrected,
+    meterModel: isMunki ? 'colormunki' : undefined,
   };
 }
