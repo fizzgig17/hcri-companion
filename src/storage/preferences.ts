@@ -200,6 +200,18 @@ export async function saveSideTabModePreference(mode: SideTabMode): Promise<void
   await AsyncStorage.setItem(SIDE_TAB_MODE_KEY, mode);
 }
 
+// Torch Bearer screen orientation: null until the user picks one (the bridge then keeps whatever it has), else true = turned 180 degrees.
+const TB_FLIP_KEY = 'hcri.io.pref.tbFlipDisplay';
+
+export async function loadTbFlipPreference(): Promise<boolean | null> {
+  const raw = await AsyncStorage.getItem(TB_FLIP_KEY);
+  return raw === '1' ? true : raw === '0' ? false : null;
+}
+
+export async function saveTbFlipPreference(flipped: boolean): Promise<void> {
+  await AsyncStorage.setItem(TB_FLIP_KEY, flipped ? '1' : '0');
+}
+
 // Set the first time the window is ever nearly square (an unfolded foldable), so Settings can show the foldable-only
 // options on that device even while it is folded.
 const FOLDABLE_SEEN_KEY = 'hcri.io.foldableSeen';
