@@ -718,6 +718,9 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
             <TouchableOpacity onPress={openForgotPassword} disabled={genBusy} style={styles.forgotPasswordLink}>
               <Text style={styles.forgotPasswordText}>Forgot password?</Text>
             </TouchableOpacity>
+            <TouchableOpacity onPress={openForgotPassword} disabled={genBusy} style={styles.forgotPasswordLink}>
+              <Text style={styles.forgotPasswordText}>Need an account? Sign up at hcri.io</Text>
+            </TouchableOpacity>
 
             <Text style={[styles.modalLabel, { marginTop: 8, marginBottom: 4 }]}>Token Name</Text>
             <TextInput
