@@ -858,7 +858,11 @@ export default function HomeScreen({ navigation }: any) {
       // A fresh reading hasn't been uploaded yet -- clears any checkmark
       // left over from the PREVIOUS reading's upload, which would
       // otherwise keep showing next to a result it no longer describes.
+      // lastUploadedReport must go too: upload() uses its id as replaceId,
+      // so leaving it set made the next upload overwrite the previous
+      // reading's report on hCRI.io instead of creating a new one.
       setUploadSucceeded(false);
+      setLastUploadedReport(null);
       setCurrentReadingId(null);
       setStatus('connected');
       hapticSuccess();
@@ -1052,6 +1056,7 @@ export default function HomeScreen({ navigation }: any) {
         liveLastRef.current = r;
         setResult(r);
         setUploadSucceeded(false);
+        setLastUploadedReport(null);
         setCurrentReadingId(null);
       },
       (err) => {
