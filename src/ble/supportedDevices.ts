@@ -80,8 +80,8 @@ export const SUPPORTED_DEVICES: SupportedDevice[] = [
     ],
   },
   {
-    model: 'Torch Bearer (via ESP32 bridge)',
-    matchedBy: 'Advertised name starts with "Torch Bearer" (the T-Display S3 bridge firmware, not the spectrometer itself)',
+    model: 'Torch Bearer and ColorMunki (via ESP32 bridge)',
+    matchedBy: 'Advertised name starts with "hCRI Bridge" (newer bridge firmware) or "Torch Bearer" (older firmware); the bridge itself reports which instrument is plugged in',
     verified: true,
     verifiedDate: '2026-10-07',
     notes: [

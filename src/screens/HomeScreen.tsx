@@ -1768,7 +1768,7 @@ export default function HomeScreen({ navigation }: any) {
             copyingLink={copyingLink}
             onCopyLink={copyReportLink}
             statIds={statIds}
-            connectedDeviceName={tbMeter && tbMeter.kind === TB_KIND_COLORMUNKI ? 'ColorMunki' : deviceName}
+            connectedDeviceName={tbMeter ? (tbMeter.kind === TB_KIND_COLORMUNKI ? 'ColorMunki' : 'Torch Bearer') : deviceName}
             connectedDeviceId={status === 'connected' || status === 'measuring' ? connRef.current?.getDeviceId() ?? null : null}
             battery={battery}
             uploadTitle={uploadTitle}
