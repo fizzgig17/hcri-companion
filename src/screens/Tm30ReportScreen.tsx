@@ -11,11 +11,19 @@ import { WebView } from 'react-native-webview';
 import { generatePDF } from 'react-native-html-to-pdf';
 import RNShare from 'react-native-share';
 import RNFS from 'react-native-fs';
+import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLog } from '../contexts/LogContext';
 import { buildTm30Html, buildTm30ImageHtml, buildTm30PdfHtml, TM30_PDF_PAGE, Tm30Input } from '../utils/tm30Report';
 import { withBackgroundDisconnectSuppressed } from '../ble/backgroundDisconnectGuard';
+
+const ICON_PHOTO = 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM21 15l-5-5L5 21';
+const ICON_IMAGE = 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3';
+const ICON_PDF = 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h8';
+const glyph = (d: string, color: string) => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><Path d={d} /></Svg>
+);
 
 export default function Tm30ReportScreen({ route, navigation, panel }: any) {
   const { colors } = useTheme();
@@ -114,6 +122,8 @@ export default function Tm30ReportScreen({ route, navigation, panel }: any) {
       paddingBottom: panel ? 12 : Math.max(insets.bottom, 10) + 4,
     },
     btn: { backgroundColor: colors.accent, borderRadius: 10, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' },
+    iconBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10, borderWidth: 1, borderColor: colors.cardBorder, backgroundColor: colors.card },
+    iconBtnText: { fontSize: 12, fontWeight: '600', marginTop: 3 },
     btnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
     btnSecondary: { flex: 1, backgroundColor: 'transparent', borderWidth: 1.5, borderColor: colors.accent },
     btnTextSecondary: { color: colors.accent, fontSize: 15, fontWeight: '700' },
@@ -144,29 +154,39 @@ export default function Tm30ReportScreen({ route, navigation, panel }: any) {
         />
       )}
       <View style={styles.dock}>
-        <View style={{ flexDirection: 'row', gap: 10 }}>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
           <TouchableOpacity
-            style={[styles.btn, styles.btnSecondary, !!built.error && { opacity: 0.5 }]}
+            style={[styles.iconBtn, !!built.error && { opacity: 0.5 }]}
             onPress={() => navigation?.navigate('Photo', { input })}
             disabled={!!built.error}
+            activeOpacity={0.8}
             accessibilityRole="button"
             accessibilityLabel="See it on a photo"
           >
-            <Text style={styles.btnTextSecondary}>See it on a photo</Text>
+            {glyph(ICON_PHOTO, colors.text)}
+            <Text style={[styles.iconBtnText, { color: colors.text }]} numberOfLines={1}>On a photo</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.btn, styles.btnSecondary, (!!imageHtml || !!built.error) && { opacity: 0.5 }]}
+            style={[styles.iconBtn, (!!imageHtml || !!built.error) && { opacity: 0.5 }]}
             onPress={startImage}
             disabled={!!imageHtml || !!built.error}
+            activeOpacity={0.8}
             accessibilityRole="button"
             accessibilityLabel="Save as image"
           >
-            {imageHtml && <ActivityIndicator color={colors.accent} style={{ marginRight: 8 }} />}
-            <Text style={styles.btnTextSecondary}>{imageHtml ? 'Making image…' : 'Save image'}</Text>
+            {imageHtml ? <ActivityIndicator size="small" color={colors.text} /> : glyph(ICON_IMAGE, colors.text)}
+            <Text style={[styles.iconBtnText, { color: colors.text }]} numberOfLines={1}>{imageHtml ? 'Making image…' : 'Save image'}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.btn, { flex: 1 }, (sharing || !!built.error) && { opacity: 0.5 }]} onPress={sharePdf} disabled={sharing || !!built.error} accessibilityRole="button" accessibilityLabel="Share PDF">
-            {sharing && <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />}
-            <Text style={styles.btnText}>{sharing ? 'Creating PDF…' : 'Share PDF'}</Text>
+          <TouchableOpacity
+            style={[styles.iconBtn, { borderColor: colors.accent }, (sharing || !!built.error) && { opacity: 0.5 }]}
+            onPress={sharePdf}
+            disabled={sharing || !!built.error}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Share PDF"
+          >
+            {sharing ? <ActivityIndicator size="small" color={colors.accent} /> : glyph(ICON_PDF, colors.accent)}
+            <Text style={[styles.iconBtnText, { color: colors.accent }]} numberOfLines={1}>{sharing ? 'Creating PDF…' : 'Share PDF'}</Text>
           </TouchableOpacity>
         </View>
       </View>
