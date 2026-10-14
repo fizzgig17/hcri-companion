@@ -168,3 +168,19 @@ describe('ColorMunki status', () => {
     expect(r.spectrum).toBe(spectrum);
   });
 });
+
+describe('bridge names', () => {
+  it('recognises both the old and the generic bridge name', () => {
+    const { isTorchBearerName } = require('../src/ble/torchBearer');
+    expect(isTorchBearerName('Torch Bearer')).toBe(true);
+    expect(isTorchBearerName('hCRI Bridge')).toBe(true);
+    expect(isTorchBearerName('HPCS-310P-5015396')).toBe(false);
+  });
+  it('a bridge-named Torch Bearer reading is labelled Torch Bearer, not the bridge name', () => {
+    const { tbToMeterResult } = require('../src/ble/torchBearer');
+    const spectrum = Array.from({ length: 351 }, (_, i) => ({ nm: 380 + i, value: 0.001 + 0.0005 * Math.sin(i / 30) }));
+    const scan = { summary: { status: 0, peakNm: 600, exposureMs: 10, peakValue: 1, sum: 1, npts: 351, startNm: 380 }, spectrum };
+    expect(tbToMeterResult(scan, 'hCRI Bridge', 0).deviceName).toBe('Torch Bearer');
+    expect(tbToMeterResult(scan, 'hCRI Bridge', 1).deviceName).toBe('ColorMunki');
+  });
+});

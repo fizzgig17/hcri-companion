@@ -477,7 +477,7 @@ export class MeterConnection {
         } catch {
           // nothing to cancel
         }
-        if (String(e?.message ?? '').startsWith('The Torch Bearer bridge is on')) break;   // not a flaky connect: nothing is plugged in, a retry won't change that
+        if (String(e?.message ?? '').startsWith('The bridge is on')) break;   // not a flaky connect: nothing is plugged in, a retry won't change that
         if (attempt < 2) await new Promise<void>((r) => setTimeout(() => r(), 700));
       } finally {
         this.connectingId = null;
@@ -594,11 +594,11 @@ export class MeterConnection {
         this.setTbMeterStatus(parseTbStatus(st));
         if (st[0] === TB_STATE_ERROR) {
           await connected.cancelConnection().catch(() => {});
-          throw new Error('The Torch Bearer bridge is on, but no spectrometer is plugged into it. Plug the spectrometer in, then connect again.');
+          throw new Error('The bridge is on, but no instrument is plugged into it. Plug the Torch Bearer or ColorMunki in, then connect again.');
         }
       }
     } catch (e: any) {
-      if (e instanceof Error && e.message.startsWith('The Torch Bearer bridge is on')) throw e;
+      if (e instanceof Error && e.message.startsWith('The bridge is on')) throw e;
       this.log(`Could not read the bridge status (continuing): ${describeBleError(e)}`);
     }
     // Remember what the bridge already holds, so only a reading taken after this point counts as new.
