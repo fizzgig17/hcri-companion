@@ -15,6 +15,7 @@
 // (the overwhelmingly common case) connects straight through with no
 // extra UI at all, same as before.
 
+import { isTorchBearerName, BRIDGE_NAME } from '../../ble/torchBearer';
 import { APP_VERSION } from '../../buildInfo';
 import React, { useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Modal, StyleSheet } from 'react-native';
@@ -617,7 +618,7 @@ export default function MainTab({
                 activeOpacity={0.6}
               >
                 <Text style={styles.deviceName}>
-                  {(d.id === connectedDeviceId && connectedDeviceName) || (munkiBridgeIds?.[d.id] ? 'ColorMunki' : null) || d.name || '(unnamed)'}
+                  {(d.id === connectedDeviceId && connectedDeviceName) || (munkiBridgeIds?.[d.id] ? 'ColorMunki' : null) || (isTorchBearerName(d.name) ? BRIDGE_NAME : null) || d.name || '(unnamed)'}
                   {d.id === connectedDeviceId ? '  ✓ connected' : ''}
                 </Text>
                 <Text style={styles.deviceMeta}>

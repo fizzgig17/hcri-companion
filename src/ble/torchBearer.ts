@@ -28,6 +28,8 @@ import type { MeterResult } from './parseResult';
 import { applyTbCorrection, isTbCorrectionEnabled } from './tbCorrection';
 
 export const TB_NAME_PREFIX = 'Torch Bearer';
+/** Newer bridge firmware advertises this generic name (it can carry a Torch Bearer or a ColorMunki); older firmware says "Torch Bearer". */
+export const BRIDGE_NAME = 'hCRI Bridge';
 export const TB_SERVICE_UUID = '7a1c0001-5b2e-4f0a-9c3d-2e8f6b4a1d00';
 export const TB_CMD_UUID = '7a1c0002-5b2e-4f0a-9c3d-2e8f6b4a1d00';
 export const TB_RESULT_UUID = '7a1c0003-5b2e-4f0a-9c3d-2e8f6b4a1d00';
@@ -136,7 +138,7 @@ export function munkiButtonMode(s: TbMeterStatus, maxAgeHours = 0, now: number =
 
 /** Matched by advertised name (the service UUID sits in the scan response, which not every phone stack merges in reliably). */
 export function isTorchBearerName(name: string | null | undefined): boolean {
-  return !!name && name.startsWith(TB_NAME_PREFIX);
+  return !!name && (name.startsWith(TB_NAME_PREFIX) || name.startsWith(BRIDGE_NAME));
 }
 
 export interface TbSummary {
@@ -290,7 +292,7 @@ export function tbToMeterResult(scan: TbScan, deviceName: string, kind: number =
   par *= 8.359e-3; // W/m^2/nm * nm -> umol/m^2/s (h*c*N_A = 0.11963 J*m/mol)
 
   return {
-    deviceName: isMunki ? 'ColorMunki' : deviceName,
+    deviceName: isMunki ? 'ColorMunki' : isTorchBearerName(deviceName) ? 'Torch Bearer' : deviceName,
     firmwareVersion: 0,
     cct: a.cct,
     ra: a.ra,
