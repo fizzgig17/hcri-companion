@@ -6,14 +6,15 @@
 // Opened with navigation.navigate('Tm30Report', { input }).
 
 import React, { useMemo, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Alert, Platform } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { generatePDF } from 'react-native-html-to-pdf';
 import RNShare from 'react-native-share';
+import RNFS from 'react-native-fs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLog } from '../contexts/LogContext';
-import { buildTm30Html, buildTm30PdfHtml, TM30_PDF_PAGE, Tm30Input } from '../utils/tm30Report';
+import { buildTm30Html, buildTm30ImageHtml, buildTm30PdfHtml, TM30_PDF_PAGE, Tm30Input } from '../utils/tm30Report';
 import { withBackgroundDisconnectSuppressed } from '../ble/backgroundDisconnectGuard';
 
 export default function Tm30ReportScreen({ route, navigation, panel }: any) {
@@ -23,6 +24,45 @@ export default function Tm30ReportScreen({ route, navigation, panel }: any) {
   const input: Tm30Input = route.params.input;
   const [sharing, setSharing] = useState(false);
   const busy = useRef(false);
+  // "Save image": a hidden WebView draws the report to a canvas and hands back a PNG, which goes to the share sheet
+  // (iOS: Save Image; Android: Photos / Files / any app).
+  const [imageHtml, setImageHtml] = useState<string | null>(null);
+  const imageBusy = useRef(false);
+
+  const startImage = () => {
+    if (imageBusy.current || busy.current) return;
+    try {
+      imageBusy.current = true;
+      setImageHtml(buildTm30ImageHtml(input));
+    } catch (e: any) {
+      imageBusy.current = false;
+      Alert.alert('Could not create the image', String(e?.message ?? e));
+    }
+  };
+
+  const onImageMessage = async (data: string) => {
+    setImageHtml(null);
+    try {
+      if (data.startsWith('err:')) throw new Error(data.slice(4));
+      if (!data.startsWith('png:')) return;
+      const name = `TM-30_${(input.title || 'reading').replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 60)}.png`;
+      const path = `${RNFS.CachesDirectoryPath}/${name}`;
+      await RNFS.writeFile(path, data.slice(4), 'base64');
+      appendLog(`TM-30 image created: ${path}`);
+      await withBackgroundDisconnectSuppressed(async () => {
+        await RNShare.open({ url: `file://${path}`, type: 'image/png', filename: name });
+      });
+    } catch (e: any) {
+      if (String(e?.message ?? e).includes('did not share')) {
+        appendLog('TM-30 image: share cancelled.');
+      } else {
+        appendLog(`TM-30 image failed: ${e?.message ?? e}`);
+        Alert.alert('Could not create the image', String(e?.message ?? e));
+      }
+    } finally {
+      imageBusy.current = false;
+    }
+  };
 
   const built = useMemo(() => {
     try {
@@ -38,7 +78,7 @@ export default function Tm30ReportScreen({ route, navigation, panel }: any) {
     setSharing(true);
     try {
       const name = `TM-30_${(input.title || 'reading').replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 60)}`;
-      const pdf = await generatePDF({ html: buildTm30PdfHtml(input), fileName: name, width: TM30_PDF_PAGE.width, height: TM30_PDF_PAGE.height });
+      const pdf = await generatePDF({ html: buildTm30PdfHtml(input, Platform.OS === 'ios'), fileName: name, width: TM30_PDF_PAGE.width, height: TM30_PDF_PAGE.height, ...(Platform.OS === 'ios' ? { padding: 0 } : {}) });
       const path = pdf.filePath;
       if (!path) throw new Error('No PDF file was produced.');
       appendLog(`TM-30 PDF created: ${path} (${pdf.numberOfPages ?? '?'} page(s))`);
@@ -94,6 +134,15 @@ export default function Tm30ReportScreen({ route, navigation, panel }: any) {
           overScrollMode="never"
         />
       )}
+      {imageHtml && (
+        <WebView
+          style={{ position: 'absolute', width: 1, height: 1, opacity: 0 }}
+          originWhitelist={['*']}
+          source={{ html: imageHtml }}
+          onMessage={(e) => onImageMessage(e.nativeEvent.data)}
+          onError={() => onImageMessage('err:the image page failed to load')}
+        />
+      )}
       <View style={styles.dock}>
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <TouchableOpacity
@@ -104,6 +153,16 @@ export default function Tm30ReportScreen({ route, navigation, panel }: any) {
             accessibilityLabel="See it on a photo"
           >
             <Text style={styles.btnTextSecondary}>See it on a photo</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.btn, styles.btnSecondary, (!!imageHtml || !!built.error) && { opacity: 0.5 }]}
+            onPress={startImage}
+            disabled={!!imageHtml || !!built.error}
+            accessibilityRole="button"
+            accessibilityLabel="Save as image"
+          >
+            {imageHtml && <ActivityIndicator color={colors.accent} style={{ marginRight: 8 }} />}
+            <Text style={styles.btnTextSecondary}>{imageHtml ? 'Making image…' : 'Save image'}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.btn, { flex: 1 }, (sharing || !!built.error) && { opacity: 0.5 }]} onPress={sharePdf} disabled={sharing || !!built.error} accessibilityRole="button" accessibilityLabel="Share PDF">
             {sharing && <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />}

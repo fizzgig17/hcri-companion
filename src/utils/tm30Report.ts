@@ -400,14 +400,58 @@ export const TM30_PDF_PAGE = { width: 595, height: 772 };
  * The shared PDF: the hCRI.io TM-30 report page (see tm30AnnexSvg.ts), drawn as one fixed-size SVG so nothing
  * depends on viewport units (a 0-wide print viewport printed a blank page on iOS before).
  */
-export function buildTm30PdfHtml(input: Tm30Input): string {
+export function buildTm30PdfHtml(input: Tm30Input, fluid = false): string {
   const svg = buildAnnexSvg(
     { ...input, generatedBy: `Generated on-device by hCRI Companion v${APP_VERSION}  ·  IES TM-30-18` },
     TM30_PDF_PAGE.width,
     TM30_PDF_PAGE.height
   );
+  if (fluid) {
+    // iOS: the print formatter lays the page out at its own width and then scales that width onto the paper (with the
+    // library's padding taken off), so a fixed 595px page came out about 80% size with blank margins. Let the SVG fill
+    // whatever width it is given (never narrower than 595px, so a 0-wide layout can't print blank) and the formatter's
+    // scaling then fills the page exactly.
+    return `<!doctype html><html><head><meta charset="utf-8">
+<style>@page{margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fafbfc}svg{display:block;width:99.6%!important;min-width:${TM30_PDF_PAGE.width - 4}px;height:auto!important}</style>
+</head><body>${svg}</body></html>`;
+  }
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=${TM30_PDF_PAGE.width}, initial-scale=1">
 <style>@page{margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fafbfc;width:${TM30_PDF_PAGE.width}px;height:${TM30_PDF_PAGE.height}px;overflow:hidden}</style>
 </head><body>${svg}</body></html>`;
+}
+
+/** Pixel size of the saved TM-30 image: the report page at 2x its on-screen layout (1650 x 2140, same proportions as the PDF). */
+export const TM30_IMAGE_PAGE = { width: 1650, height: 2140 };
+
+/**
+ * A tiny page that draws the TM-30 report SVG onto a canvas and posts the PNG (base64, no data: prefix) back to React
+ * Native as "png:<base64>", or "err:<message>" if anything fails. Rendered in a hidden WebView so no extra native module is needed.
+ */
+export function buildTm30ImageHtml(input: Tm30Input): string {
+  const svg = buildAnnexSvg(
+    { ...input, generatedBy: `Generated on-device by hCRI Companion v${APP_VERSION}  ·  IES TM-30-18` },
+    TM30_IMAGE_PAGE.width,
+    TM30_IMAGE_PAGE.height
+  );
+  const svgJson = JSON.stringify(svg).replace(/</g, '\\u003c');
+  return `<!doctype html><html><head><meta charset="utf-8"></head><body><script>
+(function(){
+  function send(m){ try { window.ReactNativeWebView.postMessage(m); } catch (e) {} }
+  try {
+    var svg = ${svgJson};
+    var img = new Image();
+    img.onload = function(){
+      try {
+        var c = document.createElement('canvas'); c.width = ${TM30_IMAGE_PAGE.width}; c.height = ${TM30_IMAGE_PAGE.height};
+        var g = c.getContext('2d'); g.fillStyle = '#fafbfc'; g.fillRect(0, 0, c.width, c.height);
+        g.drawImage(img, 0, 0, c.width, c.height);
+        send('png:' + c.toDataURL('image/png').split(',')[1]);
+      } catch (e) { send('err:' + (e && e.message ? e.message : e)); }
+    };
+    img.onerror = function(){ send('err:the report image could not be drawn'); };
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  } catch (e) { send('err:' + (e && e.message ? e.message : e)); }
+})();
+</script></body></html>`;
 }
