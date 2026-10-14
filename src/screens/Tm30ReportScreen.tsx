@@ -6,15 +6,24 @@
 // Opened with navigation.navigate('Tm30Report', { input }).
 
 import React, { useMemo, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Alert, Platform } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { generatePDF } from 'react-native-html-to-pdf';
 import RNShare from 'react-native-share';
+import RNFS from 'react-native-fs';
+import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLog } from '../contexts/LogContext';
-import { buildTm30Html, buildTm30PdfHtml, TM30_PDF_PAGE, Tm30Input } from '../utils/tm30Report';
+import { buildTm30Html, buildTm30ImageHtml, buildTm30PdfHtml, TM30_PDF_PAGE, Tm30Input } from '../utils/tm30Report';
 import { withBackgroundDisconnectSuppressed } from '../ble/backgroundDisconnectGuard';
+
+const ICON_PHOTO = 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM21 15l-5-5L5 21';
+const ICON_IMAGE = 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3';
+const ICON_PDF = 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h8';
+const glyph = (d: string, color: string) => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><Path d={d} /></Svg>
+);
 
 export default function Tm30ReportScreen({ route, navigation, panel }: any) {
   const { colors } = useTheme();
@@ -23,6 +32,45 @@ export default function Tm30ReportScreen({ route, navigation, panel }: any) {
   const input: Tm30Input = route.params.input;
   const [sharing, setSharing] = useState(false);
   const busy = useRef(false);
+  // "Save image": a hidden WebView draws the report to a canvas and hands back a PNG, which goes to the share sheet
+  // (iOS: Save Image; Android: Photos / Files / any app).
+  const [imageHtml, setImageHtml] = useState<string | null>(null);
+  const imageBusy = useRef(false);
+
+  const startImage = () => {
+    if (imageBusy.current || busy.current) return;
+    try {
+      imageBusy.current = true;
+      setImageHtml(buildTm30ImageHtml(input));
+    } catch (e: any) {
+      imageBusy.current = false;
+      Alert.alert('Could not create the image', String(e?.message ?? e));
+    }
+  };
+
+  const onImageMessage = async (data: string) => {
+    setImageHtml(null);
+    try {
+      if (data.startsWith('err:')) throw new Error(data.slice(4));
+      if (!data.startsWith('png:')) return;
+      const name = `TM-30_${(input.title || 'reading').replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 60)}.png`;
+      const path = `${RNFS.CachesDirectoryPath}/${name}`;
+      await RNFS.writeFile(path, data.slice(4), 'base64');
+      appendLog(`TM-30 image created: ${path}`);
+      await withBackgroundDisconnectSuppressed(async () => {
+        await RNShare.open({ url: `file://${path}`, type: 'image/png', filename: name });
+      });
+    } catch (e: any) {
+      if (String(e?.message ?? e).includes('did not share')) {
+        appendLog('TM-30 image: share cancelled.');
+      } else {
+        appendLog(`TM-30 image failed: ${e?.message ?? e}`);
+        Alert.alert('Could not create the image', String(e?.message ?? e));
+      }
+    } finally {
+      imageBusy.current = false;
+    }
+  };
 
   const built = useMemo(() => {
     try {
@@ -38,7 +86,7 @@ export default function Tm30ReportScreen({ route, navigation, panel }: any) {
     setSharing(true);
     try {
       const name = `TM-30_${(input.title || 'reading').replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 60)}`;
-      const pdf = await generatePDF({ html: buildTm30PdfHtml(input), fileName: name, width: TM30_PDF_PAGE.width, height: TM30_PDF_PAGE.height });
+      const pdf = await generatePDF({ html: buildTm30PdfHtml(input, Platform.OS === 'ios'), fileName: name, width: TM30_PDF_PAGE.width, height: TM30_PDF_PAGE.height, ...(Platform.OS === 'ios' ? { padding: 0 } : {}) });
       const path = pdf.filePath;
       if (!path) throw new Error('No PDF file was produced.');
       appendLog(`TM-30 PDF created: ${path} (${pdf.numberOfPages ?? '?'} page(s))`);
@@ -74,6 +122,8 @@ export default function Tm30ReportScreen({ route, navigation, panel }: any) {
       paddingBottom: panel ? 12 : Math.max(insets.bottom, 10) + 4,
     },
     btn: { backgroundColor: colors.accent, borderRadius: 10, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' },
+    iconBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10, borderWidth: 1, borderColor: colors.cardBorder, backgroundColor: colors.card },
+    iconBtnText: { fontSize: 12, fontWeight: '600', marginTop: 3 },
     btnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
     btnSecondary: { flex: 1, backgroundColor: 'transparent', borderWidth: 1.5, borderColor: colors.accent },
     btnTextSecondary: { color: colors.accent, fontSize: 15, fontWeight: '700' },
@@ -94,20 +144,49 @@ export default function Tm30ReportScreen({ route, navigation, panel }: any) {
           overScrollMode="never"
         />
       )}
+      {imageHtml && (
+        <WebView
+          style={{ position: 'absolute', width: 1, height: 1, opacity: 0 }}
+          originWhitelist={['*']}
+          source={{ html: imageHtml }}
+          onMessage={(e) => onImageMessage(e.nativeEvent.data)}
+          onError={() => onImageMessage('err:the image page failed to load')}
+        />
+      )}
       <View style={styles.dock}>
-        <View style={{ flexDirection: 'row', gap: 10 }}>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
           <TouchableOpacity
-            style={[styles.btn, styles.btnSecondary, !!built.error && { opacity: 0.5 }]}
+            style={[styles.iconBtn, !!built.error && { opacity: 0.5 }]}
             onPress={() => navigation?.navigate('Photo', { input })}
             disabled={!!built.error}
+            activeOpacity={0.8}
             accessibilityRole="button"
             accessibilityLabel="See it on a photo"
           >
-            <Text style={styles.btnTextSecondary}>See it on a photo</Text>
+            {glyph(ICON_PHOTO, colors.text)}
+            <Text style={[styles.iconBtnText, { color: colors.text }]} numberOfLines={1}>On a photo</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.btn, { flex: 1 }, (sharing || !!built.error) && { opacity: 0.5 }]} onPress={sharePdf} disabled={sharing || !!built.error} accessibilityRole="button" accessibilityLabel="Share PDF">
-            {sharing && <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />}
-            <Text style={styles.btnText}>{sharing ? 'Creating PDF…' : 'Share PDF'}</Text>
+          <TouchableOpacity
+            style={[styles.iconBtn, (!!imageHtml || !!built.error) && { opacity: 0.5 }]}
+            onPress={startImage}
+            disabled={!!imageHtml || !!built.error}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Save as image"
+          >
+            {imageHtml ? <ActivityIndicator size="small" color={colors.text} /> : glyph(ICON_IMAGE, colors.text)}
+            <Text style={[styles.iconBtnText, { color: colors.text }]} numberOfLines={1}>{imageHtml ? 'Making image…' : 'Save image'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.iconBtn, { borderColor: colors.accent }, (sharing || !!built.error) && { opacity: 0.5 }]}
+            onPress={sharePdf}
+            disabled={sharing || !!built.error}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Share PDF"
+          >
+            {sharing ? <ActivityIndicator size="small" color={colors.accent} /> : glyph(ICON_PDF, colors.accent)}
+            <Text style={[styles.iconBtnText, { color: colors.accent }]} numberOfLines={1}>{sharing ? 'Creating PDF…' : 'Share PDF'}</Text>
           </TouchableOpacity>
         </View>
       </View>
