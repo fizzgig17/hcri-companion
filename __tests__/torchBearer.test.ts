@@ -184,3 +184,12 @@ describe('bridge names', () => {
     expect(tbToMeterResult(scan, 'hCRI Bridge', 1).deviceName).toBe('ColorMunki');
   });
 });
+
+describe('firmware-corrected status bit', () => {
+  it('reads bit 6 of the flags byte as fwCorrected', () => {
+    const base = [0, 0, 0, 0, 0, 0, 0];
+    expect(parseTbStatus(new Uint8Array([...base, 0x40])).fwCorrected).toBe(true);
+    expect(parseTbStatus(new Uint8Array([...base, 0x00])).fwCorrected).toBe(false);
+    expect(parseTbStatus(new Uint8Array([0, 0, 0, 0, 0, 0])).fwCorrected).toBe(false); // old 6-byte status
+  });
+});

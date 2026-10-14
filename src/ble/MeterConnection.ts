@@ -645,14 +645,14 @@ export class MeterConnection {
             this.tbWaiter = null;
             this.tbLastSig = tbSummarySignature(scan.summary);
             this.log(`Torch Bearer scan complete: ${scan.spectrum.length} points, exposure ${scan.summary.exposureMs.toFixed(1)} ms, status ${scan.summary.status}`);
-            w.resolve(tbToMeterResult(scan, connected.name ?? connected.localName ?? 'Torch Bearer', this.tbMeterStatus?.kind ?? 0));
+            w.resolve(tbToMeterResult(scan, connected.name ?? connected.localName ?? 'Torch Bearer', this.tbMeterStatus?.kind ?? 0, this.tbMeterStatus?.fwCorrected ?? false));
           } else if (scan && tbSummarySignature(scan.summary) === this.tbLastSig) {
             this.log('Torch Bearer re-sent a reading the app already has -- ignoring it');
           } else if (scan && this.tbButtonHandlers.result) {
             // Nobody here asked for it: the button on the bridge started this scan, and the app takes the reading as its own.
             this.tbLastSig = tbSummarySignature(scan.summary);
             this.log(`Torch Bearer button scan complete: ${scan.spectrum.length} points, exposure ${scan.summary.exposureMs.toFixed(1)} ms`);
-            this.tbButtonHandlers.result(tbToMeterResult(scan, connected.name ?? connected.localName ?? 'Torch Bearer', this.tbMeterStatus?.kind ?? 0));
+            this.tbButtonHandlers.result(tbToMeterResult(scan, connected.name ?? connected.localName ?? 'Torch Bearer', this.tbMeterStatus?.kind ?? 0, this.tbMeterStatus?.fwCorrected ?? false));
           }
         } catch (e: any) {
           this.tbReassembler.reset();

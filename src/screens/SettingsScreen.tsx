@@ -97,6 +97,9 @@ const THEME_MODE_OPTIONS: { value: ThemeMode; label: string }[] = [
 ];
 
 /** `panel`: shown inside the tablet overlay (OverlayPanel supplies the title and the close button). */
+// The Torch Bearer spectral correction is applied in the bridge firmware now; the app switch is hidden (code kept).
+const SHOW_TB_CORRECTION_SWITCH = false;
+
 export default function SettingsScreen({ navigation, route, panel }: any) {
   const { colors, mode, setMode } = useTheme();
   // Settings / About sub-tabs -- About used to be a section at the very
@@ -887,7 +890,9 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
       {switchRow('Keep screen awake', 'Prevents the screen from locking during a session with the meter connected. Uses more battery.', keepAwake, toggleKeepAwake)}
 
       {sectionHeader('Torch Bearer')}
-      {switchRow('Spectrum correction', "Adjusts the Torch Bearer's spectrum so its CCT, Duv and color-rendering numbers line up with the HPCS meter (it reads a few percent high in CCT without it). Leave on for normal use; turn off to see the raw, uncorrected spectrum. Applies to new scans, and saved CSVs say which one was used.", tbCorrection, toggleTbCorrection)}
+      {/* The spectral correction now lives in the bridge firmware (the app only applies it for older firmware, always on).
+          The switch is kept in code in case it is needed again: set SHOW_TB_CORRECTION_SWITCH to true. */}
+      {SHOW_TB_CORRECTION_SWITCH && switchRow('Spectrum correction', "Adjusts the Torch Bearer's spectrum so its CCT, Duv and color-rendering numbers line up with the HPCS meter (it reads a few percent high in CCT without it). Leave on for normal use; turn off to see the raw, uncorrected spectrum. Applies to new scans, and saved CSVs say which one was used.", tbCorrection, toggleTbCorrection)}
       {switchRow('Flip screen', "Turns the Torch Bearer's screen 180° so it reads upright the other way round (the arrow then points to the button at the bottom left). Takes effect on the bridge right away while it is connected, and it keeps the setting. Needs the latest bridge firmware.", tbFlipped, toggleTbFlip)}
 
       {sectionHeader('ColorMunki')}

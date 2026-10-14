@@ -11,10 +11,9 @@
 // (shape) correction only -- it does not change the overall level, so lux
 // and PAR stay as uncalibrated as before.
 //
-// The bridge firmware sends the RAW spectrum (its own correction flag is
-// off by default), so this is the only place the curve is applied. If you
-// ever flash the firmware with TB_APPLY_CORRECTION=1 turn this off in
-// Settings, or the curve is applied twice.
+// Newer bridge firmware applies the same curve on the board and sets status
+// bit 6 (fwCorrected); the app then skips it (see tbToMeterResult). This copy
+// is used only for older firmware that sends the RAW spectrum.
 
 export const TB_CORR_FIRST_NM = 340;
 
