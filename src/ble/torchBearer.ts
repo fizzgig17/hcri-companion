@@ -16,6 +16,7 @@
 //            5 not done (ColorMunki: the reason is in the 'try' byte, see colorMunkiFailMessage)
 //     bytes 6-7 (newer firmware): meter kind (0 Torch Bearer, 1 ColorMunki) and ColorMunki flags:
 //       bit7 dial known, bits0-1 dial position (0 projector, 1 surface, 2 calibration, 3 ambient), bit2 dark calibration done
+//       bit6 (Torch Bearer): the firmware already applies the HPCS-fitted spectral correction, so the app must not
 // Result packets (all little-endian):
 //   01 | status u8 | peak_nm u16 | exposure_ms f32 | peak_val f32 | sum f32 | npts u16 | start_nm u16
 //   02 | npts u16 | start_nm u16 | step_nm u8 | total_bytes u16      (header; float32 values follow)
@@ -67,6 +68,8 @@ export interface TbMeterStatus {
   dialKnown: boolean;
   dial: number;
   calibrated: boolean;
+  /** Torch Bearer: the firmware already applied the spectral correction to the spectrum it sends. */
+  fwCorrected: boolean;
   /** ColorMunki: minutes since the dark calibration, as of the moment this status was sent (null = unknown or none). */
   calAgeMin: number | null;
   /** When the app received this status (Date.now()), so the age can be carried forward. Set by MeterConnection. */
@@ -84,6 +87,7 @@ export function parseTbStatus(p: Uint8Array): TbMeterStatus {
     dialKnown: (flags & 0x80) !== 0,
     dial: flags & 0x03,
     calibrated: (flags & 0x04) !== 0,
+    fwCorrected: (flags & 0x40) !== 0,
     calAgeMin: p.length > 9 && (p[8] | (p[9] << 8)) !== 0xffff ? p[8] | (p[9] << 8) : null,
   };
 }
@@ -269,14 +273,16 @@ export class TbReassembler {
  * only as good as the device's own units (W/m^2/nm, per the upstream
  * tobes-ui project); they have NOT been calibrated against a reference meter.
  */
-export function tbToMeterResult(scan: TbScan, deviceName: string, kind: number = TB_KIND_TORCH_BEARER): MeterResult {
+export function tbToMeterResult(scan: TbScan, deviceName: string, kind: number = TB_KIND_TORCH_BEARER, fwCorrected = false): MeterResult {
   const { summary } = scan;
   const isMunki = kind === TB_KIND_COLORMUNKI;
   // The bridge sends the raw spectrum; the app applies the HPCS-matching
   // correction (tbCorrection.ts) unless it's switched off in Settings.
   // The correction is fitted to the Torch Bearer against an HPCS; it must never be applied to a ColorMunki spectrum.
-  const corrected = !isMunki && isTbCorrectionEnabled();
-  const spectrum = corrected ? applyTbCorrection(scan.spectrum) : scan.spectrum;
+  // Newer firmware corrects on the board (status bit 6); then the app must not apply the curve a second time.
+  const appCorrects = !isMunki && !fwCorrected && isTbCorrectionEnabled();
+  const corrected = !isMunki && (fwCorrected || appCorrects);
+  const spectrum = appCorrects ? applyTbCorrection(scan.spectrum) : scan.spectrum;
   const a = analyzeSpectrum(spectrum);
 
   // Photopic illuminance: 683 lm/W * sum(ybar * E(lambda) * dlambda). Step is 1 nm.

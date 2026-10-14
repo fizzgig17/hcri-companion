@@ -1,4 +1,4 @@
-import { TbReassembler, tbToMeterResult, isTorchBearerName } from '../src/ble/torchBearer';
+import { TbReassembler, tbToMeterResult, isTorchBearerName, parseTbStatus } from '../src/ble/torchBearer';
 
 // Builds the exact packets the ESP32 bridge firmware sends (see README in tobes-esp32).
 function packets(vals: number[], startNm: number, chunk: number, exposureMs = 38.4, status = 0): Uint8Array[] {
@@ -182,5 +182,14 @@ describe('bridge names', () => {
     const scan = { summary: { status: 0, peakNm: 600, exposureMs: 10, peakValue: 1, sum: 1, npts: 351, startNm: 380 }, spectrum };
     expect(tbToMeterResult(scan, 'hCRI Bridge', 0).deviceName).toBe('Torch Bearer');
     expect(tbToMeterResult(scan, 'hCRI Bridge', 1).deviceName).toBe('ColorMunki');
+  });
+});
+
+describe('firmware-corrected status bit', () => {
+  it('reads bit 6 of the flags byte as fwCorrected', () => {
+    const base = [0, 0, 0, 0, 0, 0, 0];
+    expect(parseTbStatus(new Uint8Array([...base, 0x40])).fwCorrected).toBe(true);
+    expect(parseTbStatus(new Uint8Array([...base, 0x00])).fwCorrected).toBe(false);
+    expect(parseTbStatus(new Uint8Array([0, 0, 0, 0, 0, 0])).fwCorrected).toBe(false); // old 6-byte status
   });
 });
