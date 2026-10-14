@@ -18,7 +18,7 @@
 // column, or the pane a wide layout put it in).
 
 import { createContext, useContext } from 'react';
-import { useWindowDimensions } from 'react-native';
+import { Platform, useWindowDimensions } from 'react-native';
 
 export const MAX_CONTENT_WIDTH = 480;
 /** Settings, About and other single-column screens are capped at this width on wide windows. */
@@ -26,10 +26,17 @@ export const WIDE_SINGLE_COLUMN_WIDTH = 720;
 
 export type LayoutMode = 'compact' | 'stacked' | 'dashboard';
 
-/** Nearly square windows (an unfolded foldable): charts on the left, History/Data switchable on the right. */
-export function isSquareWindow(width: number, height: number): boolean {
+/**
+ * Nearly square windows (an unfolded foldable): charts on the left, History/Data switchable on the right.
+ * On Android the range is wider (about 3:4 to 4:3) so the less square unfolded foldables (a Galaxy Z Fold8 is 4:3)
+ * get this same layout in both orientations instead of the phone column (held wide) or the cramped stacked page
+ * (held tall). iPads have the same 4:3 shape but keep their own stacked/dashboard modes, so the wider range is Android only.
+ */
+export function isSquareWindow(width: number, height: number, android: boolean = Platform.OS === 'android'): boolean {
   const r = width / Math.max(1, height);
-  return width >= 600 && height >= 560 && r >= 0.83 && r <= 1.2;
+  const lo = android ? 0.7 : 0.83;
+  const hi = android ? 1.45 : 1.2;
+  return width >= 600 && height >= 560 && r >= lo && r <= hi;
 }
 
 /** Width of the right-hand column in a square window: a third of the window, but wide enough to read History. */
