@@ -1,4 +1,4 @@
-import { TbReassembler, tbToMeterResult, isTorchBearerName } from '../src/ble/torchBearer';
+import { TbReassembler, tbToMeterResult, isTorchBearerName, parseTbStatus } from '../src/ble/torchBearer';
 
 // Builds the exact packets the ESP32 bridge firmware sends (see README in tobes-esp32).
 function packets(vals: number[], startNm: number, chunk: number, exposureMs = 38.4, status = 0): Uint8Array[] {
