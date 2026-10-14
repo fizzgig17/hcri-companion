@@ -54,7 +54,7 @@ import { ledPatch, ledsOfReading, hasLed } from '../hcri/leds';
  * tab of its own. It drops the screen chrome (safe-area insets, title) and reloads whenever `refreshKey` changes,
  * which Home bumps when a reading is taken or uploaded.
  */
-export default function HistoryScreen({ navigation, embedded, refreshKey }: any) {
+export default function HistoryScreen({ navigation, embedded, refreshKey, onRenamed }: any) {
   const layoutMode = useLayoutMode();
   const { colors } = useTheme();
   const { appendLog } = useLog();
@@ -141,7 +141,8 @@ export default function HistoryScreen({ navigation, embedded, refreshKey }: any)
   const renameFromHistory = useCallback(async (id: string, label: string) => {
     await renameReading(id, label);
     setHistory((prev) => prev.map((r) => (r.id === id ? { ...r, label } : r)));
-  }, []);
+    onRenamed?.(id, label);
+  }, [onRenamed]);
 
   const deleteFromHistory = useCallback(async (id: string) => {
     await deleteReading(id);

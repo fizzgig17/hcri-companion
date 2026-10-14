@@ -29,7 +29,7 @@ import { fetchSampleReading } from '../hcri/fetchSampleReading';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
 import { loadAutoConnectPreference, loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference, loadTestReportIdPreference, loadMunkiCalHoursPreference, loadMunkiBridgeIds, saveMunkiBridgeId, loadSideTabPreference, saveSideTabPreference, loadSideTabModePreference, saveFoldableSeen } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
-import { addReading, loadHistory, recordUpload, setReadingFlicker, updateReadingLed } from '../storage/readingHistory';
+import { addReading, loadHistory, recordUpload, renameReading, setReadingFlicker, updateReadingLed } from '../storage/readingHistory';
 import { fetchLedSuggestion, LedDetails, LedSuggestion } from '../hcri/ledApi';
 import useLedSuggestionsEnabled from '../hooks/useLedSuggestionsEnabled';
 import { ledPatch, hasLed, ledsOfReading } from '../hcri/leds';
@@ -146,6 +146,8 @@ export default function HomeScreen({ navigation }: any) {
   // restarts (a fresh useState initializer) -- exactly "persist during a
   // session that isn't reset."
   const [uploadTitle, setUploadTitle] = useState('');
+  // Bumped whenever the title is renamed from Main or History, so the embedded History list reloads and Main/History stay in step.
+  const [titleSync, setTitleSync] = useState(0);
   // Whether the most recent upload attempt for the CURRENT reading
   // succeeded -- drives the small inline checkmark MainTab/DataTab show
   // next to their Upload button instead of a confirmation popup on every
@@ -173,6 +175,9 @@ export default function HomeScreen({ navigation }: any) {
   // moment a fresh measurement starts, so an upload triggered right after
   // can never accidentally write onto a PREVIOUS reading's History row.
   const [currentReadingId, setCurrentReadingId] = useState<string | null>(null);
+  const currentReadingIdRef = useRef<string | null>(null);
+  currentReadingIdRef.current = currentReadingId;
+  const uploadTitleRef = useRef('');
   // LED suggestion for the current reading (Main tab's floating card). Hidden by taking a new reading
   // (currentReadingId changes) or by the card's own close button; History keeps offering it until approved.
   const [ledSuggestion, setLedSuggestion] = useState<LedSuggestion | null>(null);
@@ -1420,6 +1425,36 @@ export default function HomeScreen({ navigation }: any) {
     return () => subscription.remove();
   }, [appendLog, connect, disconnect, getConnection]);
 
+  /** Title edited on Main: remember it for the upload AND write it to this reading's History row right away, so History shows the same name before any upload. */
+  const changeTitle = useCallback((t: string) => {
+    setUploadTitle(t);
+    const rid = currentReadingIdRef.current;
+    if (!rid) return;
+    const label = t.trim() || defaultLabel(cachedUsername, result?.deviceName ?? null);
+    renameReading(rid, label)
+      .then(() => setTitleSync((n) => n + 1))
+      .catch((e: any) => appendLog(`Failed to save title to history: ${e.message}`));
+  }, [cachedUsername, result, appendLog]);
+
+  uploadTitleRef.current = uploadTitle;
+  // Returning from the standalone History screen: pick up a rename made there for the reading on Main.
+  useEffect(() => {
+    const unsub = navigation.addListener('focus', async () => {
+      const rid = currentReadingIdRef.current;
+      if (!rid) return;
+      try {
+        const row = (await loadHistory()).find((r) => r.id === rid);
+        if (row && row.label !== (uploadTitleRef.current.trim() || defaultLabel(cachedUsername, result?.deviceName ?? null))) setUploadTitle(row.label);
+      } catch { /* keep what Main has */ }
+    });
+    return unsub;
+  }, [navigation, cachedUsername, result]);
+
+  /** Title edited in History: if it is the reading on Main, show it there too. */
+  const historyRenamed = useCallback((id: string, label: string) => {
+    if (id === currentReadingIdRef.current) setUploadTitle(label);
+  }, []);
+
   const upload = useCallback(async () => {
     if (!result) return;
     if (result.sampleLabel) {
@@ -1633,7 +1668,7 @@ export default function HomeScreen({ navigation }: any) {
       onCopyLink={copyReportLink}
       scrollInputIntoView={scrollInputIntoView}
       uploadTitle={uploadTitle}
-      onUploadTitleChange={setUploadTitle}
+      onUploadTitleChange={changeTitle}
       onShareCsv={shareCurrentCsv}
       cachedUsername={cachedUsername}
       ledCurrent={currentLeds.length ? currentLeds : null}
@@ -1737,7 +1772,7 @@ export default function HomeScreen({ navigation }: any) {
             connectedDeviceId={status === 'connected' || status === 'measuring' ? connRef.current?.getDeviceId() ?? null : null}
             battery={battery}
             uploadTitle={uploadTitle}
-            onUploadTitleChange={setUploadTitle}
+            onUploadTitleChange={changeTitle}
             cachedUsername={cachedUsername}
             ledSuggestion={ledSuggestion}
             ledCurrent={currentLeds.length ? currentLeds : null}
@@ -1831,7 +1866,7 @@ export default function HomeScreen({ navigation }: any) {
                 />
               </View>
               {sideTab === 'history' ? (
-                <HistoryScreen embedded navigation={navigation} refreshKey={`${currentReadingId ?? ''}|${uploadSucceeded ? 1 : 0}|${lastUploadedReport?.id ?? ''}`} />
+                <HistoryScreen embedded navigation={navigation} refreshKey={`${currentReadingId ?? ''}|${uploadSucceeded ? 1 : 0}|${lastUploadedReport?.id ?? ''}|${titleSync}`} onRenamed={historyRenamed} />
               ) : (
                 <ScrollView style={styles.bottomRight} contentContainerStyle={styles.bottomRightContent} automaticallyAdjustKeyboardInsets keyboardShouldPersistTaps="handled">
                   {renderDataTab()}
@@ -1839,7 +1874,7 @@ export default function HomeScreen({ navigation }: any) {
               )}
             </View>
           ) : (
-            <HistoryScreen embedded navigation={navigation} refreshKey={`${currentReadingId ?? ''}|${uploadSucceeded ? 1 : 0}|${lastUploadedReport?.id ?? ''}`} />
+            <HistoryScreen embedded navigation={navigation} refreshKey={`${currentReadingId ?? ''}|${uploadSucceeded ? 1 : 0}|${lastUploadedReport?.id ?? ''}|${titleSync}`} onRenamed={historyRenamed} />
           )}
         </View>
       )}
@@ -1847,7 +1882,7 @@ export default function HomeScreen({ navigation }: any) {
         // Held upright: History in the bottom-left corner, the Data panel in the bottom-right.
         <View style={styles.historyBelow}>
           <View style={styles.bottomLeft}>
-            <HistoryScreen embedded navigation={navigation} refreshKey={`${currentReadingId ?? ''}|${uploadSucceeded ? 1 : 0}|${lastUploadedReport?.id ?? ''}`} />
+            <HistoryScreen embedded navigation={navigation} refreshKey={`${currentReadingId ?? ''}|${uploadSucceeded ? 1 : 0}|${lastUploadedReport?.id ?? ''}|${titleSync}`} onRenamed={historyRenamed} />
           </View>
           <ScrollView style={styles.bottomRight} contentContainerStyle={styles.bottomRightContent} automaticallyAdjustKeyboardInsets keyboardShouldPersistTaps="handled">
             {renderDataTab()}
