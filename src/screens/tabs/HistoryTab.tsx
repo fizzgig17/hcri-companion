@@ -548,13 +548,17 @@ export default function HistoryTab({
       } else {
         next.add(id);
       }
+      // Unchecking the last one leaves select mode (standard list behaviour), so
+      // the Select all bar and checkboxes only show while something is selected.
+      if (next.size === 0) setSelectMode(false);
       return next;
     });
   };
 
   const everySelected = history.length > 0 && selected.size === history.length;
   // The "Select all" checkbox: checks everything, or clears everything when it's already all checked.
-  const toggleSelectAll = () => setSelected(everySelected ? new Set() : new Set(history.map((r) => r.id)));
+  // Clearing everything leaves select mode, same as unchecking the last row.
+  const toggleSelectAll = () => (everySelected ? exitSelectMode() : setSelected(new Set(history.map((r) => r.id))));
 
   // Long press on a row: strong haptic, then select mode with that row checked.
   const startSelectWith = (id: string) => {
