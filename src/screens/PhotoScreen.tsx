@@ -27,6 +27,30 @@ const ANDROID_PICK_HOOK = `(function(){
   };
 })(); true;`;
 
+// Swipe right anywhere on the page EXCEPT the photo itself (its canvases and the divider live in a box that holds a
+// <canvas>) posts 'swipeBack', so the TM-30 screen can go back to the report. Touches on the photo are left alone so
+// the divider still drags.
+const SWIPE_BACK_HOOK = `(function(){
+  if (window.__hcriSwipe) return; window.__hcriSwipe = true;
+  var sx = 0, sy = 0, ok = false;
+  function onPhoto(el){
+    for (var n = el; n && n !== document.body; n = n.parentElement) {
+      if (n.tagName === 'CANVAS') return true;
+      for (var i = 0; i < n.children.length; i++) if (n.children[i].tagName === 'CANVAS') return true;
+    }
+    return false;
+  }
+  window.addEventListener('touchstart', function(e){
+    if (e.touches.length !== 1) { ok = false; return; }
+    ok = !onPhoto(e.target); sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+  }, { passive: true });
+  window.addEventListener('touchend', function(e){
+    if (!ok || !e.changedTouches.length) return; ok = false;
+    var dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+    if (dx > 70 && Math.abs(dy) < dx * 0.6 && window.ReactNativeWebView) window.ReactNativeWebView.postMessage('swipeBack');
+  }, { passive: true });
+})(); true;`;
+
 function deliverPhotoJs(base64: string, mime: string, name: string): string {
   return `(function(){
     try {
@@ -41,7 +65,7 @@ function deliverPhotoJs(base64: string, mime: string, name: string): string {
   })(); true;`;
 }
 
-export default function PhotoScreen({ route }: any) {
+export default function PhotoScreen({ route, onSwipeBack }: any) {
   const { colors } = useTheme();
   const input: Tm30Input = route.params.input;
   const webRef = useRef<any>(null);
@@ -111,7 +135,13 @@ export default function PhotoScreen({ route }: any) {
             overScrollMode="never"
             allowFileAccess
             injectedJavaScriptBeforeContentLoaded={Platform.OS === 'android' ? ANDROID_PICK_HOOK : undefined}
-            onMessage={(e: any) => { if (Platform.OS === 'android' && e.nativeEvent.data === 'pickPhoto') pickPhoto(); }}
+            // Only when shown inside the TM-30 screen (which passes onSwipeBack).
+            injectedJavaScript={onSwipeBack ? SWIPE_BACK_HOOK : undefined}
+            onMessage={(e: any) => {
+              const msg = e.nativeEvent.data;
+              if (Platform.OS === 'android' && msg === 'pickPhoto') pickPhoto();
+              else if (msg === 'swipeBack') onSwipeBack?.();
+            }}
           />
         )}
       </View>

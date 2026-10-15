@@ -25,6 +25,7 @@ import { useLog } from '../contexts/LogContext';
 import { buildTm30Html, buildTm30ImageHtml, buildTm30PdfHtml, TM30_PDF_PAGE, Tm30Input } from '../utils/tm30Report';
 import { withBackgroundDisconnectSuppressed } from '../ble/backgroundDisconnectGuard';
 import PhotoScreen from './PhotoScreen';
+import { IS_DEV_BUILD } from '../hcri/buildTarget';
 
 const ICON_PHOTO = 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM21 15l-5-5L5 21';
 const ICON_IMAGE = 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3';
@@ -164,7 +165,8 @@ export default function Tm30ReportScreen({ route, navigation, panel }: any) {
       backgroundColor: colors.card,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: colors.cardBorder,
-      paddingTop: panel ? 6 : insets.top + 4,
+      // A dev build's orange banner already sits over the status bar, so adding the inset again left a big gap.
+      paddingTop: panel || IS_DEV_BUILD ? 6 : insets.top + 4,
       paddingBottom: 6,
       paddingHorizontal: 8,
     },
@@ -183,12 +185,12 @@ export default function Tm30ReportScreen({ route, navigation, panel }: any) {
       borderTopWidth: 1,
       borderTopColor: colors.cardBorder,
       paddingHorizontal: 16,
-      paddingTop: 10,
-      paddingBottom: panel ? 12 : Math.max(insets.bottom, 10) + 4,
+      paddingTop: 8,
+      paddingBottom: panel ? 8 : Math.max(insets.bottom - 8, 8),
     },
     btn: { backgroundColor: colors.accent, borderRadius: 10, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' },
-    iconBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10, borderWidth: 1, borderColor: colors.cardBorder, backgroundColor: colors.card },
-    iconBtnText: { fontSize: 12, fontWeight: '600', marginTop: 3 },
+    iconBtn: { flex: 1, flexDirection: 'row', paddingVertical: 8, alignItems: 'center', justifyContent: 'center', borderRadius: 18, borderWidth: 1, borderColor: colors.cardBorder, backgroundColor: colors.card },
+    iconBtnText: { fontSize: 13, fontWeight: '600', marginLeft: 6 },
     btnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
     btnSecondary: { flex: 1, backgroundColor: 'transparent', borderWidth: 1.5, borderColor: colors.accent },
     btnTextSecondary: { color: colors.accent, fontSize: 15, fontWeight: '700' },
@@ -234,7 +236,7 @@ export default function Tm30ReportScreen({ route, navigation, panel }: any) {
             accessibilityRole="button"
             accessibilityLabel="Save as image"
           >
-            {imageHtml ? <ActivityIndicator size="small" color={colors.text} /> : glyph(ICON_IMAGE, colors.text)}
+            {imageHtml ? <ActivityIndicator size="small" color={colors.text} /> : glyph(ICON_IMAGE, colors.text, 16)}
             <Text style={[styles.iconBtnText, { color: colors.text }]} numberOfLines={1}>{imageHtml ? 'Making image…' : 'Save image'}</Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -245,7 +247,7 @@ export default function Tm30ReportScreen({ route, navigation, panel }: any) {
             accessibilityRole="button"
             accessibilityLabel="Share PDF"
           >
-            {sharing ? <ActivityIndicator size="small" color={colors.accent} /> : glyph(ICON_PDF, colors.accent)}
+            {sharing ? <ActivityIndicator size="small" color={colors.accent} /> : glyph(ICON_PDF, colors.accent, 16)}
             <Text style={[styles.iconBtnText, { color: colors.accent }]} numberOfLines={1}>{sharing ? 'Creating PDF…' : 'Share PDF'}</Text>
           </TouchableOpacity>
         </View>
@@ -297,7 +299,7 @@ export default function Tm30ReportScreen({ route, navigation, panel }: any) {
       >
         <View style={{ width: pageW || '100%', flex: 1 }}>{reportPage}</View>
         <View style={{ width: pageW || '100%', flex: 1 }}>
-          {photoMounted ? <PhotoScreen route={{ params: { input } }} /> : null}
+          {photoMounted ? <PhotoScreen route={{ params: { input } }} onSwipeBack={() => goToPage(0)} /> : null}
         </View>
       </ScrollView>
     </View>
