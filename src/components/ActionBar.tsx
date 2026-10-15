@@ -7,6 +7,7 @@
 // secondary actions (Disconnect, Test reading, Upload, Copy link) are
 // quiet icon + label buttons on either side.
 
+import { ICONS, ICON_SIZE } from './icons';
 import React, { useRef } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
@@ -16,18 +17,19 @@ import type { Status } from '../screens/tabs/MainTab';
 
 type IconName = 'play' | 'stop' | 'bluetooth' | 'upload' | 'power' | 'copy' | 'check' | 'activity' | 'live' | 'flicker' | 'save' | 'report' | 'photo';
 
+// Paths come from the shared icon set (components/icons.tsx).
 const ICON_PATHS: Record<Exclude<IconName, 'play' | 'stop'>, string> = {
-  live: 'M21 12a9 9 0 0 0-15.5-6.2M3 12a9 9 0 0 0 15.5 6.2M21 4v5h-5M3 20v-5h5',
-  flicker: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
-  report: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h8',
-  photo: 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM21 15l-5-5L5 21',
-  save: 'M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8',
-  bluetooth: 'M6.5 6.5l11 11L12 23V1l5.5 5.5-11 11',
-  upload: 'M16 16l-4-4-4 4M12 12v9M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3',
-  power: 'M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10',
-  copy: 'M9 9h11v11H9zM5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1',
-  check: 'M20 6L9 17l-5-5',
-  activity: 'M22 12h-4l-3 9L9 3l-3 9H2',
+  live: ICONS.live,
+  flicker: ICONS.bolt,
+  report: ICONS.report,
+  photo: ICONS.photo,
+  save: ICONS.save,
+  bluetooth: ICONS.bluetooth,
+  upload: ICONS.upload,
+  power: ICONS.power,
+  copy: ICONS.copy,
+  check: ICONS.check,
+  activity: ICONS.activity,
 };
 
 function Icon({ name, size, color }: { name: IconName; size: number; color: string }) {
@@ -157,7 +159,7 @@ export default function ActionBar(p: Props) {
       {busy ? (
         <ActivityIndicator size="small" color={accent ? colors.accent : colors.muted} />
       ) : (
-        <Icon name={icon} size={22} color={accent ? colors.accent : colors.muted} />
+        <Icon name={icon} size={ICON_SIZE.primary} color={accent ? colors.accent : colors.muted} />
       )}
       <Text style={[styles.sideLabel, accent && styles.sideLabelAccent]} numberOfLines={1} adjustsFontSizeToFit>{label}</Text>
     </TouchableOpacity>

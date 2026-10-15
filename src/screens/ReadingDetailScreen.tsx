@@ -109,7 +109,7 @@ export default function ReadingDetailScreen({ route, navigation }: any) {
         {/* numberOfLines + adjustsFontSizeToFit + the shortened text itself
             -- see MainTab.tsx's identical copy of this hint for why. */}
         <Text style={styles.customizeHint} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
-          Tap ⚙ Settings to customize these measurements.
+          Open Settings to customize these measurements.
         </Text>
       </View>
 

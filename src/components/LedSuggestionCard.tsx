@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import HintPressable from './HintPressable';
+import { CloseButton } from './icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { LedSuggestion } from '../hcri/ledApi';
 
@@ -39,9 +39,7 @@ export default function LedSuggestionCard({ suggestion, onYes, onOther, onClose,
           <Text style={{ color: colors.muted, fontSize: 11 }}>{suggestion.source === 'cct' ? 'No LED match yet · the curve reads as' : suggestion.source === 'title' ? 'Title and curve suggest' : 'Looks like'}</Text>
           <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }} numberOfLines={2}>{ledText(suggestion)}</Text>
         </View>
-        <HintPressable hint="Dismiss suggestion" onPress={onClose} hitSlop={10} accessibilityLabel="Dismiss LED suggestion">
-          <Text style={{ color: colors.muted, fontSize: 18 }}>✕</Text>
-        </HintPressable>
+        <CloseButton small onPress={onClose} label="Dismiss LED suggestion" />
       </View>
       <View style={styles.row}>
         <TouchableOpacity onPress={onYes} style={[styles.btn, { backgroundColor: colors.accent }]}>

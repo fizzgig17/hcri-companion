@@ -10,7 +10,8 @@
 // read back from the meter so the popup shows what the meter really has, not what we hoped we set.
 
 import React, { useEffect, useState } from 'react';
-import { Modal, View, Text, TouchableOpacity, Switch, ActivityIndicator, StyleSheet } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import AppSwitch from './AppSwitch';
 import { useTheme } from '../contexts/ThemeContext';
 import type { FlickerSettings, FlickerSettingKey } from '../ble/liveSessions';
 import { FLICKER_RATE_LABELS, FLICKER_GEAR_LABELS } from '../ble/protocol';
@@ -138,7 +139,7 @@ export default function FlickerSettingsModal({ visible, onClose, api }: { visibl
                 <Text style={styles.label}>Gear (range){s.gear !== undefined && GEARS[s.gear] ? `: ${GEARS[s.gear]}` : ''}</Text>
                 <View style={styles.autoWrap}>
                   <Text style={styles.autoTxt}>Auto</Text>
-                  <Switch accessibilityLabel="Auto gear" value={!!s.autoGear} onValueChange={(v) => change('autoGear', v)} disabled={!api.canEdit || busy} />
+                  <AppSwitch accessibilityLabel="Auto gear" value={!!s.autoGear} onValueChange={(v) => change('autoGear', v)} disabled={!api.canEdit || busy} />
                 </View>
               </View>
               <View style={styles.chips}>
@@ -150,7 +151,7 @@ export default function FlickerSettingsModal({ visible, onClose, api }: { visibl
                 </Text>
                 <View style={styles.autoWrap}>
                   <Text style={styles.autoTxt}>Auto</Text>
-                  <Switch accessibilityLabel="Auto sample rate" value={!!s.autoRate} onValueChange={(v) => change('autoRate', v)} disabled={!api.canEdit || busy} />
+                  <AppSwitch accessibilityLabel="Auto sample rate" value={!!s.autoRate} onValueChange={(v) => change('autoRate', v)} disabled={!api.canEdit || busy} />
                 </View>
               </View>
               <View style={styles.chips}>

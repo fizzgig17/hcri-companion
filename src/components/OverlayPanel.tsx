@@ -10,11 +10,10 @@
 
 import React, { useMemo } from 'react';
 import { View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemeContext, ThemeContextValue, useTheme } from '../contexts/ThemeContext';
 import { ContentWidthContext } from '../layout';
-import HintPressable from './HintPressable';
+import { CloseButton } from './icons';
 
 interface Props {
   title: string;
@@ -46,7 +45,6 @@ export default function OverlayPanel({ title, onClose, closeHint, maxWidth = 128
     panel: { width: panelW, height: panelH, backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.cardBorder, overflow: 'hidden' },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.cardBorder, backgroundColor: colors.card },
     title: { color: colors.text, fontSize: 20, fontWeight: '700', flexShrink: 1, marginRight: 12 },
-    close: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: colors.cardBorder, alignItems: 'center', justifyContent: 'center' },
     body: { flex: 1 },
   });
 
@@ -59,11 +57,7 @@ export default function OverlayPanel({ title, onClose, closeHint, maxWidth = 128
         <View style={styles.panel}>
           <View style={styles.header}>
             <Text style={styles.title} numberOfLines={1}>{title}</Text>
-            <HintPressable hint={closeHint} onPress={onClose} style={styles.close} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel={closeHint} activeOpacity={0.7}>
-              <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={colors.muted} strokeWidth={2.4} strokeLinecap="round">
-                <Path d="M5 5l14 14M19 5L5 19" />
-              </Svg>
-            </HintPressable>
+            <CloseButton onPress={onClose} label={closeHint} />
           </View>
           <ContentWidthContext.Provider value={panelW}>
             <View style={styles.body}>{children}</View>

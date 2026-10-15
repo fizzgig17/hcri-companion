@@ -21,27 +21,32 @@
 // unsaved in a field you haven't blurred yet.
 
 import React, { useMemo, useRef, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Pressable, StyleSheet, ActivityIndicator, Alert, Modal } from 'react-native';
+import { hapticLongPress } from '../../utils/haptics';
 import HintPressable from '../../components/HintPressable';
+import { Icon, ICON_SIZE } from '../../components/icons';
 import Svg, { Polyline, Path } from 'react-native-svg';
 import CollapsibleSection from '../../components/CollapsibleSection';
 import { useTheme } from '../../contexts/ThemeContext';
 import { SavedReading, HISTORY_LIMIT, HISTORY_WARN_AT } from '../../storage/readingHistory';
 
-const ICON_CLOUD = 'M16 16l-4-4-4 4M12 12v9M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3';
-const ICON_TRASH = 'M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6';
-const ICON_X = 'M18 6L6 18M6 6l12 12';
-const ICON_CHECK = 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11';
-const ICON_EYE = 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z';
-const ICON_COMPARE = 'M3 17l5-6 4 4 8-9';
-const ICON_TRAY = 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12';
-function ActionIcon({ d, color, size = 22 }: { d: string; color: string; size?: number }) {
+// Round selection mark used by the rows and the Select all control: an empty ring, a filled circle with a
+// white tick, or (Select all only) a filled circle with a dash when some but not all are selected.
+function SelectMark({ state, accent, ring }: { state: 'off' | 'on' | 'some'; accent: string; ring: string }) {
+  const on = state !== 'off';
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Path d={d} />
-    </Svg>
+    <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: on ? 0 : 1.5, borderColor: ring, backgroundColor: on ? accent : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+      {on && (
+        <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+          <Path d={state === 'on' ? 'M5 12.5l4.5 4.5L19 7.5' : 'M6 12h12'} />
+        </Svg>
+      )}
+    </View>
   );
 }
+
+// accent hex (#rrggbb) at a low alpha, for the selected row's wash.
+const tint = (hex: string, alpha: string) => (/^#[0-9a-f]{6}$/i.test(hex) ? hex + alpha : hex);
 import { analyzeSpectrum } from '../../utils/spectralAnalysis';
 import LedSuggestionCard from '../../components/LedSuggestionCard';
 import { ledsLine, ledsOfReading } from '../../hcri/leds';
@@ -119,6 +124,7 @@ function HistoryRow({
   selectMode,
   selected,
   onToggleSelected,
+  onLongSelect,
   onCopyLink,
   copyingLink,
   onOpenReport,
@@ -137,6 +143,8 @@ function HistoryRow({
   selectMode: boolean;
   selected: boolean;
   onToggleSelected: (id: string) => void;
+  /** Long press on a row (outside select mode): enters select mode with this row selected. */
+  onLongSelect: (id: string) => void;
   onCopyLink: (reading: SavedReading) => void;
   copyingLink: boolean;
   onOpenReport: (reading: SavedReading, tm30: boolean) => void;
@@ -191,49 +199,33 @@ function HistoryRow({
   const styles = StyleSheet.create({
     row: {
       backgroundColor: colors.card,
-      borderRadius: 12,
-      borderWidth: 1,
+      borderRadius: 14,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.cardBorder,
-      padding: 10,
-      marginBottom: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      marginBottom: 10,
     },
-    rowSelectable: { paddingVertical: 10 },
-    rowSelected: { borderColor: colors.accent },
-    selectRow: { flexDirection: 'row', alignItems: 'flex-start' },
-    checkboxCol: { width: 30, alignItems: 'center', justifyContent: 'center', paddingTop: 2 },
-    checkbox: {
-      width: 20,
-      height: 20,
-      borderRadius: 5,
-      borderWidth: 1.5,
-      borderColor: colors.cardBorder,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    checkboxChecked: { backgroundColor: colors.accent, borderColor: colors.accent },
-    checkboxMark: { color: colors.text, fontSize: 13, fontWeight: '700' },
+    rowSelectable: {},
+    rowSelected: { borderColor: colors.accent, borderWidth: 1, backgroundColor: tint(colors.accent, '14') },
+    selectRow: { flexDirection: 'row', alignItems: 'center' },
+    checkboxCol: { width: 34, alignItems: 'flex-start', justifyContent: 'center' },
     selectRowBody: { flex: 1 },
-    rowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+    rowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
     // flex: 1 gives the text a definite width (iOS under-measures a shrinking wrapped row and lets the text run into the icons); paddingRight is the gap.
     rowHeaderLeft: { flex: 1, flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', paddingRight: 14 },
-    rowMeta: { color: colors.muted, fontSize: 11, fontFamily: 'monospace' },
-    rowSummaryInline: { color: colors.text, fontSize: 11, fontWeight: '600', marginLeft: 8 },
+    rowMeta: { color: colors.muted, fontSize: 12, fontVariant: ['tabular-nums'] },
+    rowSummaryInline: { color: colors.muted, fontSize: 12, fontWeight: '500', marginLeft: 8, fontVariant: ['tabular-nums'] },
     rowHeaderButtons: { flexDirection: 'row', alignItems: 'center', flexShrink: 0 },
     viewText: { color: colors.info, fontSize: 12, fontWeight: '600', marginRight: 14 },
     deleteText: { color: colors.danger, fontSize: 12 },
 
-    labelInput: {
-      backgroundColor: colors.background,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      borderRadius: 8,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      color: colors.text,
-      fontSize: 13,
-      minHeight: 32,
-      marginBottom: 6,
-    },
+    labelInput: { paddingVertical: 2, marginBottom: 8 },
+    ledLine: { flexDirection: 'row', alignItems: 'center' },
+    ledText: { color: colors.muted, fontSize: 12, marginLeft: 5 },
+    ledEdit: { flexDirection: 'row', alignItems: 'center', marginLeft: 12 },
+    ledEditText: { color: colors.accent, fontSize: 12, fontWeight: '600', marginLeft: 4 },
+    labelText: { color: colors.text, fontSize: 15, fontWeight: '600', lineHeight: 20 },
     modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'flex-start', paddingTop: 70, paddingHorizontal: 24 },
     modalSheet: {
       width: '100%',
@@ -286,15 +278,14 @@ function HistoryRow({
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      borderWidth: 1,
-      borderColor: colors.accent,
-      borderRadius: 8,
-      paddingVertical: 7,
-      marginTop: 6,
+      backgroundColor: tint(colors.accent, '1a'),
+      borderRadius: 18,
+      paddingVertical: 8,
+      marginTop: 4,
     },
     linkRow: { flexDirection: 'row', marginHorizontal: -3 },
     linkPill: { flex: 1, marginHorizontal: 3 },
-    copyLinkIcon: { fontSize: 13, marginRight: 6 },
+    copyLinkIcon: { marginRight: 6 },
     copyLinkSpinner: { marginRight: 6 },
     copyLinkLabel: { color: colors.accent, fontSize: 12, fontWeight: '700' },
   });
@@ -328,16 +319,16 @@ function HistoryRow({
         {!selectMode && (
           <View style={styles.rowHeaderButtons}>
             <HintPressable hint="Upload to hCRI.io" onPress={() => onUploadWithLabel(reading.id, reading.label)} disabled={uploading} style={{ marginRight: 14, opacity: uploading ? 0.6 : 1 }} accessibilityRole="button" accessibilityLabel="Upload reading" hitSlop={{ top: 10, bottom: 10, left: 7, right: 7 }}>
-              {uploading ? <ActivityIndicator size="small" color={colors.accent} /> : <ActionIcon d={ICON_CLOUD} color={colors.accent} size={19} />}
+              {uploading ? <ActivityIndicator size="small" color={colors.accent} /> : <Icon name="upload" color={colors.accent} size={ICON_SIZE.row} />}
             </HintPressable>
             <HintPressable hint="Share CSV" onPress={() => onShareOne(reading)} style={{ marginRight: 14 }} accessibilityRole="button" accessibilityLabel="Share CSV" hitSlop={{ top: 10, bottom: 10, left: 7, right: 7 }}>
-              <ActionIcon d={ICON_TRAY} color={colors.text} size={19} />
+              <Icon name="share" color={colors.text} size={ICON_SIZE.row} />
             </HintPressable>
             <HintPressable hint="View reading" onPress={() => onOpen(reading)} style={{ marginRight: 14 }} accessibilityRole="button" accessibilityLabel="View reading" hitSlop={{ top: 10, bottom: 10, left: 7, right: 7 }}>
-              <ActionIcon d={ICON_EYE} color={colors.info} size={19} />
+              <Icon name="eye" color={colors.info} size={ICON_SIZE.row} />
             </HintPressable>
             <HintPressable hint="Delete reading" onPress={() => onDelete(reading.id)} accessibilityRole="button" accessibilityLabel="Delete reading" hitSlop={{ top: 10, bottom: 10, left: 7, right: 7 }}>
-              <ActionIcon d={ICON_TRASH} color={colors.danger} size={19} />
+              <Icon name="trash" color={colors.danger} size={ICON_SIZE.row} />
             </HintPressable>
           </View>
         )}
@@ -347,20 +338,28 @@ function HistoryRow({
       <TouchableOpacity
         style={styles.labelInput}
         onPress={openEditor}
+        onLongPress={() => onLongSelect(reading.id)}
+        delayLongPress={400}
         disabled={selectMode}
         activeOpacity={0.7}
         accessibilityRole="button"
         accessibilityLabel="Reading title. Tap to edit."
       >
-        <Text style={{ color: colors.text, fontSize: 13 }}>{reading.label}</Text>
+        <Text style={styles.labelText}>{reading.label}</Text>
       </TouchableOpacity>
 
       {ledsOfReading(reading).length ? (
         <TouchableOpacity onPress={() => onLedPick(reading)} disabled={selectMode} style={{ marginTop: 4 }} accessibilityRole="button" accessibilityLabel="LED details. Tap to edit.">
-          <Text style={{ color: colors.muted, fontSize: 12 }}>
-            💡 {ledsLine(ledsOfReading(reading))}
-            {!selectMode && <Text style={{ color: colors.accent, fontWeight: '600' }}>{'   ✎ Edit'}</Text>}
-          </Text>
+          <View style={styles.ledLine}>
+            <Icon name="bulb" color={colors.muted} size={ICON_SIZE.inline} />
+            <Text style={[styles.ledText, { flexShrink: 1 }]}>{ledsLine(ledsOfReading(reading))}</Text>
+            {!selectMode && (
+              <View style={styles.ledEdit}>
+                <Icon name="edit" color={colors.accent} size={ICON_SIZE.inline} />
+                <Text style={styles.ledEditText}>Edit</Text>
+              </View>
+            )}
+          </View>
         </TouchableOpacity>
       ) : !selectMode && !reading.ledDismissed && reading.ledSuggestion && reading.ledSuggestion !== 'none' ? (
         <View style={{ marginTop: 6 }}>
@@ -373,7 +372,10 @@ function HistoryRow({
         </View>
       ) : !selectMode && !reading.result.sampleLabel ? (
         <TouchableOpacity onPress={() => onLedPick(reading)} style={{ marginTop: 4 }} accessibilityRole="button" accessibilityLabel="Add LED details to this reading">
-          <Text style={{ color: colors.accent, fontSize: 12 }}>💡 Add LED details</Text>
+          <View style={styles.ledLine}>
+            <Icon name="bulb" color={colors.accent} size={ICON_SIZE.inline} />
+            <Text style={[styles.ledText, { color: colors.accent }]}>Add LED details</Text>
+          </View>
         </TouchableOpacity>
       ) : null}
 
@@ -429,7 +431,7 @@ function HistoryRow({
                 {copyingLink ? (
                   <ActivityIndicator size="small" color={colors.accent} style={styles.copyLinkSpinner} />
                 ) : (
-                  <Text style={styles.copyLinkIcon}>🔗</Text>
+                  <View style={styles.copyLinkIcon}><Icon name="link" color={colors.accent} size={ICON_SIZE.inline} /></View>
                 )}
                 <Text style={styles.copyLinkLabel}>{copyingLink ? 'Working…' : 'Copy'}</Text>
               </TouchableOpacity>
@@ -438,13 +440,13 @@ function HistoryRow({
                 disabled={copyingLink}
                 style={[styles.copyLinkPill, styles.linkPill]}
               >
-                <Text style={styles.copyLinkIcon}>↗</Text>
+                <View style={styles.copyLinkIcon}><Icon name="external" color={colors.accent} size={ICON_SIZE.inline} /></View>
                 <Text style={styles.copyLinkLabel}>Report</Text>
               </TouchableOpacity>
             </>
           )}
           <TouchableOpacity onPress={() => onOpenTm30(reading)} style={[styles.copyLinkPill, styles.linkPill]}>
-            <Text style={styles.copyLinkIcon}>◐</Text>
+            <View style={styles.copyLinkIcon}><Icon name="report" color={colors.accent} size={ICON_SIZE.inline} /></View>
             <Text style={styles.copyLinkLabel}>TM-30</Text>
           </TouchableOpacity>
         </View>
@@ -452,8 +454,20 @@ function HistoryRow({
     </>
   );
 
+  // Outside select mode, holding a row (its title, or anywhere that isn't
+  // one of its buttons) enters select mode with that row already checked --
+  // the usual list behaviour on Android and iOS.
   if (!selectMode) {
-    return <View style={styles.row}>{rowInner}</View>;
+    return (
+      <Pressable
+        style={styles.row}
+        onLongPress={() => onLongSelect(reading.id)}
+        delayLongPress={400}
+        accessibilityHint="Long press to select readings"
+      >
+        {rowInner}
+      </Pressable>
+    );
   }
 
   // In Select mode the whole row becomes one big tap target for toggling
@@ -472,9 +486,7 @@ function HistoryRow({
           {uploading ? (
             <ActivityIndicator size="small" color={colors.text} />
           ) : (
-            <View style={[styles.checkbox, selected && styles.checkboxChecked]}>
-              {selected && <Text style={styles.checkboxMark}>✓</Text>}
-            </View>
+            <SelectMark state={selected ? 'on' : 'off'} accent={colors.accent} ring={colors.muted} />
           )}
         </View>
         <View style={styles.selectRowBody}>{rowInner}</View>
@@ -531,11 +543,24 @@ export default function HistoryTab({
       } else {
         next.add(id);
       }
+      // Unchecking the last one leaves select mode (standard list behaviour), so
+      // the Select all bar and checkboxes only show while something is selected.
+      if (next.size === 0) setSelectMode(false);
       return next;
     });
   };
 
-  const selectAll = () => setSelected(new Set(history.map((r) => r.id)));
+  const everySelected = history.length > 0 && selected.size === history.length;
+  // The "Select all" checkbox: checks everything, or clears everything when it's already all checked.
+  // Clearing everything leaves select mode, same as unchecking the last row.
+  const toggleSelectAll = () => (everySelected ? exitSelectMode() : setSelected(new Set(history.map((r) => r.id))));
+
+  // Long press on a row: strong haptic, then select mode with that row checked.
+  const startSelectWith = (id: string) => {
+    hapticLongPress();
+    setSelected(new Set([id]));
+    setSelectMode(true);
+  };
 
   // Split into today's readings (shown flat, same as always -- these are
   // the ones still actively being worked with this session) and every
@@ -628,10 +653,10 @@ export default function HistoryTab({
     // all centered on one line (this used to be a big full-size button next to
     // a bare text link, which sat at different heights and looked clunky).
     headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-    headerTitle: { color: colors.muted, fontSize: 12, flexShrink: 1, marginRight: 8 },
+    headerTitle: { color: colors.text, fontSize: 17, fontWeight: '600', flexShrink: 1, marginRight: 8, letterSpacing: -0.2 },
     headerButtons: { flexDirection: 'row', alignItems: 'center' },
-    headerIcon: { alignItems: 'center', marginLeft: 16, minWidth: 40 },
-    headerIconText: { color: colors.text, fontSize: 10, fontWeight: '600', marginTop: 1 },
+    headerIcon: { flexDirection: 'row', alignItems: 'center', marginLeft: 8, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 18, backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.cardBorder },
+    headerIconText: { color: colors.text, fontSize: 13, fontWeight: '500', marginLeft: 6 },
     headerPill: {
       borderWidth: 1,
       borderColor: colors.cardBorder,
@@ -648,21 +673,23 @@ export default function HistoryTab({
       flexDirection: 'column',
       alignItems: 'stretch',
       backgroundColor: colors.card,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.cardBorder,
-      borderRadius: 10,
+      borderRadius: 14,
       paddingHorizontal: 14,
-      paddingVertical: 10,
-      marginBottom: 10,
+      paddingVertical: 12,
+      marginBottom: 12,
     },
-    selectAllText: { color: colors.accent, fontSize: 13, fontWeight: '600', alignSelf: 'flex-start' },
-    selectBarButtons: { flexDirection: 'row', marginTop: 6, marginLeft: -8 },
+    selectHint: { color: colors.muted, fontSize: 12.5, marginTop: -2, marginBottom: 12 },
+    selectAllRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingVertical: 2 },
+    selectAllText: { color: colors.text, fontSize: 15, fontWeight: '500', marginLeft: 12 },
+    selectBarButtons: { flexDirection: 'row', marginTop: 12, marginLeft: -8 },
     // Overrides PrimaryButton's default marginTop:8 (meant for a full-width
     // button stacked below other content) -- here it sits inline next to
     // "Select All" text, so that top margin would push it visibly lower than
     // its sibling instead of centering with it.
-    selectBarIconButton: { flex: 1, marginLeft: 8, paddingVertical: 4, alignItems: 'center', borderRadius: 8, borderWidth: 1, borderColor: colors.cardBorder, backgroundColor: colors.card },
-    selectBarIconText: { fontSize: 10, fontWeight: '600', marginTop: 1 },
+    selectBarIconButton: { flex: 1, marginLeft: 8, paddingVertical: 8, alignItems: 'center', borderRadius: 12, backgroundColor: colors.background },
+    selectBarIconText: { fontSize: 11.5, fontWeight: '500', marginTop: 3 },
     selectBarButton: { marginTop: 0, marginLeft: 8, flex: 1, paddingHorizontal: 8, paddingVertical: 10 },
 
     limitNote: { color: colors.muted, fontSize: 12, lineHeight: 17, marginBottom: 10 },
@@ -705,23 +732,19 @@ export default function HistoryTab({
       <View style={styles.headerRow}>
         <Text style={styles.headerTitle}>
           {selectMode
-            ? `${selected.size} of ${history.length} selected`
-            : `${history.length} saved reading${history.length === 1 ? '' : 's'}`}
+            ? `${selected.size} selected`
+            : `${history.length} reading${history.length === 1 ? '' : 's'}`}
         </Text>
         <View style={styles.headerButtons}>
           {selectMode ? (
             <TouchableOpacity style={styles.headerIcon} onPress={exitSelectMode} accessibilityRole="button" accessibilityLabel="Cancel selection">
-              <ActionIcon d={ICON_X} color={colors.text} size={20} />
+              <Icon name="x" color={colors.text} size={ICON_SIZE.pill} />
               <Text style={styles.headerIconText}>Cancel</Text>
             </TouchableOpacity>
           ) : (
             <>
-              <TouchableOpacity style={styles.headerIcon} onPress={() => setSelectMode(true)} accessibilityRole="button" accessibilityLabel="Select readings">
-                <ActionIcon d={ICON_CHECK} color={colors.accent} size={20} />
-                <Text style={[styles.headerIconText, { color: colors.accent }]}>Select</Text>
-              </TouchableOpacity>
               <TouchableOpacity style={styles.headerIcon} onPress={onShareAll} accessibilityRole="button" accessibilityLabel="Share all readings">
-                <ActionIcon d={ICON_TRAY} color={colors.text} size={20} />
+                <Icon name="share" color={colors.text} size={ICON_SIZE.pill} />
                 <Text style={styles.headerIconText}>Share all</Text>
               </TouchableOpacity>
             </>
@@ -729,17 +752,27 @@ export default function HistoryTab({
         </View>
       </View>
 
+      {!selectMode && <Text style={styles.selectHint}>Hold a reading's title to select it.</Text>}
+
       {selectMode && (
         <View style={styles.selectBar}>
-          <TouchableOpacity onPress={selectAll} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={styles.selectAllText}>Select All</Text>
+          <TouchableOpacity
+            onPress={toggleSelectAll}
+            style={styles.selectAllRow}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: everySelected ? true : selected.size > 0 ? 'mixed' : false }}
+            accessibilityLabel="Select all"
+          >
+            <SelectMark state={everySelected ? 'on' : selected.size > 0 ? 'some' : 'off'} accent={colors.accent} ring={colors.muted} />
+            <Text style={styles.selectAllText}>Select all</Text>
           </TouchableOpacity>
           <View style={styles.selectBarButtons}>
             {([
-              ...(onCompareMany ? [{ icon: ICON_COMPARE, label: 'Compare', onPress: handleCompareSelected, color: colors.info, border: colors.info }] : []),
-              { icon: ICON_TRAY, label: 'Share', onPress: handleShareSelected, color: colors.text },
-              { icon: ICON_TRASH, label: bulkDeleting ? 'Deleting…' : 'Delete', onPress: handleDeleteSelected, color: colors.danger, border: colors.danger },
-              { icon: ICON_CLOUD, label: bulkUploading ? 'Uploading…' : selected.size ? `Upload (${selected.size})` : 'Upload', onPress: handleUploadSelected, color: colors.accent, border: colors.accent },
+              ...(onCompareMany ? [{ icon: 'compare' as const, label: 'Compare', onPress: handleCompareSelected, color: colors.info, border: colors.info }] : []),
+              { icon: 'share' as const, label: 'Share', onPress: handleShareSelected, color: colors.text },
+              { icon: 'trash' as const, label: bulkDeleting ? 'Deleting…' : 'Delete', onPress: handleDeleteSelected, color: colors.danger, border: colors.danger },
+              { icon: 'upload' as const, label: bulkUploading ? 'Uploading…' : selected.size ? `Upload (${selected.size})` : 'Upload', onPress: handleUploadSelected, color: colors.accent, border: colors.accent },
             ] as const).map((b) => {
               const off = selected.size === 0 || bulkUploading || bulkDeleting || (b.label === 'Compare' && (selected.size < 2 || selected.size > 6));
               return (
@@ -752,7 +785,7 @@ export default function HistoryTab({
                   accessibilityLabel={b.label}
                   style={[styles.selectBarIconButton, 'border' in b && { borderColor: b.border }, off && { opacity: 0.5 }]}
                 >
-                  <ActionIcon d={b.icon} color={b.color} size={17} />
+                  <Icon name={b.icon} color={b.color} size={ICON_SIZE.row} />
                   <Text style={[styles.selectBarIconText, { color: b.color }]} numberOfLines={1}>{b.label}</Text>
                 </TouchableOpacity>
               );
@@ -781,6 +814,7 @@ export default function HistoryTab({
           selectMode={selectMode}
           selected={selected.has(r.id)}
           onToggleSelected={toggleSelected}
+          onLongSelect={startSelectWith}
           onCopyLink={onCopyLink}
           copyingLink={copyingLinkId === r.id}
           onOpenReport={onOpenReport}
@@ -811,6 +845,7 @@ export default function HistoryTab({
                 selectMode={selectMode}
                 selected={selected.has(r.id)}
                 onToggleSelected={toggleSelected}
+                onLongSelect={startSelectWith}
                 onCopyLink={onCopyLink}
                 copyingLink={copyingLinkId === r.id}
                 onOpenReport={onOpenReport}

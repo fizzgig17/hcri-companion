@@ -17,6 +17,7 @@
 
 import { isTorchBearerName, BRIDGE_NAME } from '../../ble/torchBearer';
 import { APP_VERSION } from '../../buildInfo';
+import { Icon, ICON_SIZE } from '../../components/icons';
 import React, { useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Modal, StyleSheet } from 'react-native';
 import InfoButton from '../../components/InfoButton';
@@ -249,7 +250,7 @@ export default function MainTab({
     deviceNameText: { color: colors.text, fontSize: 14, fontWeight: '600' },
 
     switchMeterButton: { flexDirection: 'row', alignItems: 'center', marginLeft: 12, flexShrink: 0 },
-    switchMeterIcon: { color: colors.info, fontSize: 14, marginRight: 4 },
+    switchMeterIcon: { marginRight: 5 },
     switchMeterText: { color: colors.info, fontSize: 12, fontWeight: '600' },
 
     root: { flex: 1 },
@@ -275,19 +276,6 @@ export default function MainTab({
     // needed alongside it. Mirrors DataTab's identical style -- see its
     // own copy of this comment for the one place this is defined, in case
     // these two ever drift.
-    copyLinkPill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginLeft: 10,
-      paddingVertical: 7,
-      paddingHorizontal: 12,
-      borderRadius: 18,
-      borderWidth: 1.5,
-      borderColor: colors.accent,
-    },
-    copyLinkIcon: { fontSize: 15, marginRight: 6 },
-    copyLinkSpinner: { marginRight: 6 },
-    copyLinkLabel: { color: colors.accent, fontSize: 13, fontWeight: '700' },
 
     // Same Upload Title field DataTab has always had -- added here too so
     // you don't have to switch tabs just to set a title before uploading
@@ -406,8 +394,8 @@ export default function MainTab({
               />
             </View>
             <View style={[styles.batteryNub, { backgroundColor: battery.percent <= 20 ? colors.danger : colors.accent }]} />
+            {battery.charging && <View style={{ marginLeft: 4 }}><Icon name="bolt" color={battery.percent <= 20 ? colors.danger : colors.accent} size={12} /></View>}
             <Text style={[styles.batteryText, { color: battery.percent <= 20 ? colors.danger : colors.accent }]}>
-              {battery.charging ? '⚡' : ''}
               {battery.percent}%
             </Text>
           </HintPressable>
@@ -423,7 +411,7 @@ export default function MainTab({
             style={styles.switchMeterButton}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Text style={styles.switchMeterIcon}>⇄</Text>
+            <View style={styles.switchMeterIcon}><Icon name="swap" color={colors.info} size={ICON_SIZE.inline} /></View>
             <Text style={styles.switchMeterText}>Switch meter</Text>
           </TouchableOpacity>
         )}
@@ -522,10 +510,12 @@ export default function MainTab({
             </Text>
             {!result?.sampleLabel && onLedEdit && (
               <TouchableOpacity style={styles.ledPill} onPress={onLedEdit} accessibilityRole="button" accessibilityLabel="LED details for this reading">
-                <View style={styles.ledPillInner}>
-                  <Text style={{ color: ledCurrent && ledCurrent.some(hasLed) ? colors.accent : colors.muted, fontSize: 12, fontWeight: '600' }}>
-                    {ledCurrent && ledCurrent.filter(hasLed).length > 1 ? `💡 ${ledCurrent.filter(hasLed).length} LEDs ✓` : ledCurrent && ledCurrent.some(hasLed) ? '💡 LED ✓' : '💡 Add LED'}
+                <View style={[styles.ledPillInner, { flexDirection: 'row', alignItems: 'center' }]}>
+                  <Icon name="bulb" color={ledCurrent && ledCurrent.some(hasLed) ? colors.accent : colors.muted} size={ICON_SIZE.inline} />
+                  <Text style={{ color: ledCurrent && ledCurrent.some(hasLed) ? colors.accent : colors.muted, fontSize: 12, fontWeight: '600', marginLeft: 4 }}>
+                    {ledCurrent && ledCurrent.filter(hasLed).length > 1 ? `${ledCurrent.filter(hasLed).length} LEDs` : ledCurrent && ledCurrent.some(hasLed) ? 'LED' : 'Add LED'}
                   </Text>
+                  {ledCurrent && ledCurrent.some(hasLed) && <View style={{ marginLeft: 3 }}><Icon name="check" color={colors.accent} size={12} /></View>}
                 </View>
               </TouchableOpacity>
             )}
@@ -617,10 +607,17 @@ export default function MainTab({
                 onPress={() => onSelectDevice(d.id)}
                 activeOpacity={0.6}
               >
-                <Text style={styles.deviceName}>
-                  {(d.id === connectedDeviceId && connectedDeviceName) || (munkiBridgeIds?.[d.id] ? 'ColorMunki' : null) || (isTorchBearerName(d.name) ? BRIDGE_NAME : null) || d.name || '(unnamed)'}
-                  {d.id === connectedDeviceId ? '  ✓ connected' : ''}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={[styles.deviceName, { flexShrink: 1 }]}>
+                    {(d.id === connectedDeviceId && connectedDeviceName) || (munkiBridgeIds?.[d.id] ? 'ColorMunki' : null) || (isTorchBearerName(d.name) ? BRIDGE_NAME : null) || d.name || '(unnamed)'}
+                  </Text>
+                  {d.id === connectedDeviceId && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 8 }}>
+                      <Icon name="check" color={colors.accent} size={ICON_SIZE.inline} />
+                      <Text style={{ color: colors.accent, fontSize: 12, fontWeight: '600', marginLeft: 3 }}>connected</Text>
+                    </View>
+                  )}
+                </View>
                 <Text style={styles.deviceMeta}>
                   {d.id}
                   {d.rssi != null ? ` · ${d.rssi} dBm` : ''}

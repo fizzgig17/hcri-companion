@@ -6,7 +6,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { ScrollView, View, Text, TextInput, Switch, TouchableOpacity, StyleSheet, Alert, Modal, Linking, Platform, useWindowDimensions } from 'react-native';
+import { ScrollView, View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Modal, Linking, Platform, useWindowDimensions } from 'react-native';
+import AppSwitch from '../components/AppSwitch';
+import { Icon, ICON_SIZE } from '../components/icons';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { useLayoutMode, useContentWidth, isSquareWindow } from '../layout';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -490,7 +492,6 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    generateTokenIcon: { fontSize: 20 },
     generateTokenHint: { color: colors.mutedFaint, fontSize: 11.5, marginTop: 8, lineHeight: 15 },
 
     // "Generate token" modal -- same overlay/sheet treatment as MainTab's
@@ -638,7 +639,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
     </View>
   );
   const switchRow = (label: string, helpText: string, value: boolean, onChange: (v: boolean) => void) =>
-    settingRow(label, helpText, <Switch accessibilityLabel={label} value={value} onValueChange={onChange} trackColor={{ true: colors.accent }} />);
+    settingRow(label, helpText, <AppSwitch accessibilityLabel={label} value={value} onValueChange={onChange} />);
   const sectionHeader = (title: string) => <Text style={styles.sectionHeader}>{title}</Text>;
 
   // The Settings page in two parts so tablets can lay them out as columns (see `columns`).
@@ -656,7 +657,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
           'hCRI.io account',
           hasSaved
             ? 'Your credentials are saved on this device. To use a different account or key, forget the current credentials first. “Forget Credentials” only removes the token from this device; deleting the account itself is done on hcri.io.'
-            : "Enter your hCRI.io username and API token, then tap Save. Don't have a token? Tap 🔑 to sign in with your hCRI.io username and password and create one."
+            : "Enter your hCRI.io username and API token, then tap Save. Don't have a token? Tap the key button to sign in with your hCRI.io username and password and create one."
         )}
       </View>
 
@@ -729,7 +730,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               accessibilityLabel="Generate a new API token"
             >
-              <Text style={styles.generateTokenIcon}>🔑</Text>
+              <Icon name="key" color={colors.accent} size={ICON_SIZE.primary} />
             </TouchableOpacity>
           </View>
         </>
@@ -913,7 +914,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
       )}
 
       {sectionHeader('Readings')}
-      {switchRow('LED suggestions', "On by default. After a reading, hCRI.io suggests the LED (brand, model and CCT) from the shape of the spectrum and the reading's title, and you confirm it with one tap. Turn off to stop those requests and hide the suggestion cards. You can still add LED details yourself with the 💡 button.", ledSuggestions, toggleLedSuggestions)}
+      {switchRow('LED suggestions', "On by default. After a reading, hCRI.io suggests the LED (brand, model and CCT) from the shape of the spectrum and the reading's title, and you confirm it with one tap. Turn off to stop those requests and hide the suggestion cards. You can still add LED details yourself with the LED button.", ledSuggestions, toggleLedSuggestions)}
       {switchRow('Capture flicker with each reading', 'After each reading, also take a one-shot flicker capture (frequency, percent flicker, flicker index and waveform). Adds a few seconds per reading and only works on meters that support flicker. Saved with the reading, shown on its Flicker page, included in shared CSVs, and uploaded with the reading to hCRI.io (attached to its report). Even when off, you can add a flicker sample to a reading from the Flicker tab before uploading it.', flickerWithReading, toggleFlickerWithReading)}
 
       {sectionHeader('Feedback')}
@@ -962,7 +963,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
         <View style={styles.statsHeaderRow}>
           <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
             <Text style={styles.statsTitle}>Main Screen Measurements</Text>
-            {helpButton('Main Screen Measurements', 'Check which measurements show on the Main tab after a reading. Hold the ⠿ handle and drag a row to reorder it.')}
+            {helpButton('Main Screen Measurements', 'Check which measurements show on the Main tab after a reading. Hold the dotted handle and drag a row to reorder it.')}
           </View>
           <TouchableOpacity onPress={resetStatsToDefault}>
             <Text style={styles.statsResetLink}>Reset to Default</Text>

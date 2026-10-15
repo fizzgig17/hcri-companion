@@ -9,6 +9,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Svg, { Line, Polyline, Polygon, Circle, Text as SvgText } from 'react-native-svg';
 import HintPressable from './HintPressable';
+import { Icon } from './icons';
 import { HIGH_LINE, LOW_LINE, RISK_TINT, fmtMs } from './FlickerChart';
 import type { FlickerReading } from '../ble/liveSessions';
 
@@ -177,8 +178,8 @@ export default function FlickerCompareChart({ series, width, height }: Props) {
           <>
             {zoom > 1 && (
               <>
-                <HintPressable hint="Pan left" style={styles.pill} onPress={() => pan(-1)}><Text style={styles.pillTxt} allowFontScaling={false}>◀</Text></HintPressable>
-                <HintPressable hint="Pan right" style={styles.pill} onPress={() => pan(1)}><Text style={styles.pillTxt} allowFontScaling={false}>▶</Text></HintPressable>
+                <HintPressable hint="Pan left" style={styles.pill} onPress={() => pan(-1)}><Icon name="chevronLeft" color={LINE} size={12} /></HintPressable>
+                <HintPressable hint="Pan right" style={styles.pill} onPress={() => pan(1)}><Icon name="chevronRight" color={LINE} size={12} /></HintPressable>
               </>
             )}
             <HintPressable hint="Zoom (tap to cycle)" style={[styles.pill, zoom > 1 && styles.pillOn]} onPress={() => setZoomLevel(zoom === 1 ? 2 : zoom === 2 ? 4 : zoom === 4 ? 8 : 1)}>

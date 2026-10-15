@@ -21,6 +21,7 @@ import React, { useEffect, useMemo, useRef } from 'react';
 import { View, Text, PanResponder, PanResponderInstance, Animated, StyleSheet } from 'react-native';
 import HintPressable from './HintPressable';
 import { useTheme } from '../contexts/ThemeContext';
+import { Icon, ICON_SIZE } from './icons';
 
 const ROW_HEIGHT = 50;
 
@@ -165,19 +166,17 @@ export default function DraggableStatList({ order, enabled, labelFor, onReorder,
       backgroundColor: colors.card,
     },
     handle: { width: 40, alignItems: 'center', justifyContent: 'center', height: '100%' },
-    handleGlyph: { color: colors.muted, fontSize: 20 },
     checkbox: {
       width: 22,
       height: 22,
-      borderRadius: 5,
+      borderRadius: 11,
       borderWidth: 1.5,
-      borderColor: colors.mutedFaint,
+      borderColor: colors.muted,
       alignItems: 'center',
       justifyContent: 'center',
       marginRight: 12,
     },
     checkboxChecked: { backgroundColor: colors.accent, borderColor: colors.accent },
-    checkmark: { color: '#fff', fontSize: 13, fontWeight: '700' },
     rowLabel: { color: colors.text, fontSize: 15, fontWeight: '500' },
     rowLabelDisabled: { color: colors.muted },
   });
@@ -192,7 +191,7 @@ export default function DraggableStatList({ order, enabled, labelFor, onReorder,
         return (
           <Animated.View key={id} style={[styles.row, { top }]}>
             <View {...pan.panHandlers} style={styles.handle} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Text style={styles.handleGlyph}>⠿</Text>
+              <Icon name="grip" color={colors.muted} size={ICON_SIZE.row} />
             </View>
             <HintPressable
               hint="Show or hide this stat"
@@ -201,7 +200,7 @@ export default function DraggableStatList({ order, enabled, labelFor, onReorder,
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               accessibilityLabel="Show or hide this stat"
             >
-              {isEnabled && <Text style={styles.checkmark}>✓</Text>}
+              {isEnabled && <Icon name="check" color="#ffffff" size={ICON_SIZE.inline} />}
             </HintPressable>
             <Text style={[styles.rowLabel, !isEnabled && styles.rowLabelDisabled]}>{labelFor(id)}</Text>
           </Animated.View>
