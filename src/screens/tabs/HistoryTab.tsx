@@ -21,7 +21,8 @@
 // unsaved in a field you haven't blurred yet.
 
 import React, { useMemo, useRef, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Pressable, StyleSheet, ActivityIndicator, Alert, Modal } from 'react-native';
+import { hapticLongPress } from '../../utils/haptics';
 import HintPressable from '../../components/HintPressable';
 import Svg, { Polyline, Path } from 'react-native-svg';
 import CollapsibleSection from '../../components/CollapsibleSection';
@@ -31,7 +32,6 @@ import { SavedReading, HISTORY_LIMIT, HISTORY_WARN_AT } from '../../storage/read
 const ICON_CLOUD = 'M16 16l-4-4-4 4M12 12v9M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3';
 const ICON_TRASH = 'M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6';
 const ICON_X = 'M18 6L6 18M6 6l12 12';
-const ICON_CHECK = 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11';
 const ICON_EYE = 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z';
 const ICON_COMPARE = 'M3 17l5-6 4 4 8-9';
 const ICON_TRAY = 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12';
@@ -119,6 +119,7 @@ function HistoryRow({
   selectMode,
   selected,
   onToggleSelected,
+  onLongSelect,
   onCopyLink,
   copyingLink,
   onOpenReport,
@@ -137,6 +138,8 @@ function HistoryRow({
   selectMode: boolean;
   selected: boolean;
   onToggleSelected: (id: string) => void;
+  /** Long press on a row (outside select mode): enters select mode with this row selected. */
+  onLongSelect: (id: string) => void;
   onCopyLink: (reading: SavedReading) => void;
   copyingLink: boolean;
   onOpenReport: (reading: SavedReading, tm30: boolean) => void;
@@ -206,7 +209,7 @@ function HistoryRow({
       height: 20,
       borderRadius: 5,
       borderWidth: 1.5,
-      borderColor: colors.cardBorder,
+      borderColor: colors.muted,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -347,6 +350,8 @@ function HistoryRow({
       <TouchableOpacity
         style={styles.labelInput}
         onPress={openEditor}
+        onLongPress={() => onLongSelect(reading.id)}
+        delayLongPress={400}
         disabled={selectMode}
         activeOpacity={0.7}
         accessibilityRole="button"
@@ -452,8 +457,20 @@ function HistoryRow({
     </>
   );
 
+  // Outside select mode, holding a row (its title, or anywhere that isn't
+  // one of its buttons) enters select mode with that row already checked --
+  // the usual list behaviour on Android and iOS.
   if (!selectMode) {
-    return <View style={styles.row}>{rowInner}</View>;
+    return (
+      <Pressable
+        style={styles.row}
+        onLongPress={() => onLongSelect(reading.id)}
+        delayLongPress={400}
+        accessibilityHint="Long press to select readings"
+      >
+        {rowInner}
+      </Pressable>
+    );
   }
 
   // In Select mode the whole row becomes one big tap target for toggling
@@ -535,7 +552,16 @@ export default function HistoryTab({
     });
   };
 
-  const selectAll = () => setSelected(new Set(history.map((r) => r.id)));
+  const everySelected = history.length > 0 && selected.size === history.length;
+  // The "Select all" checkbox: checks everything, or clears everything when it's already all checked.
+  const toggleSelectAll = () => setSelected(everySelected ? new Set() : new Set(history.map((r) => r.id)));
+
+  // Long press on a row: strong haptic, then select mode with that row checked.
+  const startSelectWith = (id: string) => {
+    hapticLongPress();
+    setSelected(new Set([id]));
+    setSelectMode(true);
+  };
 
   // Split into today's readings (shown flat, same as always -- these are
   // the ones still actively being worked with this session) and every
@@ -655,7 +681,13 @@ export default function HistoryTab({
       paddingVertical: 10,
       marginBottom: 10,
     },
-    selectAllText: { color: colors.accent, fontSize: 13, fontWeight: '600', alignSelf: 'flex-start' },
+    selectHint: { color: colors.muted, fontSize: 12, marginTop: -4, marginBottom: 8 },
+    selectAllRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start' },
+    selectAllBox: { width: 20, height: 20, borderRadius: 5, borderWidth: 1.5, borderColor: colors.muted, alignItems: 'center', justifyContent: 'center', marginRight: 8 },
+    selectAllBoxOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+    selectAllMark: { color: colors.text, fontSize: 13, fontWeight: '700' },
+    selectAllDash: { width: 10, height: 2, borderRadius: 1, backgroundColor: colors.text },
+    selectAllText: { color: colors.text, fontSize: 13, fontWeight: '600' },
     selectBarButtons: { flexDirection: 'row', marginTop: 6, marginLeft: -8 },
     // Overrides PrimaryButton's default marginTop:8 (meant for a full-width
     // button stacked below other content) -- here it sits inline next to
@@ -716,10 +748,6 @@ export default function HistoryTab({
             </TouchableOpacity>
           ) : (
             <>
-              <TouchableOpacity style={styles.headerIcon} onPress={() => setSelectMode(true)} accessibilityRole="button" accessibilityLabel="Select readings">
-                <ActionIcon d={ICON_CHECK} color={colors.accent} size={20} />
-                <Text style={[styles.headerIconText, { color: colors.accent }]}>Select</Text>
-              </TouchableOpacity>
               <TouchableOpacity style={styles.headerIcon} onPress={onShareAll} accessibilityRole="button" accessibilityLabel="Share all readings">
                 <ActionIcon d={ICON_TRAY} color={colors.text} size={20} />
                 <Text style={styles.headerIconText}>Share all</Text>
@@ -729,10 +757,26 @@ export default function HistoryTab({
         </View>
       </View>
 
+      {!selectMode && <Text style={styles.selectHint}>Hold a reading's title to select it.</Text>}
+
       {selectMode && (
         <View style={styles.selectBar}>
-          <TouchableOpacity onPress={selectAll} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={styles.selectAllText}>Select All</Text>
+          <TouchableOpacity
+            onPress={toggleSelectAll}
+            style={styles.selectAllRow}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: everySelected ? true : selected.size > 0 ? 'mixed' : false }}
+            accessibilityLabel="Select all"
+          >
+            <View style={[styles.selectAllBox, selected.size > 0 && styles.selectAllBoxOn]}>
+              {everySelected ? (
+                <Text style={styles.selectAllMark}>✓</Text>
+              ) : selected.size > 0 ? (
+                <View style={styles.selectAllDash} />
+              ) : null}
+            </View>
+            <Text style={styles.selectAllText}>Select all</Text>
           </TouchableOpacity>
           <View style={styles.selectBarButtons}>
             {([
@@ -781,6 +825,7 @@ export default function HistoryTab({
           selectMode={selectMode}
           selected={selected.has(r.id)}
           onToggleSelected={toggleSelected}
+          onLongSelect={startSelectWith}
           onCopyLink={onCopyLink}
           copyingLink={copyingLinkId === r.id}
           onOpenReport={onOpenReport}
@@ -811,6 +856,7 @@ export default function HistoryTab({
                 selectMode={selectMode}
                 selected={selected.has(r.id)}
                 onToggleSelected={toggleSelected}
+                onLongSelect={startSelectWith}
                 onCopyLink={onCopyLink}
                 copyingLink={copyingLinkId === r.id}
                 onOpenReport={onOpenReport}
