@@ -42,6 +42,27 @@ function ActionIcon({ d, color, size = 22 }: { d: string; color: string; size?: 
     </Svg>
   );
 }
+
+// Round selection mark used by the rows and the Select all control: an empty ring, a filled circle with a
+// white tick, or (Select all only) a filled circle with a dash when some but not all are selected.
+function SelectMark({ state, accent, ring }: { state: 'off' | 'on' | 'some'; accent: string; ring: string }) {
+  const on = state !== 'off';
+  return (
+    <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: on ? 0 : 1.5, borderColor: ring, backgroundColor: on ? accent : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+      {on && (
+        <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+          <Path d={state === 'on' ? 'M5 12.5l4.5 4.5L19 7.5' : 'M6 12h12'} />
+        </Svg>
+      )}
+    </View>
+  );
+}
+
+// accent hex (#rrggbb) at a low alpha, for the selected row's wash.
+const tint = (hex: string, alpha: string) => (/^#[0-9a-f]{6}$/i.test(hex) ? hex + alpha : hex);
+const ICON_LINK = 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71';
+const ICON_EXTERNAL = 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3';
+const ICON_TM30 = 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18zM12 3v18';
 import { analyzeSpectrum } from '../../utils/spectralAnalysis';
 import LedSuggestionCard from '../../components/LedSuggestionCard';
 import { ledsLine, ledsOfReading } from '../../hcri/leds';
@@ -194,49 +215,29 @@ function HistoryRow({
   const styles = StyleSheet.create({
     row: {
       backgroundColor: colors.card,
-      borderRadius: 12,
-      borderWidth: 1,
+      borderRadius: 14,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.cardBorder,
-      padding: 10,
-      marginBottom: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      marginBottom: 10,
     },
-    rowSelectable: { paddingVertical: 10 },
-    rowSelected: { borderColor: colors.accent },
-    selectRow: { flexDirection: 'row', alignItems: 'flex-start' },
-    checkboxCol: { width: 30, alignItems: 'center', justifyContent: 'center', paddingTop: 2 },
-    checkbox: {
-      width: 20,
-      height: 20,
-      borderRadius: 5,
-      borderWidth: 1.5,
-      borderColor: colors.muted,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    checkboxChecked: { backgroundColor: colors.accent, borderColor: colors.accent },
-    checkboxMark: { color: colors.text, fontSize: 13, fontWeight: '700' },
+    rowSelectable: {},
+    rowSelected: { borderColor: colors.accent, borderWidth: 1, backgroundColor: tint(colors.accent, '14') },
+    selectRow: { flexDirection: 'row', alignItems: 'center' },
+    checkboxCol: { width: 34, alignItems: 'flex-start', justifyContent: 'center' },
     selectRowBody: { flex: 1 },
-    rowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+    rowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
     // flex: 1 gives the text a definite width (iOS under-measures a shrinking wrapped row and lets the text run into the icons); paddingRight is the gap.
     rowHeaderLeft: { flex: 1, flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', paddingRight: 14 },
-    rowMeta: { color: colors.muted, fontSize: 11, fontFamily: 'monospace' },
-    rowSummaryInline: { color: colors.text, fontSize: 11, fontWeight: '600', marginLeft: 8 },
+    rowMeta: { color: colors.muted, fontSize: 12, fontVariant: ['tabular-nums'] },
+    rowSummaryInline: { color: colors.muted, fontSize: 12, fontWeight: '500', marginLeft: 8, fontVariant: ['tabular-nums'] },
     rowHeaderButtons: { flexDirection: 'row', alignItems: 'center', flexShrink: 0 },
     viewText: { color: colors.info, fontSize: 12, fontWeight: '600', marginRight: 14 },
     deleteText: { color: colors.danger, fontSize: 12 },
 
-    labelInput: {
-      backgroundColor: colors.background,
-      borderWidth: 1,
-      borderColor: colors.cardBorder,
-      borderRadius: 8,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      color: colors.text,
-      fontSize: 13,
-      minHeight: 32,
-      marginBottom: 6,
-    },
+    labelInput: { paddingVertical: 2, marginBottom: 8 },
+    labelText: { color: colors.text, fontSize: 15, fontWeight: '600', lineHeight: 20 },
     modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'flex-start', paddingTop: 70, paddingHorizontal: 24 },
     modalSheet: {
       width: '100%',
@@ -289,15 +290,14 @@ function HistoryRow({
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      borderWidth: 1,
-      borderColor: colors.accent,
-      borderRadius: 8,
-      paddingVertical: 7,
-      marginTop: 6,
+      backgroundColor: tint(colors.accent, '1a'),
+      borderRadius: 18,
+      paddingVertical: 8,
+      marginTop: 4,
     },
     linkRow: { flexDirection: 'row', marginHorizontal: -3 },
     linkPill: { flex: 1, marginHorizontal: 3 },
-    copyLinkIcon: { fontSize: 13, marginRight: 6 },
+    copyLinkIcon: { marginRight: 6 },
     copyLinkSpinner: { marginRight: 6 },
     copyLinkLabel: { color: colors.accent, fontSize: 12, fontWeight: '700' },
   });
@@ -357,7 +357,7 @@ function HistoryRow({
         accessibilityRole="button"
         accessibilityLabel="Reading title. Tap to edit."
       >
-        <Text style={{ color: colors.text, fontSize: 13 }}>{reading.label}</Text>
+        <Text style={styles.labelText}>{reading.label}</Text>
       </TouchableOpacity>
 
       {ledsOfReading(reading).length ? (
@@ -434,7 +434,7 @@ function HistoryRow({
                 {copyingLink ? (
                   <ActivityIndicator size="small" color={colors.accent} style={styles.copyLinkSpinner} />
                 ) : (
-                  <Text style={styles.copyLinkIcon}>🔗</Text>
+                  <View style={styles.copyLinkIcon}><ActionIcon d={ICON_LINK} color={colors.accent} size={14} /></View>
                 )}
                 <Text style={styles.copyLinkLabel}>{copyingLink ? 'Working…' : 'Copy'}</Text>
               </TouchableOpacity>
@@ -443,13 +443,13 @@ function HistoryRow({
                 disabled={copyingLink}
                 style={[styles.copyLinkPill, styles.linkPill]}
               >
-                <Text style={styles.copyLinkIcon}>↗</Text>
+                <View style={styles.copyLinkIcon}><ActionIcon d={ICON_EXTERNAL} color={colors.accent} size={14} /></View>
                 <Text style={styles.copyLinkLabel}>Report</Text>
               </TouchableOpacity>
             </>
           )}
           <TouchableOpacity onPress={() => onOpenTm30(reading)} style={[styles.copyLinkPill, styles.linkPill]}>
-            <Text style={styles.copyLinkIcon}>◐</Text>
+            <View style={styles.copyLinkIcon}><ActionIcon d={ICON_TM30} color={colors.accent} size={14} /></View>
             <Text style={styles.copyLinkLabel}>TM-30</Text>
           </TouchableOpacity>
         </View>
@@ -489,9 +489,7 @@ function HistoryRow({
           {uploading ? (
             <ActivityIndicator size="small" color={colors.text} />
           ) : (
-            <View style={[styles.checkbox, selected && styles.checkboxChecked]}>
-              {selected && <Text style={styles.checkboxMark}>✓</Text>}
-            </View>
+            <SelectMark state={selected ? 'on' : 'off'} accent={colors.accent} ring={colors.muted} />
           )}
         </View>
         <View style={styles.selectRowBody}>{rowInner}</View>
@@ -658,10 +656,10 @@ export default function HistoryTab({
     // all centered on one line (this used to be a big full-size button next to
     // a bare text link, which sat at different heights and looked clunky).
     headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-    headerTitle: { color: colors.muted, fontSize: 12, flexShrink: 1, marginRight: 8 },
+    headerTitle: { color: colors.text, fontSize: 17, fontWeight: '600', flexShrink: 1, marginRight: 8, letterSpacing: -0.2 },
     headerButtons: { flexDirection: 'row', alignItems: 'center' },
-    headerIcon: { alignItems: 'center', marginLeft: 16, minWidth: 40 },
-    headerIconText: { color: colors.text, fontSize: 10, fontWeight: '600', marginTop: 1 },
+    headerIcon: { flexDirection: 'row', alignItems: 'center', marginLeft: 8, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 18, backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.cardBorder },
+    headerIconText: { color: colors.text, fontSize: 13, fontWeight: '500', marginLeft: 6 },
     headerPill: {
       borderWidth: 1,
       borderColor: colors.cardBorder,
@@ -678,27 +676,23 @@ export default function HistoryTab({
       flexDirection: 'column',
       alignItems: 'stretch',
       backgroundColor: colors.card,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.cardBorder,
-      borderRadius: 10,
+      borderRadius: 14,
       paddingHorizontal: 14,
-      paddingVertical: 10,
-      marginBottom: 10,
+      paddingVertical: 12,
+      marginBottom: 12,
     },
-    selectHint: { color: colors.muted, fontSize: 12, marginTop: -4, marginBottom: 8 },
-    selectAllRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start' },
-    selectAllBox: { width: 20, height: 20, borderRadius: 5, borderWidth: 1.5, borderColor: colors.muted, alignItems: 'center', justifyContent: 'center', marginRight: 8 },
-    selectAllBoxOn: { backgroundColor: colors.accent, borderColor: colors.accent },
-    selectAllMark: { color: colors.text, fontSize: 13, fontWeight: '700' },
-    selectAllDash: { width: 10, height: 2, borderRadius: 1, backgroundColor: colors.text },
-    selectAllText: { color: colors.text, fontSize: 13, fontWeight: '600' },
-    selectBarButtons: { flexDirection: 'row', marginTop: 6, marginLeft: -8 },
+    selectHint: { color: colors.muted, fontSize: 12.5, marginTop: -2, marginBottom: 12 },
+    selectAllRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingVertical: 2 },
+    selectAllText: { color: colors.text, fontSize: 15, fontWeight: '500', marginLeft: 12 },
+    selectBarButtons: { flexDirection: 'row', marginTop: 12, marginLeft: -8 },
     // Overrides PrimaryButton's default marginTop:8 (meant for a full-width
     // button stacked below other content) -- here it sits inline next to
     // "Select All" text, so that top margin would push it visibly lower than
     // its sibling instead of centering with it.
-    selectBarIconButton: { flex: 1, marginLeft: 8, paddingVertical: 4, alignItems: 'center', borderRadius: 8, borderWidth: 1, borderColor: colors.cardBorder, backgroundColor: colors.card },
-    selectBarIconText: { fontSize: 10, fontWeight: '600', marginTop: 1 },
+    selectBarIconButton: { flex: 1, marginLeft: 8, paddingVertical: 8, alignItems: 'center', borderRadius: 12, backgroundColor: colors.background },
+    selectBarIconText: { fontSize: 11.5, fontWeight: '500', marginTop: 3 },
     selectBarButton: { marginTop: 0, marginLeft: 8, flex: 1, paddingHorizontal: 8, paddingVertical: 10 },
 
     limitNote: { color: colors.muted, fontSize: 12, lineHeight: 17, marginBottom: 10 },
@@ -741,19 +735,19 @@ export default function HistoryTab({
       <View style={styles.headerRow}>
         <Text style={styles.headerTitle}>
           {selectMode
-            ? `${selected.size} of ${history.length} selected`
-            : `${history.length} saved reading${history.length === 1 ? '' : 's'}`}
+            ? `${selected.size} selected`
+            : `${history.length} reading${history.length === 1 ? '' : 's'}`}
         </Text>
         <View style={styles.headerButtons}>
           {selectMode ? (
             <TouchableOpacity style={styles.headerIcon} onPress={exitSelectMode} accessibilityRole="button" accessibilityLabel="Cancel selection">
-              <ActionIcon d={ICON_X} color={colors.text} size={20} />
+              <ActionIcon d={ICON_X} color={colors.text} size={16} />
               <Text style={styles.headerIconText}>Cancel</Text>
             </TouchableOpacity>
           ) : (
             <>
               <TouchableOpacity style={styles.headerIcon} onPress={onShareAll} accessibilityRole="button" accessibilityLabel="Share all readings">
-                <ActionIcon d={ICON_TRAY} color={colors.text} size={20} />
+                <ActionIcon d={ICON_TRAY} color={colors.text} size={16} />
                 <Text style={styles.headerIconText}>Share all</Text>
               </TouchableOpacity>
             </>
@@ -773,13 +767,7 @@ export default function HistoryTab({
             accessibilityState={{ checked: everySelected ? true : selected.size > 0 ? 'mixed' : false }}
             accessibilityLabel="Select all"
           >
-            <View style={[styles.selectAllBox, selected.size > 0 && styles.selectAllBoxOn]}>
-              {everySelected ? (
-                <Text style={styles.selectAllMark}>✓</Text>
-              ) : selected.size > 0 ? (
-                <View style={styles.selectAllDash} />
-              ) : null}
-            </View>
+            <SelectMark state={everySelected ? 'on' : selected.size > 0 ? 'some' : 'off'} accent={colors.accent} ring={colors.muted} />
             <Text style={styles.selectAllText}>Select all</Text>
           </TouchableOpacity>
           <View style={styles.selectBarButtons}>

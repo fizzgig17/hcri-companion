@@ -195,7 +195,9 @@ function Navigation() {
             same relationship it had to Home before. */}
         <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
         <Stack.Screen name="ReadingDetail" component={ReadingOverlay} options={popup ? popupOptions : { title: 'Reading' }} />
-        <Stack.Screen name="Tm30Report" component={Tm30Overlay} options={popup ? popupOptions : { title: 'TM-30 Report' }} />
+        {/* Phones: the report draws its own bar (X, title, Photo / TM-30) -- see Tm30ReportScreen. Edge swipe-back is
+            off because the photo page's divider is dragged sideways; the X closes it. */}
+        <Stack.Screen name="Tm30Report" component={Tm30Overlay} options={popup ? popupOptions : { headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="Photo" component={PhotoOverlay} options={popup ? popupOptions : ({ navigation }: any) => ({
           title: 'See it on a photo',
           gestureEnabled: false, // the divider is dragged near the screen edge; a back-swipe there closed the photo
