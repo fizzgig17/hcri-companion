@@ -167,6 +167,13 @@ describe('ColorMunki status', () => {
     expect(r.tbCorrected).toBe(false);
     expect(r.spectrum).toBe(spectrum);
   });
+
+  it('marks a ColorMunki reading corrected when the bridge says it corrected it (bit 6), without changing it', () => {
+    const spectrum = Array.from({ length: 351 }, (_, i) => ({ nm: 380 + i, value: 1 + Math.sin(i / 20) }));
+    const r = tbToMeterResult({ summary: { status: 0, peakNm: 450, exposureMs: 50, peakValue: 2, sum: 1, npts: 351, startNm: 380 }, spectrum }, 'Torch Bearer', 1, true);
+    expect(r.tbCorrected).toBe(true);
+    expect(r.spectrum).toBe(spectrum);
+  });
 });
 
 describe('bridge names', () => {

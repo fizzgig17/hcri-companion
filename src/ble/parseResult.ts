@@ -36,7 +36,7 @@ export interface MeterResult {
   meterModel?: 'colormunki';
   /** Torch Bearer only: the spectrometer's own exposure status on the final frame -- 0 normal, 1 over-exposed, 2 under-exposed. */
   tbStatus?: number;
-  /** Torch Bearer only: true when the HPCS-matching spectral correction (ble/tbCorrection.ts) was applied to this spectrum, false for the raw spectrum. */
+  /** Bridge readings: true when an HPCS-matching spectral correction was applied to this spectrum -- the Torch Bearer's (on the bridge or ble/tbCorrection.ts) or, with newer bridge firmware, the ColorMunki's own (on the bridge) -- false for the raw spectrum. */
   tbCorrected?: boolean;
   /** One-shot flicker capture taken with this reading (Settings -> "Capture flicker with each reading"); absent when off or the capture failed. */
   flicker?: FlickerCapture;

@@ -17,7 +17,8 @@
 //     bytes 6-7 (newer firmware): meter kind (0 Torch Bearer, 1 ColorMunki) and ColorMunki flags:
 //       bit7 dial known, bits0-1 dial position (0 projector, 1 surface, 2 calibration, 3 ambient), bit2 dark calibration done,
 //       bit3 high-gain dark references taken (very dim light)
-//       bit6 (Torch Bearer): the firmware already applies the HPCS-fitted spectral correction, so the app must not
+//       bit6: the firmware already applies the HPCS-fitted spectral correction (Torch Bearer; ColorMunki with newer
+//       firmware, its own curve), so the app must not apply one; the reading is marked corrected.
 // Result packets (all little-endian):
 //   01 | status u8 | peak_nm u16 | exposure_ms f32 | peak_val f32 | sum f32 | npts u16 | start_nm u16
 //   02 | npts u16 | start_nm u16 | step_nm u8 | total_bytes u16      (header; float32 values follow)
@@ -78,7 +79,7 @@ export interface TbMeterStatus {
   calibrated: boolean;
   /** ColorMunki (newer firmware, flags bit 3): the dark calibration also took the high-gain references used in very dim light. */
   highGainReady: boolean;
-  /** Torch Bearer: the firmware already applied the spectral correction to the spectrum it sends. */
+  /** The bridge already applied the HPCS-fitted spectral correction to the spectrum it sends (Torch Bearer, or a ColorMunki with newer firmware). */
   fwCorrected: boolean;
   /** ColorMunki: minutes since the dark calibration, as of the moment this status was sent (null = unknown or none). */
   calAgeMin: number | null;
@@ -321,7 +322,8 @@ export function tbToMeterResult(scan: TbScan, deviceName: string, kind: number =
   // The correction is fitted to the Torch Bearer against an HPCS; it must never be applied to a ColorMunki spectrum.
   // Newer firmware corrects on the board (status bit 6); then the app must not apply the curve a second time.
   const appCorrects = !isMunki && !fwCorrected && isTbCorrectionEnabled();
-  const corrected = !isMunki && (fwCorrected || appCorrects);
+  // ColorMunki: newer bridge firmware applies its own HPCS-fitted curve (munki_corr.h) and says so with the same bit.
+  const corrected = fwCorrected || appCorrects;
   const spectrum = appCorrects ? applyTbCorrection(scan.spectrum) : scan.spectrum;
   const a = analyzeSpectrum(spectrum);
 
