@@ -573,7 +573,7 @@ export class MeterConnection {
 
   /** Torch Bearer connection setup: find the bridge's characteristics, subscribe to results + status, and wire the disconnect listener. */
   private async finishConnectingTorchBearer(connected: Device): Promise<Device> {
-    this.log('Torch Bearer detected -- setting up the bridge service...');
+    this.log('hCRI Bridge detected -- setting up its service...');
     const chars = await connected.characteristicsForService(TB_SERVICE_UUID);
     const find = (uuid: string) => chars.find((c) => c.uuid.toLowerCase() === uuid);
     const cmd = find(TB_CMD_UUID);
@@ -590,7 +590,7 @@ export class MeterConnection {
       const first = await sta.read();
       if (first?.value) {
         const st = new Uint8Array(Buffer.from(first.value, 'base64'));
-        this.log(`Torch Bearer status on connect: state ${st[0]}`, true);
+        this.log(`Bridge status on connect: state ${st[0]}`, true);
         this.setTbMeterStatus(parseTbStatus(st));
         if (st[0] === TB_STATE_ERROR) {
           await connected.cancelConnection().catch(() => {});
@@ -635,26 +635,26 @@ export class MeterConnection {
     this.tbSubs = [
       res.monitor((error, char) => {
         if (error) {
-          this.log(`Torch Bearer result notification error: ${error.message}`);
+          this.log(`Bridge result notification error: ${error.message}`);
           return;
         }
         if (!char?.value) return;
         const arr = new Uint8Array(Buffer.from(char.value, 'base64'));
-        this.log(`<- TB result (${arr.length}B): ${toHex(arr.subarray(0, 12))}${arr.length > 12 ? ' ...' : ''}`, true);
+        this.log(`<- Bridge result (${arr.length}B): ${toHex(arr.subarray(0, 12))}${arr.length > 12 ? ' ...' : ''}`, true);
         try {
           const scan = this.tbReassembler.push(arr);
           if (scan && this.tbWaiter) {
             const w = this.tbWaiter;
             this.tbWaiter = null;
             this.tbLastSig = tbSummarySignature(scan.summary);
-            this.log(`Torch Bearer scan complete: ${scan.spectrum.length} points, exposure ${scan.summary.exposureMs.toFixed(1)} ms, status ${scan.summary.status}`);
+            this.log(`Bridge scan complete: ${scan.spectrum.length} points, exposure ${scan.summary.exposureMs.toFixed(1)} ms, status ${scan.summary.status}`);
             w.resolve(tbToMeterResult(scan, connected.name ?? connected.localName ?? 'Torch Bearer', this.tbMeterStatus?.kind ?? 0, this.tbMeterStatus?.fwCorrected ?? false));
           } else if (scan && tbSummarySignature(scan.summary) === this.tbLastSig) {
-            this.log('Torch Bearer re-sent a reading the app already has -- ignoring it');
+            this.log('Bridge re-sent a reading the app already has -- ignoring it');
           } else if (scan && this.tbButtonHandlers.result) {
             // Nobody here asked for it: the button on the bridge started this scan, and the app takes the reading as its own.
             this.tbLastSig = tbSummarySignature(scan.summary);
-            this.log(`Torch Bearer button scan complete: ${scan.spectrum.length} points, exposure ${scan.summary.exposureMs.toFixed(1)} ms`);
+            this.log(`Bridge button scan complete: ${scan.spectrum.length} points, exposure ${scan.summary.exposureMs.toFixed(1)} ms`);
             this.tbButtonHandlers.result(tbToMeterResult(scan, connected.name ?? connected.localName ?? 'Torch Bearer', this.tbMeterStatus?.kind ?? 0, this.tbMeterStatus?.fwCorrected ?? false));
           }
         } catch (e: any) {
@@ -670,7 +670,7 @@ export class MeterConnection {
         if (error || !char?.value) return;
         const arr = new Uint8Array(Buffer.from(char.value, 'base64'));
         const st = parseTbStatus(arr);
-        this.log(`<- TB status: state ${st.state} try ${st.reason}${st.kind === TB_KIND_COLORMUNKI ? ` (ColorMunki dial ${st.dialKnown ? st.dial : '?'}, ${st.calibrated ? 'calibrated' : 'not calibrated'})` : ''}`, true);
+        this.log(`<- Bridge status: state ${st.state} try ${st.reason}${st.kind === TB_KIND_COLORMUNKI ? ` (ColorMunki dial ${st.dialKnown ? st.dial : '?'}, ${st.calibrated ? 'calibrated' : 'not calibrated'})` : ''}`, true);
         this.setTbMeterStatus(st);
         if (arr[0] === TB_STATE_SCANNING && !this.tbWaiter && !this.tbCalWaiter) this.tbButtonHandlers.started?.();
         if (arr[0] === TB_STATE_ERROR && this.tbWaiter) {
@@ -705,7 +705,7 @@ export class MeterConnection {
 
     this.disconnectSubscription?.remove();
     this.disconnectSubscription = connected.onDisconnected((error) => {
-      this.log(`Torch Bearer disconnected${error ? `: ${describeBleError(error)}` : ''}`);
+      this.log(`Bridge disconnected${error ? `: ${describeBleError(error)}` : ''}`);
       this.device = null;
       this.characteristic = null;
       this.tbSubs.forEach((x) => x.remove());
@@ -751,7 +751,7 @@ export class MeterConnection {
         reject: (e) => { clearTimeout(timer); reject(e); },
       };
     });
-    this.log('Torch Bearer: sending scan command');
+    this.log('Bridge: sending scan command');
     try {
       await this.characteristic.writeWithResponse(TB_CMD_SCAN_B64);
     } catch (e) {
@@ -798,16 +798,16 @@ export class MeterConnection {
   private async sendTorchBearerFlip(flipped: boolean): Promise<void> {
     if (!this.isTorchBearer() || !this.characteristic) return;
     try {
-      this.log(`Torch Bearer: display ${flipped ? 'turned 180 degrees' : 'standard way up'}`, true);
+      this.log(`Bridge: display ${flipped ? 'turned 180 degrees' : 'standard way up'}`, true);
       await this.characteristic.writeWithResponse(flipped ? TB_CMD_FLIP_ON_B64 : TB_CMD_FLIP_OFF_B64);
     } catch (e: any) {
-      this.log(`Could not set the Torch Bearer display orientation: ${describeBleError(e)}`);
+      this.log(`Could not set the bridge display orientation: ${describeBleError(e)}`);
     }
   }
 
   async requestTorchBearerLastReading(): Promise<void> {
     if (!this.isTorchBearer() || !this.characteristic || this.tbWaiter) return;
-    this.log('Torch Bearer: asking for the last reading (catching up)', true);
+    this.log('Bridge: asking for the last reading (catching up)', true);
     await this.characteristic.writeWithResponse(TB_CMD_RESEND_B64);
   }
 

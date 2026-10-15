@@ -1001,7 +1001,7 @@ export default function HomeScreen({ navigation }: any) {
     result: (r: MeterResult) => {
       if (tbButtonTimer.current) { clearTimeout(tbButtonTimer.current); tbButtonTimer.current = null; }
       if (statusRef.current === 'uploading' || statusRef.current === 'connecting') return;
-      appendLog('Reading taken with the button on the Torch Bearer');
+      appendLog('Reading taken with the button on the bridge');
       (async () => {
         try {
           setStatus('measuring');
@@ -1336,7 +1336,7 @@ export default function HomeScreen({ navigation }: any) {
         // (the app ignores it if it already has it).
         const tbConn = connRef.current;
         if (tbConn?.isTorchBearer() && statusRef.current === 'connected') {
-          tbConn.requestTorchBearerLastReading().catch((e) => appendLog(`Could not catch up with the Torch Bearer: ${e?.message ?? e}`));
+          tbConn.requestTorchBearerLastReading().catch((e) => appendLog(`Could not catch up with the bridge: ${e?.message ?? e}`));
         }
         // Coming back to the foreground -- always try to reconnect if
         // there's no meter connected right now, no matter WHY there isn't
