@@ -1012,19 +1012,36 @@ export default function HomeScreen({ navigation }: any) {
   tbButtonRef.current = {
     started: () => {
       if (statusRef.current !== 'connected' && statusRef.current !== 'measuring') return;
-      if (statusRef.current === 'connected') { setLiveUnsaved(null); setPagerResetKey({}); setStatus('measuring'); }
+      if (statusRef.current === 'connected') {
+        // The ColorMunki's own button with the dial on Calibration calibrates; say so, as the app's Calibrate does.
+        const ms = connRef.current?.getTbMeterStatus();
+        const cal = !!ms && ms.kind === TB_KIND_COLORMUNKI && ms.dialKnown && ms.dial === MUNKI_DIAL_CALIBRATION;
+        calibratingRef.current = cal;
+        setCalibrating(cal);
+        setLiveUnsaved(null);
+        setPagerResetKey({});
+        setStatus('measuring');
+      }
       if (tbButtonTimer.current) clearTimeout(tbButtonTimer.current);
-      tbButtonTimer.current = setTimeout(() => { setStatus((s) => (s === 'measuring' ? 'connected' : s)); }, 45000); // no reading arrived
+      tbButtonTimer.current = setTimeout(() => {
+        calibratingRef.current = false;
+        setCalibrating(false);
+        setStatus((s) => (s === 'measuring' ? 'connected' : s));
+      }, 45000); // no reading arrived
     },
     // The bridge went back to ready without a reading (a ColorMunki calibration with its button, or a refusal).
     idle: () => {
       if (!tbButtonTimer.current) return;
       clearTimeout(tbButtonTimer.current);
       tbButtonTimer.current = null;
+      calibratingRef.current = false;
+      setCalibrating(false);
       setStatus((s) => (s === 'measuring' ? 'connected' : s));
     },
     result: (r: MeterResult) => {
       if (tbButtonTimer.current) { clearTimeout(tbButtonTimer.current); tbButtonTimer.current = null; }
+      calibratingRef.current = false;
+      setCalibrating(false);
       if (statusRef.current === 'uploading' || statusRef.current === 'connecting') return;
       appendLog('Reading taken with the button on the bridge');
       (async () => {
