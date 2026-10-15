@@ -15,7 +15,8 @@
 //     state: 0 ready, 1 scanning, 2 done, 3 error (no USB / timeout), 4 done but not locked,
 //            5 not done (ColorMunki: the reason is in the 'try' byte, see colorMunkiFailMessage)
 //     bytes 6-7 (newer firmware): meter kind (0 Torch Bearer, 1 ColorMunki) and ColorMunki flags:
-//       bit7 dial known, bits0-1 dial position (0 projector, 1 surface, 2 calibration, 3 ambient), bit2 dark calibration done
+//       bit7 dial known, bits0-1 dial position (0 projector, 1 surface, 2 calibration, 3 ambient), bit2 dark calibration done,
+//       bit3 high-gain dark references taken (very dim light)
 //       bit6 (Torch Bearer): the firmware already applies the HPCS-fitted spectral correction, so the app must not
 // Result packets (all little-endian):
 //   01 | status u8 | peak_nm u16 | exposure_ms f32 | peak_val f32 | sum f32 | npts u16 | start_nm u16
@@ -70,6 +71,8 @@ export interface TbMeterStatus {
   dialKnown: boolean;
   dial: number;
   calibrated: boolean;
+  /** ColorMunki (newer firmware, flags bit 3): the dark calibration also took the high-gain references used in very dim light. */
+  highGainReady: boolean;
   /** Torch Bearer: the firmware already applied the spectral correction to the spectrum it sends. */
   fwCorrected: boolean;
   /** ColorMunki: minutes since the dark calibration, as of the moment this status was sent (null = unknown or none). */
@@ -89,6 +92,7 @@ export function parseTbStatus(p: Uint8Array): TbMeterStatus {
     dialKnown: (flags & 0x80) !== 0,
     dial: flags & 0x03,
     calibrated: (flags & 0x04) !== 0,
+    highGainReady: (flags & 0x08) !== 0,
     fwCorrected: (flags & 0x40) !== 0,
     calAgeMin: p.length > 9 && (p[8] | (p[9] << 8)) !== 0xffff ? p[8] | (p[9] << 8) : null,
   };

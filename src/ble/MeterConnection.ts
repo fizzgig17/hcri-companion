@@ -670,7 +670,7 @@ export class MeterConnection {
         if (error || !char?.value) return;
         const arr = new Uint8Array(Buffer.from(char.value, 'base64'));
         const st = parseTbStatus(arr);
-        this.log(`<- Bridge status: state ${st.state} try ${st.reason}${st.kind === TB_KIND_COLORMUNKI ? ` (ColorMunki dial ${st.dialKnown ? st.dial : '?'}, ${st.calibrated ? 'calibrated' : 'not calibrated'})` : ''}`, true);
+        this.log(`<- Bridge status: state ${st.state} try ${st.reason}${st.kind === TB_KIND_COLORMUNKI ? ` (ColorMunki dial ${st.dialKnown ? st.dial : '?'}, ${st.calibrated ? `calibrated${st.highGainReady ? ', high gain ready' : ''}` : 'not calibrated'})` : ''}`, true);
         this.setTbMeterStatus(st);
         if (arr[0] === TB_STATE_SCANNING && !this.tbWaiter && !this.tbCalWaiter) this.tbButtonHandlers.started?.();
         if (arr[0] === TB_STATE_ERROR && this.tbWaiter) {
