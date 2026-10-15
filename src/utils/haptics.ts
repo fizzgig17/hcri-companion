@@ -15,7 +15,7 @@ import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 
 // iOS ignores the length passed to Vibration.vibrate() and always gives one long ~0.4s buzz, so on iOS the Taptic
 // Engine is used instead (light tap, success/error notification). Android keeps short timed vibrations.
-function iosHaptic(type: 'impactLight' | 'notificationSuccess' | 'notificationError'): boolean {
+function iosHaptic(type: 'impactLight' | 'impactHeavy' | 'notificationSuccess' | 'notificationError'): boolean {
   if (Platform.OS !== 'ios') return false;
   try {
     ReactNativeHapticFeedback.trigger(type, { enableVibrateFallback: false, ignoreAndroidSystemSettings: false });
@@ -74,4 +74,11 @@ export function hapticTap(): void {
   if (!tapsEnabled) return;
   if (iosHaptic('impactLight')) return;
   safeVibrate(Platform.OS === 'android' ? 25 : 15);
+}
+
+/** Strong single thump for a long press that switches mode (e.g. History entering selection), clearly firmer than the button tick. */
+export function hapticLongPress(): void {
+  if (!tapsEnabled) return;
+  if (iosHaptic('impactHeavy')) return;
+  safeVibrate(60);
 }
