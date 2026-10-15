@@ -25,6 +25,7 @@
 import React, { useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, LayoutChangeEvent } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
+import { Icon, ICON_SIZE } from '../../components/icons';
 
 interface Props {
   log: string[];
@@ -103,6 +104,7 @@ export default function LogsTab({ log, onShare, onClear }: Props) {
       paddingVertical: 6,
       alignItems: 'center',
     },
+    jumpInner: { flexDirection: 'row', alignItems: 'center' },
     jumpButtonText: { color: colors.muted, fontSize: 12, fontWeight: '600' },
     logBox: {
       flex: 1,
@@ -130,13 +132,13 @@ export default function LogsTab({ log, onShare, onClear }: Props) {
           </View>
           <View style={styles.jumpRow}>
             <TouchableOpacity style={styles.jumpButton} onPress={jumpToTop} activeOpacity={0.7}>
-              <Text style={styles.jumpButtonText}>⤒ Top</Text>
+              <View style={styles.jumpInner}><Icon name="toTop" color={colors.muted} size={ICON_SIZE.inline} /><Text style={[styles.jumpButtonText, { marginLeft: 4 }]}>Top</Text></View>
             </TouchableOpacity>
             <TouchableOpacity style={styles.jumpButton} onPress={jumpToMiddle} activeOpacity={0.7}>
               <Text style={styles.jumpButtonText}>Middle</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.jumpButton} onPress={jumpToBottom} activeOpacity={0.7}>
-              <Text style={styles.jumpButtonText}>⤓ Bottom</Text>
+              <View style={styles.jumpInner}><Icon name="toBottom" color={colors.muted} size={ICON_SIZE.inline} /><Text style={[styles.jumpButtonText, { marginLeft: 4 }]}>Bottom</Text></View>
             </TouchableOpacity>
           </View>
           <ScrollView

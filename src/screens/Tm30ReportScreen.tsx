@@ -18,7 +18,7 @@ import { WebView } from 'react-native-webview';
 import { generatePDF } from 'react-native-html-to-pdf';
 import RNShare from 'react-native-share';
 import RNFS from 'react-native-fs';
-import Svg, { Path } from 'react-native-svg';
+import { Icon, ICON_SIZE, CloseButton } from '../components/icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLog } from '../contexts/LogContext';
@@ -27,15 +27,6 @@ import { withBackgroundDisconnectSuppressed } from '../ble/backgroundDisconnectG
 import PhotoScreen from './PhotoScreen';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
 
-const ICON_PHOTO = 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM21 15l-5-5L5 21';
-const ICON_IMAGE = 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3';
-const ICON_PDF = 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M8 13h8M8 17h8';
-const ICON_X = 'M18 6L6 18M6 6l12 12';
-const ICON_NEXT = 'M9 6l6 6-6 6';
-const ICON_PREV = 'M15 6l-6 6 6 6';
-const glyph = (d: string, color: string, size = 24) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><Path d={d} /></Svg>
-);
 
 export default function Tm30ReportScreen({ route, navigation, panel }: any) {
   const { colors } = useTheme();
@@ -174,7 +165,6 @@ export default function Tm30ReportScreen({ route, navigation, panel }: any) {
     barTitle: { color: colors.text, fontSize: 16, fontWeight: '600', textAlign: 'center' },
     barBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 8, borderRadius: 18 },
     barBtnText: { color: colors.accent, fontSize: 15, fontWeight: '600' },
-    closeBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
     dots: { flexDirection: 'row', justifyContent: 'center', marginTop: 4 },
     dot: { width: 5, height: 5, borderRadius: 2.5, marginHorizontal: 3, backgroundColor: colors.mutedFaint },
     dotOn: { backgroundColor: colors.accent },
@@ -196,11 +186,7 @@ export default function Tm30ReportScreen({ route, navigation, panel }: any) {
     btnTextSecondary: { color: colors.accent, fontSize: 15, fontWeight: '700' },
   });
 
-  const closeButton = panel ? null : (
-    <TouchableOpacity style={styles.closeBtn} onPress={close} accessibilityRole="button" accessibilityLabel="Close" hitSlop={8}>
-      {glyph(ICON_X, colors.text, 20)}
-    </TouchableOpacity>
-  );
+  const closeButton = panel ? null : <CloseButton onPress={close} />;
 
   const reportPage = (
     <View style={{ flex: 1 }}>
@@ -236,7 +222,7 @@ export default function Tm30ReportScreen({ route, navigation, panel }: any) {
             accessibilityRole="button"
             accessibilityLabel="Save as image"
           >
-            {imageHtml ? <ActivityIndicator size="small" color={colors.text} /> : glyph(ICON_IMAGE, colors.text, 16)}
+            {imageHtml ? <ActivityIndicator size="small" color={colors.text} /> : <Icon name="download" color={colors.text} size={ICON_SIZE.pill} />}
             <Text style={[styles.iconBtnText, { color: colors.text }]} numberOfLines={1}>{imageHtml ? 'Making image…' : 'Save image'}</Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -247,7 +233,7 @@ export default function Tm30ReportScreen({ route, navigation, panel }: any) {
             accessibilityRole="button"
             accessibilityLabel="Share PDF"
           >
-            {sharing ? <ActivityIndicator size="small" color={colors.accent} /> : glyph(ICON_PDF, colors.accent, 16)}
+            {sharing ? <ActivityIndicator size="small" color={colors.accent} /> : <Icon name="report" color={colors.accent} size={ICON_SIZE.pill} />}
             <Text style={[styles.iconBtnText, { color: colors.accent }]} numberOfLines={1}>{sharing ? 'Creating PDF…' : 'Share PDF'}</Text>
           </TouchableOpacity>
         </View>
@@ -261,7 +247,7 @@ export default function Tm30ReportScreen({ route, navigation, panel }: any) {
         <View style={styles.barSide}>
           {page === 0 ? closeButton : (
             <TouchableOpacity style={styles.barBtn} onPress={() => goToPage(0)} accessibilityRole="button" accessibilityLabel="Back to the TM-30 report" hitSlop={6}>
-              {glyph(ICON_PREV, colors.accent, 20)}
+              <Icon name="chevronLeft" color={colors.accent} size={ICON_SIZE.row} />
               <Text style={styles.barBtnText}>TM-30</Text>
             </TouchableOpacity>
           )}
@@ -276,9 +262,9 @@ export default function Tm30ReportScreen({ route, navigation, panel }: any) {
         <View style={[styles.barSide, { justifyContent: 'flex-end' }]}>
           {page === 1 ? closeButton : (
             <TouchableOpacity style={[styles.barBtn, !!built.error && { opacity: 0.5 }]} onPress={() => goToPage(1)} disabled={!!built.error} accessibilityRole="button" accessibilityLabel="See it on a photo" hitSlop={6}>
-              {glyph(ICON_PHOTO, colors.accent, 18)}
+              <Icon name="photo" color={colors.accent} size={ICON_SIZE.pill} />
               <Text style={[styles.barBtnText, { marginLeft: 6 }]}>Photo</Text>
-              {glyph(ICON_NEXT, colors.accent, 20)}
+              <Icon name="chevronRight" color={colors.accent} size={ICON_SIZE.row} />
             </TouchableOpacity>
           )}
         </View>

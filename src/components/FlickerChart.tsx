@@ -12,6 +12,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Animated, TouchableOpacity, Share, Alert, StyleSheet, Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import HintPressable from './HintPressable';
+import { Icon, ICONS, ICON_SIZE } from './icons';
 import Svg, { Line, Polyline, Polygon, Circle, Path, Text as SvgText } from 'react-native-svg';
 import { flickerRisk, type FlickerReading } from '../ble/liveSessions';
 import { FLICKER_RATE_LABELS, FLICKER_GEAR_LABELS } from '../ble/protocol';
@@ -67,14 +68,14 @@ const RISK_H = 20;
 const HOLD_COLOR = '#c47f00';
 
 // Header icons (24x24 grid, stroke style like the rest of the app's icons).
-const ICON_SHARE = 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12';
-const ICON_GEAR =
-  'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z';
-const ICON_UPLOAD = 'M16 16l-4-4-4 4M12 12v9M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3';
-const ICON_STOP = 'M6 6h12v12H6z';
-const ICON_REDO = 'M23 4v6h-6M20.49 15a9 9 0 1 1-2.12-9.36L23 10';
-const ICON_HELP = 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01';
-const ICON_PLAY = 'M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z';
+// Shared icon paths (components/icons.tsx), so these match the rest of the app.
+const ICON_SHARE = ICONS.share;
+const ICON_GEAR = ICONS.gear;
+const ICON_UPLOAD = ICONS.upload;
+const ICON_STOP = ICONS.stop;
+const ICON_REDO = ICONS.redo;
+const ICON_HELP = ICONS.help;
+const ICON_PLAY: string = ICONS.play;
 
 function HeaderIcon({ d, color, fill, size = 15 }: { d: string; color: string; fill?: boolean; size?: number }) {
   return (
@@ -223,11 +224,11 @@ export default function FlickerChart({ reading, running, history, settings, uplo
   const headRight = (
     <>
       <HintPressable hint="About flicker readings" style={styles.iconPill} onPress={showHelp} accessibilityLabel="About flicker readings" hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
-        <HeaderIcon d={ICON_HELP} color={LINE} size={16} />
+        <HeaderIcon d={ICON_HELP} color={LINE} size={ICON_SIZE.pill} />
       </HintPressable>
       {settings && (
         <HintPressable hint="Flicker settings" style={styles.iconPill} onPress={() => setShowSettings(true)} accessibilityLabel="Flicker settings" hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
-          <HeaderIcon d={ICON_GEAR} color={LINE} size={16} />
+          <HeaderIcon d={ICON_GEAR} color={LINE} size={ICON_SIZE.pill} />
         </HintPressable>
       )}
     </>
@@ -255,7 +256,7 @@ export default function FlickerChart({ reading, running, history, settings, uplo
         accessibilityLabel={hint}
       >
         <Animated.View style={{ opacity: active ? pulse : 1 }}>
-          <HeaderIcon d={active ? ICON_PLAY : d} color={active ? RISK_COLOR.none : LINE} fill={active || d === ICON_PLAY} size={20} />
+          <HeaderIcon d={active ? ICON_PLAY : d} color={active ? RISK_COLOR.none : LINE} fill={active || d === ICON_PLAY} size={ICON_SIZE.row} />
         </Animated.View>
         <Text style={[styles.actTxt, { color: active ? RISK_COLOR.none : LINE }]} allowFontScaling={false} numberOfLines={1}>{active ? 'Sampling…' : label}</Text>
       </TouchableOpacity>
@@ -269,7 +270,7 @@ export default function FlickerChart({ reading, running, history, settings, uplo
         {canSampleReading && sampleBtn('reading', ICON_REDO, redoLabel ?? 'Add to reading', 'Take a flicker sample for the current reading')}
         {running && (
           <TouchableOpacity style={styles.actBtn} onPress={onStop} accessibilityLabel="Stop flicker sample">
-            <HeaderIcon d={ICON_STOP} color={RISK_COLOR.high} fill size={20} />
+            <HeaderIcon d={ICON_STOP} color={RISK_COLOR.high} fill size={ICON_SIZE.row} />
             <Text style={[styles.actTxt, { color: RISK_COLOR.high }]} allowFontScaling={false}>Stop</Text>
           </TouchableOpacity>
         )}
@@ -467,8 +468,8 @@ export default function FlickerChart({ reading, running, history, settings, uplo
           <>
             {zoom > 1 && (
               <>
-                <HintPressable hint="Pan left" style={styles.pill} onPress={() => pan(-1)}><Text style={styles.pillTxt} allowFontScaling={false}>◀</Text></HintPressable>
-                <HintPressable hint="Pan right" style={styles.pill} onPress={() => pan(1)}><Text style={styles.pillTxt} allowFontScaling={false}>▶</Text></HintPressable>
+                <HintPressable hint="Pan left" style={styles.pill} onPress={() => pan(-1)}><Icon name="chevronLeft" color={LINE} size={12} /></HintPressable>
+                <HintPressable hint="Pan right" style={styles.pill} onPress={() => pan(1)}><Icon name="chevronRight" color={LINE} size={12} /></HintPressable>
               </>
             )}
             <HintPressable hint="Zoom (tap to cycle)" style={[styles.pill, zoom > 1 && styles.pillOn]} onPress={() => setZoomLevel(zoom === 1 ? 2 : zoom === 2 ? 4 : zoom === 4 ? 8 : 1)}>
@@ -518,12 +519,12 @@ export default function FlickerChart({ reading, running, history, settings, uplo
         !fromReading ? (
           <>
             <TouchableOpacity style={styles.actBtn} onPress={share} accessibilityLabel="Share flicker reading">
-              <HeaderIcon d={ICON_SHARE} color={LINE} size={20} />
+              <HeaderIcon d={ICON_SHARE} color={LINE} size={ICON_SIZE.row} />
               <Text style={[styles.actTxt, { color: LINE }]} allowFontScaling={false}>Share</Text>
             </TouchableOpacity>
             {upload && (
               <TouchableOpacity style={styles.actBtn} onPress={openUpload} accessibilityLabel="Upload flicker to hCRI.io">
-                <HeaderIcon d={ICON_UPLOAD} color={LINE} size={20} />
+                <HeaderIcon d={ICON_UPLOAD} color={LINE} size={ICON_SIZE.row} />
                 <Text style={[styles.actTxt, { color: LINE }]} allowFontScaling={false}>Upload flicker</Text>
               </TouchableOpacity>
             )}

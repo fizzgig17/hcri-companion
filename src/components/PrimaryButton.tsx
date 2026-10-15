@@ -22,7 +22,7 @@ export default function PrimaryButton({ title, onPress, disabled, variant = 'acc
 
   const styles = StyleSheet.create({
     button: {
-      borderRadius: 10,
+      borderRadius: 12,
       paddingVertical: 14,
       paddingHorizontal: 20,
       alignItems: 'center',

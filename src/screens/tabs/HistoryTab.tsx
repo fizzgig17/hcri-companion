@@ -24,24 +24,11 @@ import React, { useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Pressable, StyleSheet, ActivityIndicator, Alert, Modal } from 'react-native';
 import { hapticLongPress } from '../../utils/haptics';
 import HintPressable from '../../components/HintPressable';
+import { Icon, ICON_SIZE } from '../../components/icons';
 import Svg, { Polyline, Path } from 'react-native-svg';
 import CollapsibleSection from '../../components/CollapsibleSection';
 import { useTheme } from '../../contexts/ThemeContext';
 import { SavedReading, HISTORY_LIMIT, HISTORY_WARN_AT } from '../../storage/readingHistory';
-
-const ICON_CLOUD = 'M16 16l-4-4-4 4M12 12v9M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3';
-const ICON_TRASH = 'M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6';
-const ICON_X = 'M18 6L6 18M6 6l12 12';
-const ICON_EYE = 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z';
-const ICON_COMPARE = 'M3 17l5-6 4 4 8-9';
-const ICON_TRAY = 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12';
-function ActionIcon({ d, color, size = 22 }: { d: string; color: string; size?: number }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Path d={d} />
-    </Svg>
-  );
-}
 
 // Round selection mark used by the rows and the Select all control: an empty ring, a filled circle with a
 // white tick, or (Select all only) a filled circle with a dash when some but not all are selected.
@@ -60,9 +47,6 @@ function SelectMark({ state, accent, ring }: { state: 'off' | 'on' | 'some'; acc
 
 // accent hex (#rrggbb) at a low alpha, for the selected row's wash.
 const tint = (hex: string, alpha: string) => (/^#[0-9a-f]{6}$/i.test(hex) ? hex + alpha : hex);
-const ICON_LINK = 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71';
-const ICON_EXTERNAL = 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3';
-const ICON_TM30 = 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18zM12 3v18';
 import { analyzeSpectrum } from '../../utils/spectralAnalysis';
 import LedSuggestionCard from '../../components/LedSuggestionCard';
 import { ledsLine, ledsOfReading } from '../../hcri/leds';
@@ -237,6 +221,10 @@ function HistoryRow({
     deleteText: { color: colors.danger, fontSize: 12 },
 
     labelInput: { paddingVertical: 2, marginBottom: 8 },
+    ledLine: { flexDirection: 'row', alignItems: 'center' },
+    ledText: { color: colors.muted, fontSize: 12, marginLeft: 5 },
+    ledEdit: { flexDirection: 'row', alignItems: 'center', marginLeft: 12 },
+    ledEditText: { color: colors.accent, fontSize: 12, fontWeight: '600', marginLeft: 4 },
     labelText: { color: colors.text, fontSize: 15, fontWeight: '600', lineHeight: 20 },
     modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'flex-start', paddingTop: 70, paddingHorizontal: 24 },
     modalSheet: {
@@ -331,16 +319,16 @@ function HistoryRow({
         {!selectMode && (
           <View style={styles.rowHeaderButtons}>
             <HintPressable hint="Upload to hCRI.io" onPress={() => onUploadWithLabel(reading.id, reading.label)} disabled={uploading} style={{ marginRight: 14, opacity: uploading ? 0.6 : 1 }} accessibilityRole="button" accessibilityLabel="Upload reading" hitSlop={{ top: 10, bottom: 10, left: 7, right: 7 }}>
-              {uploading ? <ActivityIndicator size="small" color={colors.accent} /> : <ActionIcon d={ICON_CLOUD} color={colors.accent} size={19} />}
+              {uploading ? <ActivityIndicator size="small" color={colors.accent} /> : <Icon name="upload" color={colors.accent} size={ICON_SIZE.row} />}
             </HintPressable>
             <HintPressable hint="Share CSV" onPress={() => onShareOne(reading)} style={{ marginRight: 14 }} accessibilityRole="button" accessibilityLabel="Share CSV" hitSlop={{ top: 10, bottom: 10, left: 7, right: 7 }}>
-              <ActionIcon d={ICON_TRAY} color={colors.text} size={19} />
+              <Icon name="share" color={colors.text} size={ICON_SIZE.row} />
             </HintPressable>
             <HintPressable hint="View reading" onPress={() => onOpen(reading)} style={{ marginRight: 14 }} accessibilityRole="button" accessibilityLabel="View reading" hitSlop={{ top: 10, bottom: 10, left: 7, right: 7 }}>
-              <ActionIcon d={ICON_EYE} color={colors.info} size={19} />
+              <Icon name="eye" color={colors.info} size={ICON_SIZE.row} />
             </HintPressable>
             <HintPressable hint="Delete reading" onPress={() => onDelete(reading.id)} accessibilityRole="button" accessibilityLabel="Delete reading" hitSlop={{ top: 10, bottom: 10, left: 7, right: 7 }}>
-              <ActionIcon d={ICON_TRASH} color={colors.danger} size={19} />
+              <Icon name="trash" color={colors.danger} size={ICON_SIZE.row} />
             </HintPressable>
           </View>
         )}
@@ -362,10 +350,16 @@ function HistoryRow({
 
       {ledsOfReading(reading).length ? (
         <TouchableOpacity onPress={() => onLedPick(reading)} disabled={selectMode} style={{ marginTop: 4 }} accessibilityRole="button" accessibilityLabel="LED details. Tap to edit.">
-          <Text style={{ color: colors.muted, fontSize: 12 }}>
-            💡 {ledsLine(ledsOfReading(reading))}
-            {!selectMode && <Text style={{ color: colors.accent, fontWeight: '600' }}>{'   ✎ Edit'}</Text>}
-          </Text>
+          <View style={styles.ledLine}>
+            <Icon name="bulb" color={colors.muted} size={ICON_SIZE.inline} />
+            <Text style={[styles.ledText, { flexShrink: 1 }]}>{ledsLine(ledsOfReading(reading))}</Text>
+            {!selectMode && (
+              <View style={styles.ledEdit}>
+                <Icon name="edit" color={colors.accent} size={ICON_SIZE.inline} />
+                <Text style={styles.ledEditText}>Edit</Text>
+              </View>
+            )}
+          </View>
         </TouchableOpacity>
       ) : !selectMode && !reading.ledDismissed && reading.ledSuggestion && reading.ledSuggestion !== 'none' ? (
         <View style={{ marginTop: 6 }}>
@@ -378,7 +372,10 @@ function HistoryRow({
         </View>
       ) : !selectMode && !reading.result.sampleLabel ? (
         <TouchableOpacity onPress={() => onLedPick(reading)} style={{ marginTop: 4 }} accessibilityRole="button" accessibilityLabel="Add LED details to this reading">
-          <Text style={{ color: colors.accent, fontSize: 12 }}>💡 Add LED details</Text>
+          <View style={styles.ledLine}>
+            <Icon name="bulb" color={colors.accent} size={ICON_SIZE.inline} />
+            <Text style={[styles.ledText, { color: colors.accent }]}>Add LED details</Text>
+          </View>
         </TouchableOpacity>
       ) : null}
 
@@ -434,7 +431,7 @@ function HistoryRow({
                 {copyingLink ? (
                   <ActivityIndicator size="small" color={colors.accent} style={styles.copyLinkSpinner} />
                 ) : (
-                  <View style={styles.copyLinkIcon}><ActionIcon d={ICON_LINK} color={colors.accent} size={14} /></View>
+                  <View style={styles.copyLinkIcon}><Icon name="link" color={colors.accent} size={ICON_SIZE.inline} /></View>
                 )}
                 <Text style={styles.copyLinkLabel}>{copyingLink ? 'Working…' : 'Copy'}</Text>
               </TouchableOpacity>
@@ -443,13 +440,13 @@ function HistoryRow({
                 disabled={copyingLink}
                 style={[styles.copyLinkPill, styles.linkPill]}
               >
-                <View style={styles.copyLinkIcon}><ActionIcon d={ICON_EXTERNAL} color={colors.accent} size={14} /></View>
+                <View style={styles.copyLinkIcon}><Icon name="external" color={colors.accent} size={ICON_SIZE.inline} /></View>
                 <Text style={styles.copyLinkLabel}>Report</Text>
               </TouchableOpacity>
             </>
           )}
           <TouchableOpacity onPress={() => onOpenTm30(reading)} style={[styles.copyLinkPill, styles.linkPill]}>
-            <View style={styles.copyLinkIcon}><ActionIcon d={ICON_TM30} color={colors.accent} size={14} /></View>
+            <View style={styles.copyLinkIcon}><Icon name="report" color={colors.accent} size={ICON_SIZE.inline} /></View>
             <Text style={styles.copyLinkLabel}>TM-30</Text>
           </TouchableOpacity>
         </View>
@@ -741,13 +738,13 @@ export default function HistoryTab({
         <View style={styles.headerButtons}>
           {selectMode ? (
             <TouchableOpacity style={styles.headerIcon} onPress={exitSelectMode} accessibilityRole="button" accessibilityLabel="Cancel selection">
-              <ActionIcon d={ICON_X} color={colors.text} size={16} />
+              <Icon name="x" color={colors.text} size={ICON_SIZE.pill} />
               <Text style={styles.headerIconText}>Cancel</Text>
             </TouchableOpacity>
           ) : (
             <>
               <TouchableOpacity style={styles.headerIcon} onPress={onShareAll} accessibilityRole="button" accessibilityLabel="Share all readings">
-                <ActionIcon d={ICON_TRAY} color={colors.text} size={16} />
+                <Icon name="share" color={colors.text} size={ICON_SIZE.pill} />
                 <Text style={styles.headerIconText}>Share all</Text>
               </TouchableOpacity>
             </>
@@ -772,10 +769,10 @@ export default function HistoryTab({
           </TouchableOpacity>
           <View style={styles.selectBarButtons}>
             {([
-              ...(onCompareMany ? [{ icon: ICON_COMPARE, label: 'Compare', onPress: handleCompareSelected, color: colors.info, border: colors.info }] : []),
-              { icon: ICON_TRAY, label: 'Share', onPress: handleShareSelected, color: colors.text },
-              { icon: ICON_TRASH, label: bulkDeleting ? 'Deleting…' : 'Delete', onPress: handleDeleteSelected, color: colors.danger, border: colors.danger },
-              { icon: ICON_CLOUD, label: bulkUploading ? 'Uploading…' : selected.size ? `Upload (${selected.size})` : 'Upload', onPress: handleUploadSelected, color: colors.accent, border: colors.accent },
+              ...(onCompareMany ? [{ icon: 'compare' as const, label: 'Compare', onPress: handleCompareSelected, color: colors.info, border: colors.info }] : []),
+              { icon: 'share' as const, label: 'Share', onPress: handleShareSelected, color: colors.text },
+              { icon: 'trash' as const, label: bulkDeleting ? 'Deleting…' : 'Delete', onPress: handleDeleteSelected, color: colors.danger, border: colors.danger },
+              { icon: 'upload' as const, label: bulkUploading ? 'Uploading…' : selected.size ? `Upload (${selected.size})` : 'Upload', onPress: handleUploadSelected, color: colors.accent, border: colors.accent },
             ] as const).map((b) => {
               const off = selected.size === 0 || bulkUploading || bulkDeleting || (b.label === 'Compare' && (selected.size < 2 || selected.size > 6));
               return (
@@ -788,7 +785,7 @@ export default function HistoryTab({
                   accessibilityLabel={b.label}
                   style={[styles.selectBarIconButton, 'border' in b && { borderColor: b.border }, off && { opacity: 0.5 }]}
                 >
-                  <ActionIcon d={b.icon} color={b.color} size={17} />
+                  <Icon name={b.icon} color={b.color} size={ICON_SIZE.row} />
                   <Text style={[styles.selectBarIconText, { color: b.color }]} numberOfLines={1}>{b.label}</Text>
                 </TouchableOpacity>
               );

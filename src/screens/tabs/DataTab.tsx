@@ -8,9 +8,9 @@
 // customizable, right where the reading is taken; repeating them here
 // was just the same numbers twice.
 
+import { Icon, ICON_SIZE } from '../../components/icons';
 import React, { useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
 import CollapsibleSection from '../../components/CollapsibleSection';
 import { useTheme } from '../../contexts/ThemeContext';
 import { MeterResult } from '../../ble/parseResult';
@@ -23,8 +23,6 @@ import { LedDetails } from '../../hcri/ledApi';
 import { hasLed } from '../../hcri/leds';
 import { LedLists } from '../../hcri/ledLists';
 
-const ICON_CLOUD = 'M16 16l-4-4-4 4M12 12v9M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3';
-const ICON_TRAY = 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12';
 
 // The core colorimetric numbers (CCT/Ra/Duv/Lux/Rf/R9/Rg), still worth
 // having right here rather than only on Main -- but as a compact, plain
@@ -154,8 +152,9 @@ export default function DataTab({
     },
 
     uploadRow: { flexDirection: 'row', alignItems: 'center' },
-    iconButton: { flex: 1, marginTop: 8, paddingVertical: 10, alignItems: 'center', borderRadius: 10, borderWidth: 1, borderColor: colors.cardBorder, backgroundColor: colors.card },
-    iconButtonText: { fontSize: 12, fontWeight: '600', marginTop: 3 },
+    // Same pill as the TM-30 screen's Save image / Share PDF: icon beside the label.
+    iconButton: { flex: 1, marginTop: 8, flexDirection: 'row', paddingVertical: 8, alignItems: 'center', justifyContent: 'center', borderRadius: 18, borderWidth: 1, borderColor: colors.cardBorder, backgroundColor: colors.card },
+    iconButtonText: { fontSize: 13, fontWeight: '600', marginLeft: 6 },
     // Replaces the old separate checkmark + bare-icon-button pair -- next
     // to each other, both unlabeled, they read as two things rather than
     // one ("why are there two icons?"). A single pill that's both the
@@ -168,15 +167,14 @@ export default function DataTab({
       flexDirection: 'row',
       alignItems: 'center',
       marginLeft: 10,
-      paddingVertical: 7,
-      paddingHorizontal: 12,
+      paddingVertical: 8,
+      paddingHorizontal: 14,
       borderRadius: 18,
-      borderWidth: 1.5,
-      borderColor: colors.accent,
+      backgroundColor: /^#[0-9a-f]{6}$/i.test(colors.accent) ? colors.accent + '1a' : colors.card,
     },
-    copyLinkIcon: { fontSize: 15, marginRight: 6 },
+    copyLinkIcon: { marginRight: 6 },
     copyLinkSpinner: { marginRight: 6 },
-    copyLinkLabel: { color: colors.accent, fontSize: 13, fontWeight: '700' },
+    copyLinkLabel: { color: colors.accent, fontSize: 13, fontWeight: '600' },
 
     ledBlock: { marginTop: 12 },
     ledHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
@@ -279,7 +277,10 @@ export default function DataTab({
             <Text style={styles.fieldLabel}>LED</Text>
             {onLedEdit && (
               <TouchableOpacity onPress={onLedEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel="Edit LED details">
-                <Text style={styles.ledEdit}>{ledCurrent && ledCurrent.some(hasLed) ? 'Edit' : '💡 Add LED details'}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Icon name={ledCurrent && ledCurrent.some(hasLed) ? 'edit' : 'bulb'} color={colors.accent} size={ICON_SIZE.inline} />
+                  <Text style={[styles.ledEdit, { marginLeft: 4 }]}>{ledCurrent && ledCurrent.some(hasLed) ? 'Edit' : 'Add LED details'}</Text>
+                </View>
               </TouchableOpacity>
             )}
           </View>
@@ -331,7 +332,7 @@ export default function DataTab({
             accessibilityLabel={`Upload reading to ${HCRI_BRAND_HOST}`}
             style={[styles.iconButton, (uploading || !!result.sampleLabel) && { opacity: 0.5 }]}
           >
-            {uploading ? <ActivityIndicator size="small" color={colors.accent} /> : <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={colors.accent} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><Path d={ICON_CLOUD} /></Svg>}
+            {uploading ? <ActivityIndicator size="small" color={colors.accent} /> : <Icon name="upload" color={colors.accent} size={ICON_SIZE.row} />}
             <Text style={[styles.iconButtonText, { color: colors.accent }]} numberOfLines={1}>{uploading ? 'Uploading…' : 'Upload reading'}</Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -341,7 +342,7 @@ export default function DataTab({
             accessibilityLabel="Share CSV"
             style={[styles.iconButton, { marginLeft: 8 }]}
           >
-            <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={colors.text} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><Path d={ICON_TRAY} /></Svg>
+            <Icon name="share" color={colors.text} size={ICON_SIZE.row} />
             <Text style={[styles.iconButtonText, { color: colors.text }]} numberOfLines={1}>Share CSV</Text>
           </TouchableOpacity>
           {/* Same Copy Link pill MainTab shows -- it's both the success
@@ -358,14 +359,14 @@ export default function DataTab({
               {copyingLink ? (
                 <ActivityIndicator size="small" color={colors.accent} style={styles.copyLinkSpinner} />
               ) : (
-                <Text style={styles.copyLinkIcon}>🔗</Text>
+                <View style={styles.copyLinkIcon}><Icon name="link" color={colors.accent} size={ICON_SIZE.pill} /></View>
               )}
               <Text style={styles.copyLinkLabel}>{copyingLink ? 'Copying…' : 'Copy Link'}</Text>
             </TouchableOpacity>
           )}
           {uploadSucceeded && !canCopyLink && (
             <View style={styles.copyLinkPill}>
-              <Text style={styles.copyLinkIcon}>✓</Text>
+              <View style={styles.copyLinkIcon}><Icon name="check" color={colors.accent} size={ICON_SIZE.pill} /></View>
               <Text style={styles.copyLinkLabel}>Uploaded</Text>
             </View>
           )}

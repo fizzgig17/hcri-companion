@@ -7,6 +7,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
+import { Icon, ICON_SIZE } from './icons';
 
 interface Props {
   title: string;
@@ -38,7 +39,6 @@ export default function CollapsibleSection({ title, count, defaultExpanded = fal
     },
     title: { color: colors.text, fontSize: 14, fontWeight: '600' },
     count: { color: colors.muted, fontWeight: '400' },
-    chevron: { color: colors.muted, fontSize: 14 },
     body: {
       paddingHorizontal: 14,
       paddingBottom: 12,
@@ -54,7 +54,9 @@ export default function CollapsibleSection({ title, count, defaultExpanded = fal
           {title}
           {count !== undefined ? <Text style={styles.count}> ({count})</Text> : null}
         </Text>
-        <Text style={styles.chevron}>{expanded ? '▾' : '▸'}</Text>
+        <View style={{ transform: [{ rotate: expanded ? '0deg' : '-90deg' }] }}>
+          <Icon name="chevronDown" color={colors.muted} size={ICON_SIZE.pill} />
+        </View>
       </TouchableOpacity>
       {expanded && <View style={styles.body}>{children}</View>}
     </View>
