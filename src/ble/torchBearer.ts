@@ -15,13 +15,17 @@
 //     state: 0 ready, 1 scanning, 2 done, 3 error (no USB / timeout), 4 done but not locked,
 //            5 not done (ColorMunki: the reason is in the 'try' byte, see colorMunkiFailMessage)
 //     bytes 6-7 (newer firmware): meter kind (0 Torch Bearer, 1 ColorMunki) and ColorMunki flags:
-//       bit7 dial known, bits0-1 dial position (0 projector, 1 surface, 2 calibration, 3 ambient), bit2 dark calibration done
-//       bit6 (Torch Bearer): the firmware already applies the HPCS-fitted spectral correction, so the app must not
+//       bit7 dial known, bits0-1 dial position (0 projector, 1 surface, 2 calibration, 3 ambient), bit2 dark calibration done,
+//       bit3 high-gain dark references taken (very dim light)
+//       bit6: the firmware already applies the HPCS-fitted spectral correction (Torch Bearer; ColorMunki with newer
+//       firmware, its own curve), so the app must not apply one; the reading is marked corrected.
 // Result packets (all little-endian):
 //   01 | status u8 | peak_nm u16 | exposure_ms f32 | peak_val f32 | sum f32 | npts u16 | start_nm u16
 //   02 | npts u16 | start_nm u16 | step_nm u8 | total_bytes u16      (header; float32 values follow)
 //   03 | seq u8 | bytes...                                           (data chunks, seq from 0)
 //   04 | chunks u8                                                   (end marker)
+//   05 | id u8 | seq u8 | last u8 | bytes...                         (ColorMunki diagnostics after the end marker:
+//        id 1 = the reading's raw sensor data, id 2 = the calibration block; logged for offline work, see onDiag)
 
 import { analyzeSpectrum } from '../utils/spectralAnalysis';
 import { cieColorMatch } from '../utils/cieChromaticity';
@@ -41,6 +45,11 @@ export const TB_CMD_SCAN_B64 = 'AQ==';
 
 /** Base64 of the single byte 0x02 -- "send the last reading again". */
 export const TB_CMD_RESEND_B64 = 'Ag==';
+/** 05: cancel the reading in progress. Newer bridge firmware stops a ColorMunki reading or calibration at its next
+ * step and sends no result; older firmware ignores it (the app then drops the result itself). */
+export const TB_CMD_CANCEL_B64 = 'BQ==';
+/** `name` of the error a cancelled bridge reading rejects with. */
+export const TB_CANCELLED_ERROR = 'TbCancelledError';
 
 /** Base64 of 0x03 0x00 / 0x03 0x01 -- "set the display orientation" (1 = turned 180 degrees). Needs bridge firmware that knows 0x03; older firmware ignores it. */
 export const TB_CMD_FLIP_OFF_B64 = 'AwA=';
@@ -68,7 +77,9 @@ export interface TbMeterStatus {
   dialKnown: boolean;
   dial: number;
   calibrated: boolean;
-  /** Torch Bearer: the firmware already applied the spectral correction to the spectrum it sends. */
+  /** ColorMunki (newer firmware, flags bit 3): the dark calibration also took the high-gain references used in very dim light. */
+  highGainReady: boolean;
+  /** The bridge already applied the HPCS-fitted spectral correction to the spectrum it sends (Torch Bearer, or a ColorMunki with newer firmware). */
   fwCorrected: boolean;
   /** ColorMunki: minutes since the dark calibration, as of the moment this status was sent (null = unknown or none). */
   calAgeMin: number | null;
@@ -87,6 +98,7 @@ export function parseTbStatus(p: Uint8Array): TbMeterStatus {
     dialKnown: (flags & 0x80) !== 0,
     dial: flags & 0x03,
     calibrated: (flags & 0x04) !== 0,
+    highGainReady: (flags & 0x08) !== 0,
     fwCorrected: (flags & 0x40) !== 0,
     calAgeMin: p.length > 9 && (p[8] | (p[9] << 8)) !== 0xffff ? p[8] | (p[9] << 8) : null,
   };
@@ -187,6 +199,9 @@ export interface TbScan {
  * marker arrives (and throws on a gap or a size mismatch), null otherwise.
  */
 export class TbReassembler {
+  /** Called with each complete diagnostics blob (packet type 05). Separate from the reading itself. */
+  onDiag: ((id: number, bytes: Uint8Array) => void) | null = null;
+  private diag = new Map<number, { next: number; parts: Uint8Array[] }>();
   private summary: TbSummary | null = null;
   private total = 0;
   private npts = 0;
@@ -259,6 +274,32 @@ export class TbReassembler {
         this.reset();
         return out;
       }
+      case 0x05: {
+        // Diagnostics never affect the reading, so a gap just drops that blob instead of throwing.
+        if (p.length < 4) return null;
+        const id = p[1];
+        const seq = p[2];
+        let d = this.diag.get(id);
+        if (seq === 0) {
+          d = { next: 0, parts: [] };
+          this.diag.set(id, d);
+        }
+        if (!d || seq !== (d.next & 0xff)) {
+          this.diag.delete(id);
+          return null;
+        }
+        d.parts.push(p.slice(4));
+        d.next++;
+        if (p[3] & 1) {
+          this.diag.delete(id);
+          const n = d.parts.reduce((s, x) => s + x.length, 0);
+          const all = new Uint8Array(n);
+          let o = 0;
+          for (const x of d.parts) { all.set(x, o); o += x.length; }
+          this.onDiag?.(id, all);
+        }
+        return null;
+      }
       default:
         return null; // unknown packet type -- ignore (forward compatibility)
     }
@@ -281,7 +322,8 @@ export function tbToMeterResult(scan: TbScan, deviceName: string, kind: number =
   // The correction is fitted to the Torch Bearer against an HPCS; it must never be applied to a ColorMunki spectrum.
   // Newer firmware corrects on the board (status bit 6); then the app must not apply the curve a second time.
   const appCorrects = !isMunki && !fwCorrected && isTbCorrectionEnabled();
-  const corrected = !isMunki && (fwCorrected || appCorrects);
+  // ColorMunki: newer bridge firmware applies its own HPCS-fitted curve (munki_corr.h) and says so with the same bit.
+  const corrected = fwCorrected || appCorrects;
   const spectrum = appCorrects ? applyTbCorrection(scan.spectrum) : scan.spectrum;
   const a = analyzeSpectrum(spectrum);
 

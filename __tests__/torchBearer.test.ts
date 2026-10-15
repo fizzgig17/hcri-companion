@@ -167,6 +167,13 @@ describe('ColorMunki status', () => {
     expect(r.tbCorrected).toBe(false);
     expect(r.spectrum).toBe(spectrum);
   });
+
+  it('marks a ColorMunki reading corrected when the bridge says it corrected it (bit 6), without changing it', () => {
+    const spectrum = Array.from({ length: 351 }, (_, i) => ({ nm: 380 + i, value: 1 + Math.sin(i / 20) }));
+    const r = tbToMeterResult({ summary: { status: 0, peakNm: 450, exposureMs: 50, peakValue: 2, sum: 1, npts: 351, startNm: 380 }, spectrum }, 'Torch Bearer', 1, true);
+    expect(r.tbCorrected).toBe(true);
+    expect(r.spectrum).toBe(spectrum);
+  });
 });
 
 describe('bridge names', () => {
@@ -191,5 +198,28 @@ describe('firmware-corrected status bit', () => {
     expect(parseTbStatus(new Uint8Array([...base, 0x40])).fwCorrected).toBe(true);
     expect(parseTbStatus(new Uint8Array([...base, 0x00])).fwCorrected).toBe(false);
     expect(parseTbStatus(new Uint8Array([0, 0, 0, 0, 0, 0])).fwCorrected).toBe(false); // old 6-byte status
+  });
+});
+
+describe('ColorMunki diagnostics packets (05)', () => {
+  const pkt = (id: number, seq: number, last: boolean, bytes: number[]) => new Uint8Array([0x05, id, seq, last ? 1 : 0, ...bytes]);
+
+  it('reassembles a blob across packets and reports it without touching the reading', () => {
+    const r = new TbReassembler();
+    const got: [number, number[]][] = [];
+    r.onDiag = (id, b) => got.push([id, Array.from(b)]);
+    expect(r.push(pkt(2, 0, false, [1, 2, 3]))).toBeNull();
+    expect(r.push(pkt(1, 0, true, [9]))).toBeNull();
+    expect(r.push(pkt(2, 1, true, [4, 5]))).toBeNull();
+    expect(got).toEqual([[1, [9]], [2, [1, 2, 3, 4, 5]]]);
+  });
+
+  it('drops a blob with a missing packet instead of throwing', () => {
+    const r = new TbReassembler();
+    const got: number[] = [];
+    r.onDiag = (id) => got.push(id);
+    r.push(pkt(1, 0, false, [1]));
+    expect(() => r.push(pkt(1, 2, true, [3]))).not.toThrow();
+    expect(got).toEqual([]);
   });
 });

@@ -63,6 +63,8 @@ interface Props {
   isSample: boolean;
   connect: () => void;
   onCancelConnect?: () => void;
+  /** Tapping the main button while a reading (or a ColorMunki calibration) is running cancels it. */
+  onCancelMeasure?: () => void;
   measure: () => void;
   /** ColorMunki behind the bridge: replaces the centre button's caption/colour/enabled state, and a note shows above the bar. */
   mainOverride?: { caption: string; tint?: string; disabled?: boolean };
@@ -225,7 +227,7 @@ export default function ActionBar(p: Props) {
         {status === 'disconnected' && mainButton('bluetooth', 'Connect to Meter', p.connect, p.onResetConnection)}
         {busyLabel && (status === 'connecting'
           ? mainButton('bluetooth', 'Tap to cancel', p.onCancelConnect)
-          : mainButton('play', busyLabel))}
+          : mainButton('play', p.onCancelMeasure ? `${busyLabel} Tap to cancel` : busyLabel, p.onCancelMeasure))}
         {connected && (p.mainOverride
           ? mainButton('play', p.mainOverride.caption, p.mainOverride.disabled || !idle ? undefined : p.measure, undefined, p.mainOverride.tint)
           : mainButton('play', 'Take reading', idle ? p.measure : undefined))}
