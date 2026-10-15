@@ -6,7 +6,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { ScrollView, View, Text, TextInput, Switch, TouchableOpacity, StyleSheet, Alert, Modal, Linking, Platform, useWindowDimensions } from 'react-native';
+import { ScrollView, View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Modal, Linking, Platform, useWindowDimensions } from 'react-native';
+import AppSwitch from '../components/AppSwitch';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { useLayoutMode, useContentWidth, isSquareWindow } from '../layout';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -638,7 +639,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
     </View>
   );
   const switchRow = (label: string, helpText: string, value: boolean, onChange: (v: boolean) => void) =>
-    settingRow(label, helpText, <Switch accessibilityLabel={label} value={value} onValueChange={onChange} trackColor={{ true: colors.accent }} />);
+    settingRow(label, helpText, <AppSwitch accessibilityLabel={label} value={value} onValueChange={onChange} />);
   const sectionHeader = (title: string) => <Text style={styles.sectionHeader}>{title}</Text>;
 
   // The Settings page in two parts so tablets can lay them out as columns (see `columns`).
