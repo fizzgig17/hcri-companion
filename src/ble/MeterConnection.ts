@@ -629,6 +629,9 @@ export class MeterConnection {
 
     this.tbSubs.forEach((x) => x.remove());
     this.tbReassembler.reset();
+    // ColorMunki raw data (bridge packet 05): one log line each, for the bridge's tools/munki_diag.py.
+    this.tbReassembler.onDiag = (id, bytes) =>
+      this.log(`ColorMunki diag ${id} (${bytes.length} bytes): ${Buffer.from(bytes).toString('base64')}`);
     this.tbSubs = [
       res.monitor((error, char) => {
         if (error) {

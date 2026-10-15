@@ -22,6 +22,8 @@
 //   02 | npts u16 | start_nm u16 | step_nm u8 | total_bytes u16      (header; float32 values follow)
 //   03 | seq u8 | bytes...                                           (data chunks, seq from 0)
 //   04 | chunks u8                                                   (end marker)
+//   05 | id u8 | seq u8 | last u8 | bytes...                         (ColorMunki diagnostics after the end marker:
+//        id 1 = the reading's raw sensor data, id 2 = the calibration block; logged for offline work, see onDiag)
 
 import { analyzeSpectrum } from '../utils/spectralAnalysis';
 import { cieColorMatch } from '../utils/cieChromaticity';
@@ -187,6 +189,9 @@ export interface TbScan {
  * marker arrives (and throws on a gap or a size mismatch), null otherwise.
  */
 export class TbReassembler {
+  /** Called with each complete diagnostics blob (packet type 05). Separate from the reading itself. */
+  onDiag: ((id: number, bytes: Uint8Array) => void) | null = null;
+  private diag = new Map<number, { next: number; parts: Uint8Array[] }>();
   private summary: TbSummary | null = null;
   private total = 0;
   private npts = 0;
@@ -258,6 +263,32 @@ export class TbReassembler {
         const out: TbScan = { summary: this.summary, spectrum };
         this.reset();
         return out;
+      }
+      case 0x05: {
+        // Diagnostics never affect the reading, so a gap just drops that blob instead of throwing.
+        if (p.length < 4) return null;
+        const id = p[1];
+        const seq = p[2];
+        let d = this.diag.get(id);
+        if (seq === 0) {
+          d = { next: 0, parts: [] };
+          this.diag.set(id, d);
+        }
+        if (!d || seq !== (d.next & 0xff)) {
+          this.diag.delete(id);
+          return null;
+        }
+        d.parts.push(p.slice(4));
+        d.next++;
+        if (p[3] & 1) {
+          this.diag.delete(id);
+          const n = d.parts.reduce((s, x) => s + x.length, 0);
+          const all = new Uint8Array(n);
+          let o = 0;
+          for (const x of d.parts) { all.set(x, o); o += x.length; }
+          this.onDiag?.(id, all);
+        }
+        return null;
       }
       default:
         return null; // unknown packet type -- ignore (forward compatibility)
