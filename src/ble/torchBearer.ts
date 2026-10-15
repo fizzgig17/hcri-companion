@@ -44,6 +44,11 @@ export const TB_CMD_SCAN_B64 = 'AQ==';
 
 /** Base64 of the single byte 0x02 -- "send the last reading again". */
 export const TB_CMD_RESEND_B64 = 'Ag==';
+/** 05: cancel the reading in progress. Newer bridge firmware stops a ColorMunki reading or calibration at its next
+ * step and sends no result; older firmware ignores it (the app then drops the result itself). */
+export const TB_CMD_CANCEL_B64 = 'BQ==';
+/** `name` of the error a cancelled bridge reading rejects with. */
+export const TB_CANCELLED_ERROR = 'TbCancelledError';
 
 /** Base64 of 0x03 0x00 / 0x03 0x01 -- "set the display orientation" (1 = turned 180 degrees). Needs bridge firmware that knows 0x03; older firmware ignores it. */
 export const TB_CMD_FLIP_OFF_B64 = 'AwA=';

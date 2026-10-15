@@ -18,6 +18,7 @@ import { startLiveSpectrum, startFlicker, captureFlickerOnce, readFlickerSetting
 import type { FlickerSettingsApi } from '../components/FlickerSettingsModal';
 import type { FlickerUploadApi } from '../components/FlickerChart';
 import { initializeMeter, takeMeasurement, EMPTY_READING_ERROR } from '../ble/takeMeasurement';
+import { CMD_STOP_SAMPLING } from '../ble/protocol';
 import { MeterResult } from '../ble/parseResult';
 import { tm30InputFromReading } from '../utils/tm30Report';
 import { analyzeSpectrum } from '../utils/spectralAnalysis';
@@ -920,8 +921,12 @@ export default function HomeScreen({ navigation }: any) {
     return c.onTbMeterStatus(setTbMeter);
   }, [status]);
 
+  // Each reading gets a number; cancelling bumps it, so a reading that finishes after it was cancelled is ignored.
+  const measureGenRef = useRef(0);
   const measure = useCallback(async () => {
     if (!connRef.current) return;
+    const gen = ++measureGenRef.current;
+    const stale = () => gen !== measureGenRef.current;
     setLiveUnsaved(null);
     setPagerResetKey({}); // back to the Spectrum page right away (e.g. from Flicker)
     setStatus('measuring');
@@ -939,9 +944,11 @@ export default function HomeScreen({ navigation }: any) {
           try {
             await connRef.current.calibrateTorchBearer();
           } catch (err) {
+            if (stale()) return;
             setCalibrating(false);
             throw err; // calibratingRef stays true so the failure alert says "Calibration failed"
           }
+          if (stale()) return;
           setCalibrating(false);
           calibratingRef.current = false;
           appendLog('ColorMunki calibrated');
@@ -953,15 +960,17 @@ export default function HomeScreen({ navigation }: any) {
         r = await connRef.current.takeTorchBearerReading();
       } else {
         try {
-          r = await takeMeasurement(connRef.current, appendLog);
+          r = await takeMeasurement(connRef.current, appendLog, { shouldAbort: stale });
         } catch (e: any) {
           if (e?.name !== EMPTY_READING_ERROR) throw e;
           appendLog('Meter returned an empty reading -- retrying once...');
-          r = await takeMeasurement(connRef.current, appendLog);
+          r = await takeMeasurement(connRef.current, appendLog, { shouldAbort: stale });
         }
       }
+      if (stale()) return;
       await acceptReading(r);
     } catch (e: any) {
+      if (stale()) return; // cancelled: cancelMeasure() already put the screen back
       const wasCal = calibratingRef.current;
       calibratingRef.current = false;
       appendLog(`${wasCal ? 'Calibration' : 'Measurement'} failed: ${e.message}`);
@@ -984,6 +993,22 @@ export default function HomeScreen({ navigation }: any) {
   // Pressing the button on the Torch Bearer takes a reading by itself; the bridge sends it to the app, which accepts it
   // exactly like one taken with Measure (result card, History). Ignored while the app is busy with something else.
   const tbButtonTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Tapping the main button again while a reading (or a ColorMunki calibration) is running cancels it.
+  const cancelMeasure = useCallback(() => {
+    if (statusRef.current !== 'measuring') return;
+    measureGenRef.current++;
+    calibratingRef.current = false;
+    setCalibrating(false);
+    if (tbButtonTimer.current) { clearTimeout(tbButtonTimer.current); tbButtonTimer.current = null; }
+    setStatus('connected');
+    appendLog('Reading cancelled');
+    const c = connRef.current;
+    if (!c) return;
+    if (c.isTorchBearer()) c.cancelTorchBearerReading().catch(() => {});
+    else c.sendCommand(CMD_STOP_SAMPLING).catch(() => {}); // HPCS: stop the test it is running
+  }, [appendLog]);
+
   tbButtonRef.current = {
     started: () => {
       if (statusRef.current !== 'connected' && statusRef.current !== 'measuring') return;
@@ -1335,6 +1360,9 @@ export default function HomeScreen({ navigation }: any) {
         // A reading taken with the Torch Bearer's own button while the app was away: ask the bridge for its last one
         // (the app ignores it if it already has it).
         const tbConn = connRef.current;
+        // The ColorMunki dial may have been turned while the app was away (a status notification can be missed in
+        // the background): read the bridge status again so the screen shows where the dial is now.
+        if (tbConn?.isTorchBearer()) tbConn.refreshTorchBearerStatus().catch(() => {});
         if (tbConn?.isTorchBearer() && statusRef.current === 'connected') {
           tbConn.requestTorchBearerLastReading().catch((e) => appendLog(`Could not catch up with the bridge: ${e?.message ?? e}`));
         }
@@ -1815,6 +1843,7 @@ export default function HomeScreen({ navigation }: any) {
           isSample={!!result?.sampleLabel}
           connect={() => connect({ promptIfBluetoothOff: true })}
           measure={measure}
+          onCancelMeasure={cancelMeasure}
           mainOverride={munkiMain.override}
           meterNote={munkiMain.note}
           busyCaption={calibrating ? 'Calibrating…' : undefined}
