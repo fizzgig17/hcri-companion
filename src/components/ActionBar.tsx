@@ -121,7 +121,8 @@ export default function ActionBar(p: Props) {
       padding: 4,
     },
     inner: { flex: 1, borderRadius: 25, backgroundColor: colors.accent + 'D9', alignItems: 'center', justifyContent: 'center' },
-    caption: { marginTop: 2, color: colors.accent, fontSize: 11.5, fontWeight: '700', textAlign: 'center', alignSelf: 'stretch' },
+    // Fixed height: text that shrinks to fit ("Measuring… Tap to cancel") must not make the bar shorter than "Take reading" does.
+    caption: { marginTop: 2, color: colors.accent, fontSize: 11.5, lineHeight: 15, height: 15, fontWeight: '700', textAlign: 'center', alignSelf: 'stretch' },
     side: { minWidth: 0, flexShrink: 1, paddingVertical: 4, paddingHorizontal: 3, alignItems: 'center', justifyContent: 'center' },
     sideLabel: { color: colors.muted, fontSize: 10.5, marginTop: 3, fontWeight: '600' },
     sideLabelAccent: { color: colors.accent },
