@@ -8,7 +8,7 @@
 // quiet icon + label buttons on either side.
 
 import { ICONS, ICON_SIZE } from './icons';
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
@@ -121,7 +121,10 @@ export default function ActionBar(p: Props) {
       padding: 4,
     },
     inner: { flex: 1, borderRadius: 25, backgroundColor: colors.accent + 'D9', alignItems: 'center', justifyContent: 'center' },
-    caption: { marginTop: 2, color: colors.accent, fontSize: 11.5, fontWeight: '700', textAlign: 'center', alignSelf: 'stretch' },
+    // Fixed height: text that shrinks to fit ("Measuring… Tap to cancel") must not make the bar shorter than "Take reading" does.
+    // The Text itself has no fixed height/lineHeight (iOS hides shrink-to-fit text that has them); the wrapper holds the height.
+    captionBox: { marginTop: 2, height: 16, alignSelf: 'stretch', justifyContent: 'center' },
+    caption: { color: colors.accent, fontSize: 11.5, fontWeight: '700', textAlign: 'center' },
     side: { minWidth: 0, flexShrink: 1, paddingVertical: 4, paddingHorizontal: 3, alignItems: 'center', justifyContent: 'center' },
     sideLabel: { color: colors.muted, fontSize: 10.5, marginTop: 3, fontWeight: '600' },
     sideLabelAccent: { color: colors.accent },
@@ -129,6 +132,8 @@ export default function ActionBar(p: Props) {
     note: { color: colors.muted, fontSize: 12.5, fontWeight: '600', textAlign: 'center', paddingHorizontal: 10, marginTop: 2, marginBottom: 6 },
   });
 
+  // The bar keeps the tallest height it has had: its content differs a little between idle, measuring and disconnected, and when it shrank the chart card above it grew for the length of a reading.
+  const [barH, setBarH] = useState(0);
   const { status } = p;
   const busyLabel = status === 'connecting' ? 'Connecting…' : status === 'measuring' ? (p.busyCaption ?? 'Measuring…') : null;
   const uploadDisabled = p.uploading || !p.hasReading || p.isSample;
@@ -188,14 +193,16 @@ export default function ActionBar(p: Props) {
           {busyLabel ? <ActivityIndicator color="#fff" /> : <Icon name={icon} size={icon === 'play' ? 26 : 24} color="#fff" />}
         </View>
       </TouchableOpacity>
-      <Text style={[styles.caption, tint && { color: tint }]} numberOfLines={1} adjustsFontSizeToFit>{caption}</Text>
+      <View style={styles.captionBox}>
+        <Text style={[styles.caption, tint && { color: tint }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{caption}</Text>
+      </View>
     </View>
   );
 
   return (
     <View style={styles.wrap}>
       {connected && p.meterNote ? <Text style={styles.note}>{p.meterNote}</Text> : null}
-      <View style={styles.bar}>
+      <View style={[styles.bar, barH > 0 && { minHeight: barH }]} onLayout={(e) => { const h = Math.ceil(e.nativeEvent.layout.height); setBarH((prev) => (h > prev ? h : prev)); }}>
         <View style={[styles.slot, styles.slotLeft]}>
           {connected && <SideButton icon="power" label="Disconnect" onPress={p.disconnect} />}
           {status === 'disconnected' && (

@@ -156,7 +156,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   // milestones and errors, which always show regardless of this setting).
   const [verboseLogging, setVerboseLogging] = useState(false);
   const [testReportId, setTestReportId] = useState('');
-  const [tbCorrection, setTbCorrection] = useState(true);
+  const [tbCorrection, setTbCorrection] = useState(false);
   const [tbFlipped, setTbFlipped] = useState(false);
   const [munkiHours, setMunkiHours] = useState('1');
   const [help, setHelp] = useState<{ title: string; text: string } | null>(null);
