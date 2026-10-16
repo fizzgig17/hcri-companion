@@ -168,6 +168,16 @@ describe('ColorMunki status', () => {
     expect(r.spectrum).toBe(spectrum);
   });
 
+  it('records a ColorMunki reading as high resolution (bit 5) unless it was a low-light reading', () => {
+    const spectrum = Array.from({ length: 351 }, (_, i) => ({ nm: 380 + i, value: 1 }));
+    const sm = (status: number) => ({ status, peakNm: 450, exposureMs: 50, peakValue: 1, sum: 1, npts: 351, startNm: 380 });
+    expect(tbToMeterResult({ summary: sm(0), spectrum }, 'x', 1, true, true).munkiResolutionNm).toBe(3.3);
+    expect(tbToMeterResult({ summary: sm(2), spectrum }, 'x', 1, true, true).munkiResolutionNm).toBe(10);
+    expect(tbToMeterResult({ summary: sm(0), spectrum }, 'x', 1, true, false).munkiResolutionNm).toBe(10);
+    expect(tbToMeterResult({ summary: sm(0), spectrum }, 'x', 0, true, true).munkiResolutionNm).toBeUndefined();
+    expect(parseTbStatus(new Uint8Array([0, 0, 0, 0, 0, 0, 1, 0x20])).highRes).toBe(true);
+  });
+
   it('marks a ColorMunki reading corrected when the bridge says it corrected it (bit 6), without changing it', () => {
     const spectrum = Array.from({ length: 351 }, (_, i) => ({ nm: 380 + i, value: 1 + Math.sin(i / 20) }));
     const r = tbToMeterResult({ summary: { status: 0, peakNm: 450, exposureMs: 50, peakValue: 2, sum: 1, npts: 351, startNm: 380 }, spectrum }, 'Torch Bearer', 1, true);

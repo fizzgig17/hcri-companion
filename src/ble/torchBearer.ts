@@ -17,6 +17,7 @@
 //     bytes 6-7 (newer firmware): meter kind (0 Torch Bearer, 1 ColorMunki) and ColorMunki flags:
 //       bit7 dial known, bits0-1 dial position (0 projector, 1 surface, 2 calibration, 3 ambient), bit2 dark calibration done,
 //       bit3 high-gain dark references taken (very dim light)
+//       bit5 readings are high resolution (3.33 nm); one flagged low light (summary status 2) is the standard 10 nm
 //       bit6: the firmware already applies the HPCS-fitted spectral correction (Torch Bearer; ColorMunki with newer
 //       firmware, its own curve), so the app must not apply one; the reading is marked corrected.
 // Result packets (all little-endian):
@@ -79,6 +80,8 @@ export interface TbMeterStatus {
   calibrated: boolean;
   /** ColorMunki (newer firmware, flags bit 3): the dark calibration also took the high-gain references used in very dim light. */
   highGainReady: boolean;
+  /** ColorMunki (newer firmware, flags bit 5): readings are high resolution (3.33 nm), except one flagged low light (10 nm). */
+  highRes: boolean;
   /** The bridge already applied the HPCS-fitted spectral correction to the spectrum it sends (Torch Bearer, or a ColorMunki with newer firmware). */
   fwCorrected: boolean;
   /** ColorMunki: minutes since the dark calibration, as of the moment this status was sent (null = unknown or none). */
@@ -99,6 +102,7 @@ export function parseTbStatus(p: Uint8Array): TbMeterStatus {
     dial: flags & 0x03,
     calibrated: (flags & 0x04) !== 0,
     highGainReady: (flags & 0x08) !== 0,
+    highRes: (flags & 0x20) !== 0,
     fwCorrected: (flags & 0x40) !== 0,
     calAgeMin: p.length > 9 && (p[8] | (p[9] << 8)) !== 0xffff ? p[8] | (p[9] << 8) : null,
   };
@@ -314,7 +318,7 @@ export class TbReassembler {
  * only as good as the device's own units (W/m^2/nm, per the upstream
  * tobes-ui project); they have NOT been calibrated against a reference meter.
  */
-export function tbToMeterResult(scan: TbScan, deviceName: string, kind: number = TB_KIND_TORCH_BEARER, fwCorrected = false): MeterResult {
+export function tbToMeterResult(scan: TbScan, deviceName: string, kind: number = TB_KIND_TORCH_BEARER, fwCorrected = false, highRes = false): MeterResult {
   const { summary } = scan;
   const isMunki = kind === TB_KIND_COLORMUNKI;
   // The bridge sends the raw spectrum; the app applies the HPCS-matching
@@ -362,5 +366,6 @@ export function tbToMeterResult(scan: TbScan, deviceName: string, kind: number =
     tbStatus: summary.status,
     tbCorrected: corrected,
     meterModel: isMunki ? 'colormunki' : undefined,
+    ...(isMunki ? { munkiResolutionNm: highRes && summary.status !== 2 ? 3.3 : 10 } : {}),
   };
 }

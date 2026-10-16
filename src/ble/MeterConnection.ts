@@ -658,14 +658,14 @@ export class MeterConnection {
             this.tbWaiter = null;
             this.tbLastSig = tbSummarySignature(scan.summary);
             this.log(`Bridge scan complete: ${scan.spectrum.length} points, exposure ${scan.summary.exposureMs.toFixed(1)} ms, status ${scan.summary.status}`);
-            w.resolve(tbToMeterResult(scan, connected.name ?? connected.localName ?? 'Torch Bearer', this.tbMeterStatus?.kind ?? 0, this.tbMeterStatus?.fwCorrected ?? false));
+            w.resolve(tbToMeterResult(scan, connected.name ?? connected.localName ?? 'Torch Bearer', this.tbMeterStatus?.kind ?? 0, this.tbMeterStatus?.fwCorrected ?? false, this.tbMeterStatus?.highRes ?? false));
           } else if (scan && tbSummarySignature(scan.summary) === this.tbLastSig) {
             this.log('Bridge re-sent a reading the app already has -- ignoring it');
           } else if (scan && this.tbButtonHandlers.result) {
             // Nobody here asked for it: the button on the bridge started this scan, and the app takes the reading as its own.
             this.tbLastSig = tbSummarySignature(scan.summary);
             this.log(`Bridge button scan complete: ${scan.spectrum.length} points, exposure ${scan.summary.exposureMs.toFixed(1)} ms`);
-            this.tbButtonHandlers.result(tbToMeterResult(scan, connected.name ?? connected.localName ?? 'Torch Bearer', this.tbMeterStatus?.kind ?? 0, this.tbMeterStatus?.fwCorrected ?? false));
+            this.tbButtonHandlers.result(tbToMeterResult(scan, connected.name ?? connected.localName ?? 'Torch Bearer', this.tbMeterStatus?.kind ?? 0, this.tbMeterStatus?.fwCorrected ?? false, this.tbMeterStatus?.highRes ?? false));
           }
         } catch (e: any) {
           this.tbReassembler.reset();
@@ -680,7 +680,7 @@ export class MeterConnection {
         if (error || !char?.value) return;
         const arr = new Uint8Array(Buffer.from(char.value, 'base64'));
         const st = parseTbStatus(arr);
-        this.log(`<- Bridge status: state ${st.state} try ${st.reason}${st.kind === TB_KIND_COLORMUNKI ? ` (ColorMunki dial ${st.dialKnown ? st.dial : '?'}, ${st.calibrated ? `calibrated${st.highGainReady ? ', high gain ready' : ''}` : 'not calibrated'})` : ''}`, true);
+        this.log(`<- Bridge status: state ${st.state} try ${st.reason}${st.kind === TB_KIND_COLORMUNKI ? ` (ColorMunki dial ${st.dialKnown ? st.dial : '?'}, ${st.calibrated ? `calibrated${st.highGainReady ? ', high gain ready' : ''}${st.highRes ? ', high resolution' : ''}` : 'not calibrated'})` : ''}`, true);
         this.setTbMeterStatus(st);
         const ignoring = this.tbIgnoreUntil > Date.now();
         // Ready, failed or no instrument: a cancelled reading is over, so stop ignoring results.
