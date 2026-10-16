@@ -82,7 +82,7 @@ const TB_CORR: number[] = [
   0.83313,
 ];
 
-let enabled = true; // default ON; Settings flips it via setTbCorrectionEnabled
+let enabled = false; // default OFF since 2026-10-16 (raw spectrum, as tobes-ui shows it); Settings could flip it via setTbCorrectionEnabled
 
 export function setTbCorrectionEnabled(on: boolean): void {
   enabled = on;

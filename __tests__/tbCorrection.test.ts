@@ -8,10 +8,10 @@ const flat = (start: number, end: number) => {
 };
 
 describe('Torch Bearer spectral correction', () => {
-  afterEach(() => setTbCorrectionEnabled(true));
+  afterEach(() => setTbCorrectionEnabled(false));
 
-  it('defaults to on', () => {
-    expect(isTbCorrectionEnabled()).toBe(true);
+  it('defaults to off (raw spectrum, as the open-source tobes-ui shows it)', () => {
+    expect(isTbCorrectionEnabled()).toBe(false);
   });
 
   it('scales each wavelength and does not modify the input', () => {

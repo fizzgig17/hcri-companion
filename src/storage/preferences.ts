@@ -94,21 +94,21 @@ export async function loadStayConnectedInBackgroundPreference(): Promise<boolean
   // reading the other preferences in this file use, since true is the
   // behavior this setting is supposed to default to (see the comment
   // above).
-  return raw === null ? true : raw === 'true';
+  return raw === null ? false : raw === 'true';
 }
 
 export async function saveStayConnectedInBackgroundPreference(enabled: boolean): Promise<void> {
   await AsyncStorage.setItem(STAY_CONNECTED_IN_BACKGROUND_KEY, enabled ? 'true' : 'false');
 }
 
-// Default ON -- the Torch Bearer's raw spectrum reads a few percent high in
+// Default OFF since 2026-10-16 (raw spectrum, as tobes-ui shows it). Was ON: the Torch Bearer's raw spectrum reads a few percent high in
 // CCT next to the HPCS; the correction in ble/tbCorrection.ts brings it back
 // in line (see that file for how it was checked). Off gives the raw spectrum.
 const TB_CORRECTION_KEY = 'hcri.io.pref.torchBearerCorrection';
 
 export async function loadTbCorrectionPreference(): Promise<boolean> {
   const raw = await AsyncStorage.getItem(TB_CORRECTION_KEY);
-  return raw === null ? true : raw === 'true';
+  return raw === null ? false : raw === 'true';
 }
 
 export async function saveTbCorrectionPreference(enabled: boolean): Promise<void> {
