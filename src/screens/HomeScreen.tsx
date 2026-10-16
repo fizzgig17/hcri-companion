@@ -1653,6 +1653,27 @@ export default function HomeScreen({ navigation }: any) {
     return {};
   })();
 
+  // What the empty chart says while there is no reading: follows the connection, the ColorMunki dial and calibration.
+  const emptyState: { title: string; body?: string; busy?: boolean } | null = (() => {
+    if (status === 'disconnected') return { title: 'No meter connected', body: 'Tap Connect to Meter, or load a Test reading to look around.' };
+    if (status === 'connecting') return { title: 'Connecting…', body: connectStage ?? undefined, busy: true };
+    if (status === 'measuring') {
+      return calibrating
+        ? { title: 'Calibrating…', body: 'Keep the dial on Calibration and the meter still.', busy: true }
+        : { title: 'Measuring…', body: 'Dim light can take 10–15 s. Keep the meter still.', busy: true };
+    }
+    if (tbMeter && tbMeter.kind === TB_KIND_COLORMUNKI) {
+      const mode = munkiButtonMode(tbMeter, getMunkiCalHours(), calClock);
+      if (mode.kind === 'calibrate') {
+        return tbMeter.calibrated
+          ? { title: 'Calibrated', body: 'Turn the dial to Ambient and tap Take reading.' }
+          : { title: 'Calibrate first', body: 'Keep the dial on Calibration, hold the meter still and tap Calibrate.' };
+      }
+      if (mode.kind === 'blocked') return { title: mode.caption, body: mode.note };
+    }
+    return { title: 'Ready', body: 'Point the meter at the light and tap Take reading.' };
+  })();
+
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
     rootRow: { flex: 1, flexDirection: 'row' },
@@ -1836,6 +1857,8 @@ export default function HomeScreen({ navigation }: any) {
             onLedPickerSave={confirmLed}
             scrollInputIntoView={scrollInputIntoView}
             pagerResetKey={pagerResetKey}
+            emptyState={emptyState}
+            onOpenSavedReading={(reading) => navigation.navigate('ReadingDetail', { reading })}
             wide={wide}
             portrait={layoutMode === 'stacked' || (layoutMode === 'dashboard' && !gridCharts)}
             flicker={

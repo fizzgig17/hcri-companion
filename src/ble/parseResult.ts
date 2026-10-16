@@ -32,8 +32,10 @@ export interface MeterResult {
   sampleLabel?: string;
   /** Set to 'torchbearer' on a reading from the Torch Bearer bridge (spectrum-only device): the HPCS-specific peak/dark ADC signal doesn't exist there, so the UI leaves those out. */
   source?: 'torchbearer';
-  /** Set when the reading came from a ColorMunki behind the bridge (10 nm optical bands, interpolated to 1 nm by the bridge); the Torch Bearer correction is not applied to it. */
+  /** Set when the reading came from a ColorMunki behind the bridge (interpolated to 1 nm by the bridge); the Torch Bearer correction is not applied to it. */
   meterModel?: 'colormunki';
+  /** ColorMunki only: the band spacing the bridge measured at -- 3.3 (high resolution, newer firmware) or 10 nm. */
+  munkiResolutionNm?: number;
   /** Torch Bearer only: the spectrometer's own exposure status on the final frame -- 0 normal, 1 over-exposed, 2 under-exposed. */
   tbStatus?: number;
   /** Bridge readings: true when an HPCS-matching spectral correction was applied to this spectrum -- the Torch Bearer's (on the bridge or ble/tbCorrection.ts) or, with newer bridge firmware, the ColorMunki's own (on the bridge) -- false for the raw spectrum. */

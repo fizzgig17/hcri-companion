@@ -53,7 +53,11 @@ export function buildShareCsv(result: MeterResult): string {
   lines.push(`PeakSignal,${result.peakSignal}`);
   if (result.source === 'torchbearer') {
     lines.push(`TorchBearerStatus,${['normal', 'over-exposed', 'under-exposed'][result.tbStatus ?? 0] ?? result.tbStatus}`);
-    if (result.meterModel === 'colormunki') lines.push('Instrument,ColorMunki (10 nm optical bands, interpolated to 1 nm)');
+    if (result.meterModel === 'colormunki') {
+      lines.push(result.munkiResolutionNm === 3.3
+        ? 'Instrument,ColorMunki (3.3 nm high resolution, interpolated to 1 nm)'
+        : 'Instrument,ColorMunki (10 nm optical bands, interpolated to 1 nm)');
+    }
     lines.push(`SpectralCorrection,${result.tbCorrected ? 'applied' : 'none (raw)'}`);
   } else {
     lines.push(`DarkSignal,${result.darkSignal}`);

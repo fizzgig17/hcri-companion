@@ -18,7 +18,7 @@
 import { isTorchBearerName, BRIDGE_NAME } from '../../ble/torchBearer';
 import { APP_VERSION } from '../../buildInfo';
 import { Icon, ICON_SIZE } from '../../components/icons';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Modal, StyleSheet } from 'react-native';
 import InfoButton from '../../components/InfoButton';
 import StatCard, { statDensity } from '../../components/StatCard';
@@ -42,6 +42,7 @@ import { LedLists } from '../../hcri/ledLists';
 import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
 import HintPressable from '../../components/HintPressable';
 import { EMPTY_METER_RESULT, EMPTY_SPECTRAL_ANALYSIS } from '../../utils/placeholderReading';
+import { loadHistory, SavedReading } from '../../storage/readingHistory';
 
 // Title field (56) + its top margin (8), always subtracted so the charts are
 // the same size whether or not a reading (and so the title) is showing.
@@ -155,6 +156,10 @@ interface Props {
   scrollInputIntoView: (inputRef: React.RefObject<any>) => void;
   /** Set only while a flicker-capable meter is connected: adds the Flicker chart page. */
   flicker?: { reading: FlickerReading | null; running: boolean; focusNonce: number; history: { f: number; p: number }[]; settings?: FlickerSettingsApi; upload?: FlickerUploadApi; target?: 'reading' | 'new' | null; onStart?: (target: 'reading' | 'new') => void; onStop?: () => void; canSampleReading?: boolean; redoLabel?: string; readingNote?: string; fromReading?: boolean };
+  /** Message laid over the empty chart while there is no reading yet (what to do next / what is happening). */
+  emptyState?: { title: string; body?: string; busy?: boolean } | null;
+  /** Opens a saved reading from the "Last reading" link under the empty-state message. */
+  onOpenSavedReading?: (r: SavedReading) => void;
   /** See SpectrumTab's pagerResetKey. */
   pagerResetKey?: unknown;
   /** Tablet / unfolded layout: all graphs at once (SpectrumGrid) and the stat tiles in one row, instead of the swipeable pager. */
@@ -197,6 +202,8 @@ export default function MainTab({
   scrollInputIntoView,
   flicker,
   pagerResetKey,
+  emptyState,
+  onOpenSavedReading,
   wide,
   portrait,
   ledSuggestion, ledCurrent, onLedEdit, ledLists, ledPickerOpen, onLedYes, onLedOther, onLedClose, onLedPickerCancel, onLedPickerSave,
@@ -210,6 +217,14 @@ export default function MainTab({
   // what actually keeps the Take Reading button from jumping position.
   const displayResult = result ?? EMPTY_METER_RESULT;
   const displayAnalysis = analysis ?? EMPTY_SPECTRAL_ANALYSIS;
+  // Most recent saved reading, offered under the empty-state message so the screen isn't a dead end after a restart.
+  const [lastSaved, setLastSaved] = useState<SavedReading | null>(null);
+  useEffect(() => {
+    if (hasReading) return;
+    let alive = true;
+    loadHistory().then((h) => { if (alive) setLastSaved(h[0] ?? null); }).catch(() => {});
+    return () => { alive = false; };
+  }, [hasReading, status]);
   // See HomeScreen.tsx's scrollInputIntoView comment -- needs a ref to the
   // actual TextInput, not just a position, since it measures this input's
   // layout relative to the ScrollView HomeScreen owns.
@@ -255,6 +270,10 @@ export default function MainTab({
 
     root: { flex: 1 },
     chartRegion: { flex: 1, minHeight: 0, overflow: 'hidden' },
+    emptyOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28, backgroundColor: colors.card + 'B8' },
+    emptyTitle: { color: colors.text, fontSize: 16, fontWeight: '600', textAlign: 'center' },
+    emptyBody: { color: colors.muted, fontSize: 13, lineHeight: 18, textAlign: 'center', marginTop: 6 },
+    emptyLast: { color: colors.muted, fontSize: 12, textAlign: 'center' },
     resultCard: {
       flex: 1,
       backgroundColor: colors.card,
@@ -446,7 +465,7 @@ export default function MainTab({
               are 0 for every field until a real reading exists, so every
               tile just reads "0" until then. */}
           {visibleStats.map(({ id, metric, out }) => (
-            <StatCard key={id} label={metric.label} value={out.value} unit={out.unit} compact density={density} columns={wide ? Math.min(visibleStats.length, 9) : undefined} />
+            <StatCard key={id} label={metric.label} value={hasReading ? out.value : '—'} unit={hasReading ? out.unit : ''} compact density={density} columns={wide ? Math.min(visibleStats.length, 9) : undefined} />
           ))}
         </View>
         {/* resultCard (below) wraps this in its own padding: 14 AND
@@ -474,6 +493,18 @@ export default function MainTab({
             </ContentWidthContext.Provider>
           ) : (
           <SpectrumTab result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} sampleLabel={result?.sampleLabel} flicker={flicker} pagerResetKey={pagerResetKey} />
+          )}
+          {!hasReading && emptyState && (
+            <View style={styles.emptyOverlay} pointerEvents="box-none">
+              {emptyState.busy ? <ActivityIndicator color={colors.accent} style={{ marginBottom: 8 }} /> : null}
+              <Text style={styles.emptyTitle}>{emptyState.title}</Text>
+              {emptyState.body ? <Text style={styles.emptyBody}>{emptyState.body}</Text> : null}
+              {lastSaved && onOpenSavedReading && !emptyState.busy ? (
+                <TouchableOpacity onPress={() => onOpenSavedReading(lastSaved)} style={{ marginTop: 14 }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={styles.emptyLast} numberOfLines={1}>Last reading: {lastSaved.label} · <Text style={{ color: colors.accent }}>View</Text></Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           )}
           {ledSuggestion && hasReading && !result?.sampleLabel && onLedYes && onLedOther && onLedClose && (
             <LedSuggestionCard floating suggestion={ledSuggestion} onYes={onLedYes} onOther={onLedOther} onClose={onLedClose} />
