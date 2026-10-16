@@ -8,7 +8,7 @@
 // quiet icon + label buttons on either side.
 
 import { ICONS, ICON_SIZE } from './icons';
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
@@ -129,6 +129,8 @@ export default function ActionBar(p: Props) {
     note: { color: colors.muted, fontSize: 12.5, fontWeight: '600', textAlign: 'center', paddingHorizontal: 10, marginTop: 2, marginBottom: 6 },
   });
 
+  // The bar keeps the tallest height it has had: its content differs a little between idle, measuring and disconnected, and when it shrank the chart card above it grew for the length of a reading.
+  const [barH, setBarH] = useState(0);
   const { status } = p;
   const busyLabel = status === 'connecting' ? 'Connecting…' : status === 'measuring' ? (p.busyCaption ?? 'Measuring…') : null;
   const uploadDisabled = p.uploading || !p.hasReading || p.isSample;
@@ -195,7 +197,7 @@ export default function ActionBar(p: Props) {
   return (
     <View style={styles.wrap}>
       {connected && p.meterNote ? <Text style={styles.note}>{p.meterNote}</Text> : null}
-      <View style={styles.bar}>
+      <View style={[styles.bar, barH > 0 && { minHeight: barH }]} onLayout={(e) => { const h = Math.ceil(e.nativeEvent.layout.height); setBarH((prev) => (h > prev ? h : prev)); }}>
         <View style={[styles.slot, styles.slotLeft]}>
           {connected && <SideButton icon="power" label="Disconnect" onPress={p.disconnect} />}
           {status === 'disconnected' && (
