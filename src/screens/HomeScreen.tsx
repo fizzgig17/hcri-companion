@@ -1277,8 +1277,14 @@ export default function HomeScreen({ navigation }: any) {
   // lifetime instead of tearing down and re-adding the listener on every
   // status change.
   const statusRef = useRef(status);
+  // True once a meter has been connected in THIS app session. A fresh launch (cold start) also fires the AppState
+  // "active" event, which used to look like "coming back to the app" and silently reconnected to the last meter
+  // without ever offering the second one in range. Only a real return trip (a meter was connected earlier this
+  // session) may prefer the last-used meter.
+  const connectedThisSessionRef = useRef(false);
   useEffect(() => {
     statusRef.current = status;
+    if (status === 'connected') connectedThisSessionRef.current = true;
   }, [status]);
 
   // Background poll while connected: other meters that are switched on and in range are
@@ -1423,7 +1429,7 @@ export default function HomeScreen({ navigation }: any) {
               // right now, silently go back to the one that was connected
               // before backgrounding rather than popping up a picker the
               // person didn't ask for (see connect()'s own comment on this).
-              connect({ preferLastDeviceOnMultiple: true });
+              connect({ preferLastDeviceOnMultiple: connectedThisSessionRef.current });
             }, FOREGROUND_RECONNECT_DELAY_MS);
           })();
         }
