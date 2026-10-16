@@ -23,3 +23,32 @@ export function meterListLabel(advertisedName: string | null | undefined, isBrid
   if (isBridge || isTorchBearerName(advertisedName)) return attached ? `${BRIDGE_NAME} · ${attached}` : BRIDGE_NAME;
   return hpcsModelName(advertisedName) || '(unnamed)';
 }
+
+export type BridgeAttached = 'ColorMunki' | 'Torch Bearer' | 'none';
+
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+/**
+ * What a bridge says is plugged into it, read from its scan response: manufacturer data (base64, company id
+ * first) = FF FF 'h' 'C' <0 nothing | 1 Torch Bearer | 2 ColorMunki>. Returns null when the field is missing
+ * (older bridge firmware), so those bridges keep being listed as before.
+ */
+export function bridgeAttachedFromAdv(manufacturerData: string | null | undefined): BridgeAttached | null {
+  if (!manufacturerData) return null;
+  const bytes: number[] = [];
+  let acc = 0;
+  let bits = 0;
+  for (const ch of manufacturerData) {
+    if (ch === '=') break;
+    const v = B64.indexOf(ch);
+    if (v < 0) return null;
+    acc = (acc << 6) | v;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      bytes.push((acc >> bits) & 0xff);
+    }
+  }
+  if (bytes.length < 5 || bytes[0] !== 0xff || bytes[1] !== 0xff || bytes[2] !== 0x68 || bytes[3] !== 0x43) return null;
+  return bytes[4] === 1 ? 'Torch Bearer' : bytes[4] === 2 ? 'ColorMunki' : 'none';
+}

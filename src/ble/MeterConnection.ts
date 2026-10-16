@@ -9,6 +9,7 @@
 //
 // Requires: react-native-ble-plx (already installed in this project).
 
+import { bridgeAttachedFromAdv } from './meterLabel';
 import { BleManager, Device, Characteristic, Subscription, ScanMode } from 'react-native-ble-plx';
 import { Buffer } from 'buffer';
 import { PermissionsAndroid, Platform } from 'react-native';
@@ -400,6 +401,8 @@ export class MeterConnection {
       const windowTimer = setTimeout(finish, windowMs);
     });
 
+    // Bridges report what is plugged into them; hang it on the Device so callers can hide empty ones.
+    for (const d of found.values()) (d as any).attached = bridgeAttachedFromAdv(d.manufacturerData);
     const devices = Array.from(found.values()).sort((a, b) => (b.rssi ?? -999) - (a.rssi ?? -999));
     if (quiet) return devices;
     this.log(`scan: finished after ${Date.now() - startedAt} ms, ${found.size} matching device(s)`, true);

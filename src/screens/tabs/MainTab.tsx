@@ -57,6 +57,8 @@ export interface FoundDevice {
   id: string;
   name: string | null;
   rssi: number | null;
+  /** What a bridge says is plugged into it (null = unknown, e.g. older bridge firmware or not a bridge). */
+  attached?: 'ColorMunki' | 'Torch Bearer' | 'none' | null;
 }
 
 interface Props {
@@ -644,7 +646,7 @@ export default function MainTab({
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Text style={[styles.deviceName, { flexShrink: 1 }]}>
-                    {meterListLabel(d.name, !!munkiBridgeIds?.[d.id], d.id === connectedDeviceId ? bridgeAttached(connectedDeviceName) : munkiBridgeIds?.[d.id] ? 'ColorMunki' : null)}
+                    {meterListLabel(d.name, !!munkiBridgeIds?.[d.id], d.id === connectedDeviceId ? bridgeAttached(connectedDeviceName) : d.attached && d.attached !== 'none' ? d.attached : munkiBridgeIds?.[d.id] ? 'ColorMunki' : null)}
                   </Text>
                   {d.id === connectedDeviceId && (
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 8 }}>

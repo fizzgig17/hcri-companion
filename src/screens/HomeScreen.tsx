@@ -577,8 +577,14 @@ export default function HomeScreen({ navigation }: any) {
         // window so a second meter in range is always seen and offered in the list.
         const lastIdForScan = opts?.preferLastDeviceOnMultiple ? await loadLastDeviceId().catch(() => null) : null;
         setConnectStage('Scanning for meter…');
-        const candidates = await conn.scanForKnownMeters(CONNECT_SCAN_WINDOW_MS, { preferDeviceId: lastIdForScan });
+        const allFound = await conn.scanForKnownMeters(CONNECT_SCAN_WINDOW_MS, { preferDeviceId: lastIdForScan });
         if (stale()) return;
+        // A bridge that says nothing is plugged in can't measure; leave it out (older firmware says nothing, so stays).
+        const candidates = allFound.filter((d) => (d as any).attached !== 'none');
+        if (candidates.length === 0 && allFound.length > 0) {
+          setMultiMeterCandidates(null);
+          throw new Error('Bridge found, but no meter is plugged in -- connect the ColorMunki or Torch Bearer to it');
+        }
 
         if (candidates.length === 0) {
           setMultiMeterCandidates(null);
@@ -601,7 +607,7 @@ export default function HomeScreen({ navigation }: any) {
         // More than one match -- remember the list either way (so the
         // switch-meter icon works later even if we silently pick one
         // below), then decide whether that's a silent pick or a picker.
-        const mapped = candidates.map((d) => ({ id: d.id, name: d.name, rssi: d.rssi }));
+        const mapped = candidates.map((d) => ({ id: d.id, name: d.name, rssi: d.rssi, attached: (d as any).attached ?? null }));
         setMultiMeterCandidates(mapped);
 
         const lastId = opts?.preferLastDeviceOnMultiple ? await loadLastDeviceId().catch(() => null) : null;
@@ -1306,7 +1312,7 @@ export default function HomeScreen({ navigation }: any) {
         const currentId = conn.getDeviceId();
         const seen = seenMetersRef.current;
         for (const d of found) {
-          if (d.id !== currentId) seen.set(d.id, { dev: { id: d.id, name: d.name, rssi: d.rssi }, ts: now });
+          if (d.id !== currentId && (d as any).attached !== 'none') seen.set(d.id, { dev: { id: d.id, name: d.name, rssi: d.rssi, attached: (d as any).attached ?? null }, ts: now });
         }
         for (const [id, v] of Array.from(seen.entries())) {
           if (now - v.ts > DEVICE_POLL_FORGET_MS || id === currentId) seen.delete(id);
