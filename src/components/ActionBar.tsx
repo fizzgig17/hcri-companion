@@ -122,7 +122,9 @@ export default function ActionBar(p: Props) {
     },
     inner: { flex: 1, borderRadius: 25, backgroundColor: colors.accent + 'D9', alignItems: 'center', justifyContent: 'center' },
     // Fixed height: text that shrinks to fit ("Measuring… Tap to cancel") must not make the bar shorter than "Take reading" does.
-    caption: { marginTop: 2, color: colors.accent, fontSize: 11.5, lineHeight: 15, height: 15, fontWeight: '700', textAlign: 'center', alignSelf: 'stretch' },
+    // The Text itself has no fixed height/lineHeight (iOS hides shrink-to-fit text that has them); the wrapper holds the height.
+    captionBox: { marginTop: 2, height: 16, alignSelf: 'stretch', justifyContent: 'center' },
+    caption: { color: colors.accent, fontSize: 11.5, fontWeight: '700', textAlign: 'center' },
     side: { minWidth: 0, flexShrink: 1, paddingVertical: 4, paddingHorizontal: 3, alignItems: 'center', justifyContent: 'center' },
     sideLabel: { color: colors.muted, fontSize: 10.5, marginTop: 3, fontWeight: '600' },
     sideLabelAccent: { color: colors.accent },
@@ -191,7 +193,9 @@ export default function ActionBar(p: Props) {
           {busyLabel ? <ActivityIndicator color="#fff" /> : <Icon name={icon} size={icon === 'play' ? 26 : 24} color="#fff" />}
         </View>
       </TouchableOpacity>
-      <Text style={[styles.caption, tint && { color: tint }]} numberOfLines={1} adjustsFontSizeToFit>{caption}</Text>
+      <View style={styles.captionBox}>
+        <Text style={[styles.caption, tint && { color: tint }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{caption}</Text>
+      </View>
     </View>
   );
 
