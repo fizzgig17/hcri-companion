@@ -15,7 +15,11 @@
 // (the overwhelmingly common case) connects straight through with no
 // extra UI at all, same as before.
 
-import { isTorchBearerName, BRIDGE_NAME } from '../../ble/torchBearer';
+import { meterListLabel } from '../../ble/meterLabel';
+
+/** What is plugged into the connected bridge, or null when the connected meter is an HPCS. */
+const bridgeAttached = (connectedName: string | null | undefined): string | null =>
+  connectedName === 'ColorMunki' || connectedName === 'Torch Bearer' ? connectedName : null;
 import { APP_VERSION } from '../../buildInfo';
 import { Icon, ICON_SIZE } from '../../components/icons';
 import React, { useEffect, useRef, useState } from 'react';
@@ -640,7 +644,7 @@ export default function MainTab({
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Text style={[styles.deviceName, { flexShrink: 1 }]}>
-                    {(d.id === connectedDeviceId && connectedDeviceName) || (munkiBridgeIds?.[d.id] ? 'ColorMunki' : null) || (isTorchBearerName(d.name) ? BRIDGE_NAME : null) || d.name || '(unnamed)'}
+                    {meterListLabel(d.name, !!munkiBridgeIds?.[d.id], d.id === connectedDeviceId ? bridgeAttached(connectedDeviceName) : munkiBridgeIds?.[d.id] ? 'ColorMunki' : null)}
                   </Text>
                   {d.id === connectedDeviceId && (
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 8 }}>
