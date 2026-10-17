@@ -1667,9 +1667,9 @@ export default function HomeScreen({ navigation }: any) {
   })();
 
   // What the empty chart says while there is no reading: follows the connection, the ColorMunki dial and calibration.
-  const emptyState: { title: string; body?: string; busy?: boolean } | null = (() => {
+  const emptyState: { title: string; body?: string; busy?: boolean; spinner?: boolean } | null = (() => {
     if (status === 'disconnected') return { title: 'No meter connected', body: 'Tap Connect to Meter, or load a Test reading to look around.' };
-    if (status === 'connecting') return { title: 'Connecting…', body: connectStage ?? undefined, busy: true };
+    if (status === 'connecting') return { title: 'Connecting…', body: connectStage ?? undefined, busy: true, spinner: true };
     if (status === 'measuring') {
       return calibrating
         ? { title: 'Calibrating…', body: 'Keep the dial on Calibration and the meter still.', busy: true }
