@@ -163,7 +163,7 @@ interface Props {
   /** Set only while a flicker-capable meter is connected: adds the Flicker chart page. */
   flicker?: { reading: FlickerReading | null; running: boolean; focusNonce: number; history: { f: number; p: number }[]; settings?: FlickerSettingsApi; upload?: FlickerUploadApi; target?: 'reading' | 'new' | null; onStart?: (target: 'reading' | 'new') => void; onStop?: () => void; canSampleReading?: boolean; redoLabel?: string; readingNote?: string; fromReading?: boolean };
   /** Message laid over the empty chart while there is no reading yet (what to do next / what is happening). */
-  emptyState?: { title: string; body?: string; busy?: boolean } | null;
+  emptyState?: { title: string; body?: string; busy?: boolean; spinner?: boolean } | null;
   /** Opens a saved reading from the "Last reading" link under the empty-state message. */
   onOpenSavedReading?: (r: SavedReading) => void;
   /** See SpectrumTab's pagerResetKey. */
@@ -502,12 +502,15 @@ export default function MainTab({
           )}
           {!hasReading && emptyState && (
             <View style={styles.emptyOverlay} pointerEvents="box-none">
-              {emptyState.busy ? <ActivityIndicator color={colors.accent} style={{ marginBottom: 8 }} /> : null}
+              {emptyState.spinner ? <ActivityIndicator color={colors.accent} style={{ marginBottom: 8 }} /> : null}
               <Text style={styles.emptyTitle}>{emptyState.title}</Text>
               {emptyState.body ? <Text style={styles.emptyBody}>{emptyState.body}</Text> : null}
               {lastSaved && onOpenSavedReading && !emptyState.busy ? (
                 <TouchableOpacity onPress={() => onOpenSavedReading(lastSaved)} style={{ marginTop: 14 }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Text style={styles.emptyLast} numberOfLines={1}>Last reading: {lastSaved.label} · <Text style={{ color: colors.accent }}>View</Text></Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon name="eye" size={16} color={colors.accent} />
+                    <Text style={[styles.emptyLast, { color: colors.accent, marginLeft: 6 }]}>View last reading</Text>
+                  </View>
                 </TouchableOpacity>
               ) : null}
             </View>
