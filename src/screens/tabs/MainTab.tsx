@@ -401,7 +401,6 @@ export default function MainTab({
         ) : (
           <Text style={styles.statusText} numberOfLines={1}>{connectStage || statusLabels[status]}</Text>
         )}
-        {isBusy && <ActivityIndicator size="small" color={colors.muted} style={{ marginLeft: 8 }} />}
         {/* Meter battery (8C C3). Only while a meter is connected and has
             actually answered; red at 20% or below (same threshold the
             vendor app warns at), green otherwise. A bolt means the meter
