@@ -14,12 +14,15 @@
 // samples). preferences.ts uses the same AsyncStorage dependency, so it
 // only needs installing once for both.
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MeterResult } from '../ble/parseResult';
 import { analyzeSpectrum, SpectralAnalysis } from '../utils/spectralAnalysis';
 import { queueBackupDelete } from './backupState';
+import { createChunkedStore } from './chunkedList';
 
 const STORAGE_KEY = 'hcri.io.readingHistory.v1';
+// One storage entry per reading (see chunkedList.ts): a single blob of 100+ spectra can grow too big for the phone's
+// storage to read back, which made History look empty and every new save fail. The old v1 blob is migrated on first use.
+const store = createChunkedStore<SavedReading>('hcri.io.readingHistory.v2', STORAGE_KEY);
 
 // Caps how many readings get kept locally -- unbounded growth would mean an
 // ever-larger JSON blob getting read/written on every single change, which
@@ -113,16 +116,7 @@ function makeId(): string {
 }
 
 export async function loadHistory(): Promise<SavedReading[]> {
-  const raw = await AsyncStorage.getItem(STORAGE_KEY);
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    // Corrupted/unparseable stored JSON -- treat as empty rather than
-    // throwing and taking the whole History tab down with it.
-    return [];
-  }
+  return store.load();
 }
 
 // Set by hcri/backup.ts so every change to the history (the single write path below) can trigger a cloud backup.
@@ -136,7 +130,7 @@ export function notifyHistoryChanged(): void {
 }
 
 async function saveAll(readings: SavedReading[]): Promise<void> {
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(readings));
+  await store.save(readings);
   notifyHistoryChanged();
 }
 
