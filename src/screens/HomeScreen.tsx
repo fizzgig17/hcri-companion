@@ -35,6 +35,7 @@ import { fetchLedSuggestion, LedDetails, LedSuggestion } from '../hcri/ledApi';
 import useLedSuggestionsEnabled from '../hooks/useLedSuggestionsEnabled';
 import { ledPatch, hasLed, ledsOfReading } from '../hcri/leds';
 import { syncLedForReading } from '../hcri/ledSync';
+import { initBackup, offerRestoreIfEmpty, scheduleBackup } from '../hcri/backup';
 import { EMPTY_LED_LISTS, getCachedLedLists, LedLists, refreshLedLists } from '../hcri/ledLists';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
 import { shareDebugLog } from '../utils/shareLog';
@@ -1384,9 +1385,17 @@ export default function HomeScreen({ navigation }: any) {
   // Home) can also put up a share sheet and needs to be able to set this
   // same flag.
 
+  // Optional cloud backup of the history (hcri/backup.ts): starts once, backs up after each change, offers a restore on a fresh install.
+  useEffect(() => {
+    initBackup(appendLog);
+    const t = setTimeout(() => { offerRestoreIfEmpty(); }, 3000);
+    return () => clearTimeout(t);
+  }, []);
+
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
+        scheduleBackup(2000, appendLog);
         // A reading taken with the Torch Bearer's own button while the app was away: ask the bridge for its last one
         // (the app ignores it if it already has it).
         const tbConn = connRef.current;
