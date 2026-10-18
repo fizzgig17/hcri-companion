@@ -130,10 +130,14 @@ let historyChangeListener: (() => void) | null = null;
 export function setHistoryChangeListener(fn: (() => void) | null): void {
   historyChangeListener = fn;
 }
+/** Tells the cloud backup something changed (also used by flickerHistory.ts). Never throws. */
+export function notifyHistoryChanged(): void {
+  try { historyChangeListener?.(); } catch { /* a backup problem must never break saving */ }
+}
 
 async function saveAll(readings: SavedReading[]): Promise<void> {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(readings));
-  try { historyChangeListener?.(); } catch { /* a backup problem must never break saving a reading */ }
+  notifyHistoryChanged();
 }
 
 /**

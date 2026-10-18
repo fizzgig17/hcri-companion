@@ -14,11 +14,30 @@ export function fingerprint(r: SavedReading): string {
   return `${(h >>> 0).toString(36)}.${json.length.toString(36)}`;
 }
 
-/** What still has to go to the server: readings whose fingerprint differs from what was last sent, plus queued deletions. */
-export function planBackup(history: SavedReading[], state: Pick<BackupState, 'synced' | 'pendingDelete'>): { upload: SavedReading[]; deleteIds: string[] } {
+/** Backup ids: readings use their own id; saved flickers get a prefix so the two kinds never collide. */
+export const FLICKER_BACKUP_PREFIX = 'fl_';
+export const flickerBackupId = (id: string): string => FLICKER_BACKUP_PREFIX + id;
+export const isFlickerBackupId = (id: string): boolean => id.startsWith(FLICKER_BACKUP_PREFIX);
+
+/** One thing that gets backed up: a saved reading or a saved flicker, under its backup id. */
+export interface BackupItem {
+  id: string;
+  savedAt: number;
+  payload: unknown;
+}
+export const readingItem = (r: SavedReading): BackupItem => ({ id: r.id, savedAt: r.savedAt, payload: r });
+export const flickerItem = (f: { id: string; savedAt: number }): BackupItem => ({ id: flickerBackupId(f.id), savedAt: f.savedAt, payload: f });
+
+/** Same fingerprint for any payload. */
+export function fingerprintOf(x: unknown): string {
+  return fingerprint(x as SavedReading);
+}
+
+/** What still has to go to the server: items whose fingerprint differs from what was last sent, plus queued deletions. */
+export function planBackup(items: BackupItem[], state: Pick<BackupState, 'synced' | 'pendingDelete'>): { upload: BackupItem[]; deleteIds: string[] } {
   const gone = new Set(state.pendingDelete);
   return {
-    upload: history.filter((r) => !gone.has(r.id) && state.synced[r.id] !== fingerprint(r)),
+    upload: items.filter((it) => !gone.has(it.id) && state.synced[it.id] !== fingerprintOf(it.payload)),
     deleteIds: state.pendingDelete,
   };
 }

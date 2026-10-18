@@ -332,7 +332,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
     } else if (r.added === 0) {
       Alert.alert('Already up to date', 'All of your backed-up readings are already in History.');
     } else {
-      Alert.alert('Restored', `Added ${r.added} reading${r.added === 1 ? '' : 's'} to History.`);
+      Alert.alert('Restored', `Added ${r.added} item${r.added === 1 ? '' : 's'} (readings and saved flickers) to History.`);
     }
   };
 
@@ -919,7 +919,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
       {switchRow('Keep screen awake', 'Prevents the screen from locking during a session with the meter connected. Uses more battery.', keepAwake, toggleKeepAwake)}
 
       {sectionHeader('Backup')}
-      {switchRow('Back up readings to hCRI.io', "Saves your reading history to your own hCRI.io account after each reading, so reinstalling the app or changing phones doesn't lose it. Needs your API token (see hCRI.io account above); readings taken before you sign in are sent once you do. Backed-up readings are private to you: they are not reports and nobody else can see them. Deleting a reading here removes it from the backup too.", cloudBackup, toggleCloudBackup)}
+      {switchRow('Back up readings to hCRI.io', "Saves your reading history and saved flickers to your own hCRI.io account after each change, so reinstalling the app or changing phones doesn't lose it. Needs your API token (see hCRI.io account above); readings taken before you sign in are sent once you do. Backed-up readings are private to you: they are not reports and nobody else can see them. Deleting a reading here removes it from the backup too.", cloudBackup, toggleCloudBackup)}
       {hasSaved && (
         <View style={styles.saveButtonWrap}>
           <PrimaryButton title={restoring ? 'Restoring…' : 'Restore readings from backup'} onPress={restoreBackup} variant="outline" style={styles.noTopMargin} />

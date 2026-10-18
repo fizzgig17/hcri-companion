@@ -11,7 +11,8 @@
 //  - Restoring adds back readings the app doesn't have.
 
 import { Alert } from 'react-native';
-import { fingerprint, planBackup, isRestorableReading } from './backupPlan';
+import { fingerprintOf, planBackup, isRestorableReading, readingItem, flickerItem, isFlickerBackupId, flickerBackupId } from './backupPlan';
+import { loadFlickers, mergeRestoredFlickers, isRestorableFlicker, SavedFlicker } from '../storage/flickerHistory';
 import { HCRI_API_BASE } from './apiConfig';
 import fetchWithTimeout from './fetchWithTimeout';
 import { loadHcriCredentials } from '../storage/secureStorage';
@@ -65,7 +66,8 @@ export async function runBackup(log?: (m: string) => void): Promise<BackupRunRes
 
     do {
       again = false;
-      const plan = planBackup(await loadHistory(), await loadBackupState());
+      const items = [...(await loadHistory()).map(readingItem), ...(await loadFlickers()).map(flickerItem)];
+      const plan = planBackup(items, await loadBackupState());
 
       for (let i = 0; i < plan.deleteIds.length; i += DELETE_BATCH) {
         const ids = plan.deleteIds.slice(i, i + DELETE_BATCH);
@@ -80,12 +82,12 @@ export async function runBackup(log?: (m: string) => void): Promise<BackupRunRes
 
       for (let i = 0; i < plan.upload.length; i += UPLOAD_BATCH) {
         const batch = plan.upload.slice(i, i + UPLOAD_BATCH);
-        const body = JSON.stringify({ items: batch.map((r) => ({ id: r.id, savedAt: r.savedAt, reading: r })) });
+        const body = JSON.stringify({ items: batch.map((it) => ({ id: it.id, savedAt: it.savedAt, reading: it.payload })) });
         const res = await fetchWithTimeout(BACKUP_URL, { method: 'POST', headers: headers(creds.token), body }, 60000);
         if (!res.ok) return fail(res.status, log, uploaded);
         // Too-large items come back as "skipped"; they're marked as sent so they aren't retried on every run.
         await withBackupState((s) => {
-          for (const r of batch) s.synced[r.id] = fingerprint(r);
+          for (const it of batch) s.synced[it.id] = fingerprintOf(it.payload);
         });
         uploaded += batch.length;
       }
@@ -127,7 +129,7 @@ export function initBackup(log?: (m: string) => void): void {
 
 export interface RestoreResult {
   ok: boolean;
-  /** Readings now in the history that were not there before. */
+  /** Readings and saved flickers now in History that were not there before. */
   added: number;
   /** Readings the backup holds. */
   total: number;
@@ -150,16 +152,24 @@ export async function restoreFromBackup(onProgress?: (done: number, total: numbe
       const data = await res.json();
       total = Number(data?.total) || total;
       const gone = new Set((await loadBackupState()).pendingDelete);
-      const readings: SavedReading[] = (Array.isArray(data?.items) ? data.items : [])
-        .map((it: any) => it?.reading)
-        .filter((r: any) => isRestorableReading(r) && !gone.has(r.id));
-      seen += Array.isArray(data?.items) ? data.items.length : 0;
-      if (readings.length) {
-        // Mark them as already backed up before they land in the history, so they aren't sent straight back.
+      const rawItems: any[] = Array.isArray(data?.items) ? data.items : [];
+      const readings: SavedReading[] = [];
+      const flickers: SavedFlicker[] = [];
+      for (const it of rawItems) {
+        const p = it?.reading;
+        if (typeof it?.id !== 'string' || gone.has(it.id)) continue;
+        if (isFlickerBackupId(it.id)) { if (isRestorableFlicker(p)) flickers.push(p); }
+        else if (isRestorableReading(p)) readings.push(p);
+      }
+      seen += rawItems.length;
+      if (readings.length || flickers.length) {
+        // Mark them as already backed up before they land in the lists, so they aren't sent straight back.
         await withBackupState((s) => {
-          for (const r of readings) s.synced[r.id] = fingerprint(r);
+          for (const r of readings) s.synced[r.id] = fingerprintOf(r);
+          for (const f of flickers) s.synced[flickerBackupId(f.id)] = fingerprintOf(f);
         });
         added += await mergeRestoredReadings(readings);
+        added += await mergeRestoredFlickers(flickers);
       }
       onProgress?.(seen, total);
       if (!data?.next) break;
@@ -178,7 +188,7 @@ export async function restoreFromBackup(onProgress?: (done: number, total: numbe
 export async function offerRestoreIfEmpty(onDone?: (r: RestoreResult) => void): Promise<void> {
   try {
     if (!(await loadBackupEnabled()) || (await loadRestoreDeclined())) return;
-    if ((await loadHistory()).length > 0) return;
+    if ((await loadHistory()).length > 0 || (await loadFlickers()).length > 0) return;
     const creds = await loadHcriCredentials().catch(() => null);
     if (!creds?.token) return;
     const res = await fetchWithTimeout(`${BACKUP_URL}?limit=1`, { headers: headers(creds.token) });
