@@ -17,6 +17,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MeterResult } from '../ble/parseResult';
 import { analyzeSpectrum, SpectralAnalysis } from '../utils/spectralAnalysis';
+import { queueBackupDelete } from './backupState';
 
 const STORAGE_KEY = 'hcri.io.readingHistory.v1';
 
@@ -124,8 +125,34 @@ export async function loadHistory(): Promise<SavedReading[]> {
   }
 }
 
+// Set by hcri/backup.ts so every change to the history (the single write path below) can trigger a cloud backup.
+let historyChangeListener: (() => void) | null = null;
+export function setHistoryChangeListener(fn: (() => void) | null): void {
+  historyChangeListener = fn;
+}
+/** Tells the cloud backup something changed (also used by flickerHistory.ts). Never throws. */
+export function notifyHistoryChanged(): void {
+  try { historyChangeListener?.(); } catch { /* a backup problem must never break saving */ }
+}
+
 async function saveAll(readings: SavedReading[]): Promise<void> {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(readings));
+  notifyHistoryChanged();
+}
+
+/**
+ * Adds readings restored from the cloud backup that aren't already here (by id), newest first, then trims to the usual
+ * limits. Returns how many ended up in the history.
+ */
+export async function mergeRestoredReadings(restored: SavedReading[]): Promise<number> {
+  const existing = await loadHistory();
+  const have = new Set(existing.map((r) => r.id));
+  const fresh = restored.filter((r) => !have.has(r.id));
+  if (!fresh.length) return 0;
+  const merged = trimHistory([...existing, ...fresh].sort((a, b) => b.savedAt - a.savedAt));
+  await saveAll(merged);
+  const kept = new Set(merged.map((r) => r.id));
+  return fresh.filter((r) => kept.has(r.id)).length;
 }
 
 /** Call once per completed measurement -- adds it to the front of history (most recent first) and returns the saved entry (including its new id). Computes `analysis` here, once, from `result.spectrum` -- see SavedReading's own comment on that field for why. */
@@ -196,6 +223,7 @@ export async function recordUpload(
 export async function deleteReading(id: string): Promise<void> {
   const existing = await loadHistory();
   await saveAll(existing.filter((r) => r.id !== id));
+  queueBackupDelete([id]);
 }
 
 /** Deletes several readings in one go (HistoryTab's bulk/"select all" delete) -- one read-modify-write of the whole list instead of calling deleteReading in a loop, which would otherwise race itself: each call's `loadHistory()` wouldn't yet see the previous call's not-yet-finished `saveAll()`, so only the last delete in the loop would actually stick. */
@@ -204,6 +232,7 @@ export async function deleteManyReadings(ids: string[]): Promise<void> {
   const idSet = new Set(ids);
   const existing = await loadHistory();
   await saveAll(existing.filter((r) => !idSet.has(r.id)));
+  queueBackupDelete(ids);
 }
 
 /** Replaces (or adds) the flicker capture stored with a saved reading -- used when the person redoes the flicker for the reading they just took. */

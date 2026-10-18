@@ -14,6 +14,8 @@ import { useLayoutMode, useContentWidth, isSquareWindow } from '../layout';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IS_DEV_BUILD, HCRI_API_HOST } from '../hcri/buildTarget';
 import PrimaryButton from '../components/PrimaryButton';
+import { loadBackupEnabled, saveBackupEnabled } from '../storage/backupState';
+import { restoreFromBackup, scheduleBackup } from '../hcri/backup';
 import HintPressable from '../components/HintPressable';
 import Svg, { Circle, Path } from 'react-native-svg';
 import DraggableStatList from '../components/DraggableStatList';
@@ -144,6 +146,8 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   // below: the two are never shown/editable at the same time).
   const [loadedToken, setLoadedToken] = useState('');
   const [keepAwake, setKeepAwake] = useState(false);
+  const [cloudBackup, setCloudBackup] = useState(true);
+  const [restoring, setRestoring] = useState(false);
   const [hapticTaps, setHapticTaps] = useState(true);
   const [hapticResults, setHapticResults] = useState(true);
   // Default true ("stay connected") -- matches loadStayConnectedInBackground
@@ -210,6 +214,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
       }
     });
     loadKeepAwakePreference().then(setKeepAwake);
+    loadBackupEnabled().then(setCloudBackup).catch(() => {});
     loadHapticTapsPreference().then(setHapticTaps);
     loadHapticResultsPreference().then(setHapticResults);
     loadStayConnectedInBackgroundPreference().then(setStayConnectedInBackground);
@@ -309,6 +314,28 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
     await saveTbCorrectionPreference(value);
   };
 
+  const toggleCloudBackup = async (value: boolean) => {
+    setCloudBackup(value);
+    await saveBackupEnabled(value);
+    if (value) scheduleBackup(500);   // catches up on anything not backed up yet
+  };
+
+  const restoreBackup = async () => {
+    if (restoring) return;
+    setRestoring(true);
+    const r = await restoreFromBackup();
+    setRestoring(false);
+    if (!r.ok) {
+      Alert.alert('Could not restore', r.message ?? 'Something went wrong. Try again.');
+    } else if (r.total === 0) {
+      Alert.alert('Nothing to restore', 'Your hCRI.io account has no backed-up readings yet.');
+    } else if (r.added === 0) {
+      Alert.alert('Already up to date', 'All of your backed-up readings are already in History.');
+    } else {
+      Alert.alert('Restored', `Added ${r.added} item${r.added === 1 ? '' : 's'} (readings and saved flickers) to History.`);
+    }
+  };
+
   const toggleKeepAwake = async (value: boolean) => {
     // Update the toggle immediately rather than waiting on the write to
     // resolve -- same "feel instant" reasoning as HomeScreen's disconnect().
@@ -357,6 +384,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
     setLoadedToken(newToken);
     setToken('');
     setHasSaved(true);
+    scheduleBackup(1000);   // sends any readings that were waiting for a token
   };
 
   const save = async () => {
@@ -889,6 +917,14 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
       {switchRow('Auto-connect to meter', 'On by default. The app looks for your meter when it opens and when you switch back to it, and skips the attempt while Bluetooth is off. Turn off to connect only when you tap Connect to Meter.', autoConnect, toggleAutoConnect)}
       {switchRow('Stay connected in background', "Keeps the meter connected when you switch away from the app or lock the screen, so coming back doesn't need a fresh reconnect. Turn off to disconnect the meter whenever the app isn't in the foreground instead (saves the meter's battery, at the cost of reconnecting every time).", stayConnectedInBackground, toggleStayConnectedInBackground)}
       {switchRow('Keep screen awake', 'Prevents the screen from locking during a session with the meter connected. Uses more battery.', keepAwake, toggleKeepAwake)}
+
+      {sectionHeader('Backup')}
+      {switchRow('Back up readings to hCRI.io', "Saves your reading history and saved flickers to your own hCRI.io account after each change, so reinstalling the app or changing phones doesn't lose it. Needs your API token (see hCRI.io account above); readings taken before you sign in are sent once you do. Backed-up readings are private to you: they are not reports and nobody else can see them. Deleting a reading here removes it from the backup too.", cloudBackup, toggleCloudBackup)}
+      {hasSaved && (
+        <View style={styles.saveButtonWrap}>
+          <PrimaryButton title={restoring ? 'Restoring…' : 'Restore readings from backup'} onPress={restoreBackup} variant="outline" style={styles.noTopMargin} />
+        </View>
+      )}
 
       {sectionHeader('Bridge')}
       {/* The spectral correction now lives in the bridge firmware (the app only applies it for older firmware, always on).

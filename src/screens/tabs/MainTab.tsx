@@ -225,6 +225,8 @@ export default function MainTab({
   const displayAnalysis = analysis ?? EMPTY_SPECTRAL_ANALYSIS;
   // Most recent saved reading, offered under the empty-state message so the screen isn't a dead end after a restart.
   const [lastSaved, setLastSaved] = useState<SavedReading | null>(null);
+  // Which chart page is showing. The "Ready" message belongs to the spectrum pages; the Flicker page has its own controls.
+  const [pageKey, setPageKey] = useState('spectrum');
   useEffect(() => {
     if (hasReading) return;
     let alive = true;
@@ -494,12 +496,12 @@ export default function MainTab({
           ) : portrait ? (
             // Upright tablet: the same swipeable pages as on a phone (spectrum, CIE, R-values, flicker), sized to this region.
             <ContentWidthContext.Provider value={chartRegionW + 62}>
-              <SpectrumTab tall result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} sampleLabel={result?.sampleLabel} flicker={flicker} pagerResetKey={pagerResetKey} />
+              <SpectrumTab tall result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} sampleLabel={result?.sampleLabel} flicker={flicker} pagerResetKey={pagerResetKey} onPageKey={setPageKey} />
             </ContentWidthContext.Provider>
           ) : (
-          <SpectrumTab result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} sampleLabel={result?.sampleLabel} flicker={flicker} pagerResetKey={pagerResetKey} />
+          <SpectrumTab result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} sampleLabel={result?.sampleLabel} flicker={flicker} pagerResetKey={pagerResetKey} onPageKey={setPageKey} />
           )}
-          {!hasReading && emptyState && (
+          {!hasReading && emptyState && !(flicker && pageKey === 'flicker') && (
             <View style={styles.emptyOverlay} pointerEvents="box-none">
               {emptyState.spinner ? <ActivityIndicator color={colors.accent} style={{ marginBottom: 8 }} /> : null}
               <Text style={styles.emptyTitle}>{emptyState.title}</Text>

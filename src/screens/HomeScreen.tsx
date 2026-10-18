@@ -31,10 +31,12 @@ import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage'
 import { loadAutoConnectPreference, loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference, loadTestReportIdPreference, loadMunkiCalHoursPreference, loadMunkiBridgeIds, saveMunkiBridgeId, loadSideTabPreference, saveSideTabPreference, loadSideTabModePreference, saveFoldableSeen } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
 import { addReading, loadHistory, recordUpload, renameReading, setReadingFlicker, updateReadingLed } from '../storage/readingHistory';
+import { addFlicker, updateFlicker } from '../storage/flickerHistory';
 import { fetchLedSuggestion, LedDetails, LedSuggestion } from '../hcri/ledApi';
 import useLedSuggestionsEnabled from '../hooks/useLedSuggestionsEnabled';
 import { ledPatch, hasLed, ledsOfReading } from '../hcri/leds';
 import { syncLedForReading } from '../hcri/ledSync';
+import { initBackup, offerRestoreIfEmpty, scheduleBackup } from '../hcri/backup';
 import { EMPTY_LED_LISTS, getCachedLedLists, LedLists, refreshLedLists } from '../hcri/ledLists';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
 import { shareDebugLog } from '../utils/shareLog';
@@ -1126,6 +1128,20 @@ export default function HomeScreen({ navigation }: any) {
   const flickerLatestRef = useRef<FlickerReading | null>(null);
   const canSampleReading = !!result && !result.source && !!currentReadingId && !uploadSucceeded && !lastUploadedReport && status === 'connected' && (mode === 'idle' || mode === 'flicker');
 
+  // An independent ('new') sample is saved to History's Flicker list when it ends, however it ends, so leaving the page never loses it.
+  const standaloneSavedRef = useRef(false);
+  const lastStandaloneFlickerIdRef = useRef<string | null>(null);
+  const saveStandaloneFlickerRef = useRef<() => void>(() => {});
+  saveStandaloneFlickerRef.current = () => {
+    const f = flickerLatestRef.current;
+    if (standaloneSavedRef.current || !f) return;
+    standaloneSavedRef.current = true;
+    const label = `${hpcsModelName(deviceName) ?? 'Meter'} flicker ${new Date().toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
+    addFlicker(f, label, hpcsModelName(deviceName) ?? undefined)
+      .then((saved) => { lastStandaloneFlickerIdRef.current = saved.id; })
+      .catch((e: any) => appendLog(`Failed to save flicker sample: ${e?.message ?? e}`));
+  };
+
   const finishReadingSample = useCallback(() => {
     const f = flickerLatestRef.current ?? result?.flicker ?? null;
     if (!f) return;
@@ -1142,12 +1158,15 @@ export default function HomeScreen({ navigation }: any) {
     const wasReading = flickerTarget === 'reading';
     await stopActiveMode();
     if (wasReading) finishReadingSample();
+    else saveStandaloneFlickerRef.current();
   }, [mode, flickerTarget, stopActiveMode, finishReadingSample]);
 
   const startFlickerSample = useCallback(async (target: 'reading' | 'new') => {
     if (mode !== 'idle' || !connRef.current) return;
     setFlickerTarget(target);
     flickerLatestRef.current = null;
+    standaloneSavedRef.current = false;
+    lastStandaloneFlickerIdRef.current = null;
     setMode('flicker');
     if (target === 'new') {
       // An independent sample leaves the current reading behind (it's already in History): clear it and its flicker.
@@ -1170,6 +1189,7 @@ export default function HomeScreen({ navigation }: any) {
       (err) => {
         sessionRef.current = null;
         setMode('idle');
+        if (target === 'new') saveStandaloneFlickerRef.current();
         if (err) {
           hapticFailure();
           Alert.alert('Flicker reading stopped', err.message ?? 'The meter stopped responding.');
@@ -1210,10 +1230,12 @@ export default function HomeScreen({ navigation }: any) {
           creds.token,
           appendLog
         );
+        // A standalone sample that was sent on its own is marked as uploaded in History's Flicker list.
+        if (ok && !flickerFromReading && lastStandaloneFlickerIdRef.current) updateFlicker(lastStandaloneFlickerIdRef.current, { uploaded: true }).catch(() => {});
         return ok ? null : 'Upload failed. Check Logs for details (hCRI.io may not support flicker yet).';
       },
     }),
-    [deviceName, appendLog]
+    [deviceName, appendLog, flickerFromReading]
   );
 
   const flickerSettingsApi = useMemo<FlickerSettingsApi>(
@@ -1384,9 +1406,17 @@ export default function HomeScreen({ navigation }: any) {
   // Home) can also put up a share sheet and needs to be able to set this
   // same flag.
 
+  // Optional cloud backup of the history (hcri/backup.ts): starts once, backs up after each change, offers a restore on a fresh install.
+  useEffect(() => {
+    initBackup(appendLog);
+    const t = setTimeout(() => { offerRestoreIfEmpty(); }, 3000);
+    return () => clearTimeout(t);
+  }, []);
+
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
+        scheduleBackup(2000, appendLog);
         // A reading taken with the Torch Bearer's own button while the app was away: ask the bridge for its last one
         // (the app ignores it if it already has it).
         const tbConn = connRef.current;

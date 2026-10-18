@@ -87,6 +87,9 @@ interface Props {
   onLedConfirm: (id: string, d: { brand?: string; model?: string; cct?: string }) => void;
   onLedPick: (reading: SavedReading) => void;
   onLedDismiss: (id: string) => void;
+  /** Readings that may take a saved flicker (no flicker yet, and a free saved flicker exists) get an "Add saved flicker" button. */
+  addFlickerIds?: Set<string>;
+  onAddFlicker?: (reading: SavedReading) => void;
 }
 
 function formatSavedAt(ms: number): string {
@@ -132,7 +135,11 @@ function HistoryRow({
   onLedConfirm,
   onLedPick,
   onLedDismiss,
+  canAddFlicker,
+  onAddFlicker,
 }: {
+  canAddFlicker?: boolean;
+  onAddFlicker?: (reading: SavedReading) => void;
   reading: SavedReading;
   uploading: boolean;
   onRename: (id: string, label: string) => void;
@@ -309,7 +316,7 @@ function HistoryRow({
             {analysis.cct.toFixed(0)}K · Ra {Math.round(analysis.ra)}
           </Text>
           {!!reading.result.flicker && (
-            <HintPressable hint="Includes a flicker reading" activeOpacity={1} style={{ marginLeft: 6 }} accessibilityLabel="Includes a flicker reading">
+            <HintPressable hint={reading.reportId != null ? 'Includes a flicker reading, sent with its report' : 'Includes a flicker reading'} activeOpacity={1} style={{ marginLeft: 6 }} accessibilityLabel={reading.reportId != null ? 'Includes a flicker reading, sent with its report' : 'Includes a flicker reading'}>
               <Svg width={16} height={12} viewBox="0 0 16 12">
                 <Polyline points="0,9 3,9 3,2 7,2 7,9 11,9 11,2 15,2" fill="none" stroke={colors.accent} strokeWidth={1.6} strokeLinejoin="round" />
               </Svg>
@@ -318,6 +325,11 @@ function HistoryRow({
         </View>
         {!selectMode && (
           <View style={styles.rowHeaderButtons}>
+            {canAddFlicker && onAddFlicker && (
+              <HintPressable hint="Add a saved flicker" onPress={() => onAddFlicker(reading)} style={{ marginRight: 14 }} accessibilityRole="button" accessibilityLabel="Add saved flicker" hitSlop={{ top: 10, bottom: 10, left: 7, right: 7 }}>
+                <Icon name="bolt" color={colors.accent} size={ICON_SIZE.row} />
+              </HintPressable>
+            )}
             <HintPressable hint="Upload to hCRI.io" onPress={() => onUploadWithLabel(reading.id, reading.label)} disabled={uploading} style={{ marginRight: 14, opacity: uploading ? 0.6 : 1 }} accessibilityRole="button" accessibilityLabel="Upload reading" hitSlop={{ top: 10, bottom: 10, left: 7, right: 7 }}>
               {uploading ? <ActivityIndicator size="small" color={colors.accent} /> : <Icon name="upload" color={colors.accent} size={ICON_SIZE.row} />}
             </HintPressable>
@@ -517,6 +529,8 @@ export default function HistoryTab({
   onLedConfirm,
   onLedPick,
   onLedDismiss,
+  addFlickerIds,
+  onAddFlicker,
 }: Props) {
   const { colors } = useTheme();
   const [selectMode, setSelectMode] = useState(false);
@@ -822,6 +836,8 @@ export default function HistoryTab({
           onLedConfirm={onLedConfirm}
           onLedPick={onLedPick}
           onLedDismiss={onLedDismiss}
+          canAddFlicker={addFlickerIds?.has(r.id)}
+          onAddFlicker={onAddFlicker}
         />
       ))}
 
@@ -853,6 +869,8 @@ export default function HistoryTab({
           onLedConfirm={onLedConfirm}
           onLedPick={onLedPick}
           onLedDismiss={onLedDismiss}
+                canAddFlicker={addFlickerIds?.has(r.id)}
+                onAddFlicker={onAddFlicker}
               />
             ))}
           </View>

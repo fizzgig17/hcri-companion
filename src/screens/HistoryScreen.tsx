@@ -18,7 +18,7 @@
 
 import { useLayoutMode } from '../layout';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Text, View, ScrollView, StyleSheet, Alert, Linking } from 'react-native';
+import { Text, View, ScrollView, StyleSheet, Alert, Linking, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { useTheme } from '../contexts/ThemeContext';
@@ -31,9 +31,14 @@ import {
   deleteReading,
   deleteManyReadings,
   setReadingReportLink,
+  setReadingFlicker,
   updateReadingLed,
   SavedReading,
 } from '../storage/readingHistory';
+import { loadFlickers, updateFlicker, deleteFlickers, flickersForReading, attachedReading, SavedFlicker } from '../storage/flickerHistory';
+import FlickerHistoryTab from './tabs/FlickerHistoryTab';
+import FlickerPickerModal from '../components/FlickerPickerModal';
+import { uploadFlickerToHcri } from '../hcri/uploadFlickerToHcri';
 import { loadHcriCredentials } from '../storage/secureStorage';
 import { buildCsv } from '../hcri/buildCsv';
 import { uploadReadingToHcri } from '../hcri/uploadFlickerToHcri';
@@ -74,7 +79,14 @@ export default function HistoryScreen({ navigation, embedded, refreshKey, onRena
   // tappable.
   const [copyingLinkId, setCopyingLinkId] = useState<string | null>(null);
 
+  // Saved standalone flicker samples (the "Flicker" list), and the picker for attaching one to a reading.
+  const [section, setSection] = useState<'readings' | 'flicker'>('readings');
+  const [flickers, setFlickers] = useState<SavedFlicker[]>([]);
+  const [flickerUploadingId, setFlickerUploadingId] = useState<string | null>(null);
+  const [flickerPickFor, setFlickerPickFor] = useState<SavedReading | null>(null);
+
   const refreshHistory = useCallback(() => {
+    loadFlickers().then(setFlickers).catch(() => {});
     loadHistory()
       .then(setHistory)
       .catch((e: any) => appendLog(`Failed to load reading history: ${e.message}`))
@@ -136,6 +148,58 @@ export default function HistoryScreen({ navigation, embedded, refreshKey, onRena
     return unsubscribe;
     // refreshKey: Home changes it when a reading is saved or uploaded, so the embedded list stays current.
   }, [navigation, refreshHistory, refreshKey]);
+
+  const renameFlicker = useCallback(async (id: string, label: string) => {
+    await updateFlicker(id, { label });
+    setFlickers((prev) => prev.map((f) => (f.id === id ? { ...f, label } : f)));
+  }, []);
+
+  const deleteFlicker = useCallback((id: string) => {
+    Alert.alert('Delete this flicker?', 'It is removed from History (and from your cloud backup).', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => { await deleteFlickers([id]); setFlickers((prev) => prev.filter((f) => f.id !== id)); } },
+    ]);
+  }, []);
+
+  const uploadSavedFlicker = useCallback(async (f: SavedFlicker) => {
+    const creds = await loadHcriCredentials();
+    if (!creds?.token) { Alert.alert('Not signed in', 'Add your hCRI.io username and API token in Settings first.'); return; }
+    setFlickerUploadingId(f.id);
+    const ok = await uploadFlickerToHcri(f.flicker, { label: f.label, model: f.model }, creds.token, appendLog);
+    setFlickerUploadingId(null);
+    if (ok) {
+      await updateFlicker(f.id, { uploaded: true });
+      setFlickers((prev) => prev.map((x) => (x.id === f.id ? { ...x, uploaded: true } : x)));
+    } else {
+      Alert.alert('Upload failed', 'Check Logs for details.');
+    }
+  }, [appendLog]);
+
+  /** Attaches a saved flicker to a reading (copied into it, so it goes up with the reading). A reading that already has a report gets it sent to that report now. */
+  const attachFlicker = useCallback(async (reading: SavedReading, f: SavedFlicker) => {
+    setFlickerPickFor(null);
+    try {
+      await setReadingFlicker(reading.id, f.flicker);
+      await updateFlicker(f.id, { readingId: reading.id });
+    } catch (e: any) {
+      Alert.alert('Could not attach', String(e?.message ?? e));
+      return;
+    }
+    setHistory((prev) => prev.map((r) => (r.id === reading.id ? { ...r, result: { ...r.result, flicker: f.flicker } } : r)));
+    setFlickers((prev) => prev.map((x) => (x.id === f.id ? { ...x, readingId: reading.id } : x)));
+    if (reading.reportId != null) {
+      const creds = await loadHcriCredentials();
+      const ok = creds?.token ? await uploadFlickerToHcri(f.flicker, { reportId: reading.reportId, label: reading.label, model: f.model }, creds.token, appendLog) : false;
+      if (!ok) Alert.alert('Attached to the reading', "The flicker could not be added to the uploaded report just now, so the report doesn't have it yet. Check Logs for details.");
+    }
+  }, [appendLog]);
+
+  // Readings that can take a saved flicker: no flicker yet, and at least one saved flicker not attached to a reading.
+  const addFlickerIds = useMemo(() => {
+    const free = flickers.filter((f) => !attachedReading(f, history));
+    if (!free.length) return new Set<string>();
+    return new Set(history.filter((r) => !r.result.flicker && !r.result.sampleLabel).map((r) => r.id));
+  }, [flickers, history]);
 
   /** Renames a History entry by itself -- no upload involved (e.g. committed on blur in HistoryTab). */
   const renameFromHistory = useCallback(async (id: string, label: string) => {
@@ -378,6 +442,11 @@ export default function HistoryScreen({ navigation, embedded, refreshKey, onRena
     content: embedded ? { padding: 12, paddingBottom: 24 } : { padding: 16, paddingBottom: 56 },
     pane: { flex: 1, backgroundColor: colors.background },
     title: { fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: 14 },
+    switchRow: { flexDirection: 'row', backgroundColor: colors.card, borderRadius: 10, borderWidth: 1, borderColor: colors.cardBorder, padding: 3, marginBottom: 14 },
+    switchBtn: { flex: 1, alignItems: 'center', paddingVertical: 7, borderRadius: 8 },
+    switchBtnActive: { backgroundColor: colors.accent },
+    switchText: { color: colors.muted, fontWeight: '600', fontSize: 14 },
+    switchTextActive: { color: '#fff' },
   });
 
   const Frame: React.ComponentType<any> = embedded ? View : SafeAreaView;
@@ -396,7 +465,22 @@ export default function HistoryScreen({ navigation, embedded, refreshKey, onRena
           straight through. */}
       <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>History</Text>
+        <View style={styles.switchRow}>
+          {(['readings', 'flicker'] as const).map((k) => {
+            const active = section === k;
+            return (
+              <TouchableOpacity key={k} style={[styles.switchBtn, active && styles.switchBtnActive]} onPress={() => setSection(k)} accessibilityRole="button" accessibilityState={{ selected: active }}>
+                <Text style={[styles.switchText, active && styles.switchTextActive]}>{k === 'readings' ? 'Readings' : `Flicker${flickers.length ? ` (${flickers.length})` : ''}`}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        {section === 'flicker' ? (
+          <FlickerHistoryTab flickers={flickers} readings={history} loading={historyLoading} uploadingId={flickerUploadingId} onRename={renameFlicker} onDelete={deleteFlicker} onUpload={uploadSavedFlicker} />
+        ) : (
         <HistoryTab
+          addFlickerIds={addFlickerIds}
+          onAddFlicker={setFlickerPickFor}
           history={shownHistory}
           loading={historyLoading}
           onRename={renameFromHistory}
@@ -426,7 +510,15 @@ export default function HistoryScreen({ navigation, embedded, refreshKey, onRena
           }}
           copyingLinkId={copyingLinkId}
         />
+        )}
       </ScrollView>
+      <FlickerPickerModal
+        visible={!!flickerPickFor}
+        readingLabel={flickerPickFor?.label ?? ''}
+        flickers={flickerPickFor ? flickersForReading(flickerPickFor, flickers, history) : []}
+        onPick={(f) => flickerPickFor && attachFlicker(flickerPickFor, f)}
+        onCancel={() => setFlickerPickFor(null)}
+      />
       <LedPickerModal
         visible={!!ledPickFor}
         lists={ledLists}
