@@ -72,12 +72,14 @@ interface Props {
   resetKey?: unknown;
   /** Jump to the page with this key whenever `n` changes (e.g. start of a Flicker run). */
   goTo?: { key: string; n: number };
+  /** Called with the key of the page now showing (and once on mount), so a parent can react to which page is up. */
+  onPageKey?: (key: string) => void;
 }
 
 // Dots row footprint in fill mode (26 tall + 8 above + 4 below, same as the flow layout).
 const DOTS_H = 38;
 
-export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZONTAL_PADDING, fixedHeight, fill, resetKey, goTo: goToTarget }: Props) {
+export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZONTAL_PADDING, fixedHeight, fill, resetKey, goTo: goToTarget, onPageKey }: Props) {
   const { colors } = useTheme();
   // Confirmed 2026-10-03: measuring this via onLayout at all -- even
   // seeded with a close estimate that onLayout then "corrects" -- means
@@ -97,6 +99,10 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
   // fill mode: fixedHeight is the TOTAL height available (pages + dots row), all laid out with explicit numbers.
   const clipH = fill ? Math.max(0, Math.floor((fixedHeight ?? 0) - DOTS_H)) : 0;
   const pageH = fill ? clipH : fixedHeight;
+  const activeKey = pages[Math.min(activeIndex, Math.max(0, pages.length - 1))]?.key;
+  useEffect(() => {
+    if (activeKey) onPageKey?.(activeKey);
+  }, [activeKey]);
   const [scrollLocked, setScrollLocked] = useState(false);
   const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   // Note: no system-gesture exclusion zones here. They used to reserve the pager's left/right

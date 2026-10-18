@@ -73,6 +73,8 @@ interface Props {
   flicker?: { reading: FlickerReading | null; running: boolean; focusNonce: number; history: { f: number; p: number }[]; settings?: FlickerSettingsApi; upload?: FlickerUploadApi; target?: 'reading' | 'new' | null; onStart?: (target: 'reading' | 'new') => void; onStop?: () => void; canSampleReading?: boolean; redoLabel?: string; readingNote?: string; fromReading?: boolean };
   /** Changing this sends the pager back to the Spectrum page; defaults to `result`. Live updates replace `result` constantly without changing this. */
   pagerResetKey?: unknown;
+  /** Reports which page (spectrum, cie, rvalues, flicker...) is showing. */
+  onPageKey?: (key: string) => void;
 }
 
 // The screen's own scroll-content padding (HomeScreen's and
@@ -103,7 +105,7 @@ function FixedBox({ h, center, children }: { h: number; center?: boolean; childr
   return <View style={{ height: h, justifyContent: center ? 'center' : 'flex-start' }}>{h > 0 ? children(h) : null}</View>;
 }
 
-export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 0, regionHeight, sampleLabel, flicker, pagerResetKey, tall }: Props) {
+export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 0, regionHeight, sampleLabel, flicker, pagerResetKey, tall, onPageKey }: Props) {
   const source = sampleLabel
     ? `This is a sample from a public hCRI.io report (${sampleLabel}), not a reading from your own meter. It isn't saved to History and can't be uploaded or shared.`
     : 'This comes from the reading your meter just took.';
@@ -195,6 +197,7 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
   return (
     <SwipablePages
       resetKey={pagerResetKey ?? result}
+      onPageKey={onPageKey}
       goTo={flicker ? { key: 'flicker', n: flicker.focusNonce } : undefined}
       horizontalChrome={totalChrome}
       fill={fill}
