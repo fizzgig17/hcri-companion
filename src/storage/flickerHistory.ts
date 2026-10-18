@@ -9,7 +9,7 @@
 //                "in a report" is read from that reading's own report link, so it never goes stale.
 //   uploaded  -- sent to hCRI.io on its own (a standalone flicker reading there, not part of any report)
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createChunkedStore } from './chunkedList';
 import type { FlickerCapture } from '../ble/parseResult';
 import { notifyHistoryChanged } from './readingHistory';
 import { queueBackupDelete } from './backupState';
@@ -19,24 +19,18 @@ import { SavedFlicker, FLICKER_LIMIT, trimFlickers, isRestorableFlicker, attache
 export { FLICKER_LIMIT, trimFlickers, isRestorableFlicker, attachedReading, flickersForReading, flickerAssociation };
 export type { SavedFlicker };
 
-const STORAGE_KEY = 'hcri.io.flickerHistory.v1';
+const store = createChunkedStore<SavedFlicker>('hcri.io.flickerHistory.v2', 'hcri.io.flickerHistory.v1');
 
 function makeId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export async function loadFlickers(): Promise<SavedFlicker[]> {
-  try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  try { return await store.load(); } catch { return []; }
 }
 
 async function saveAll(list: SavedFlicker[]): Promise<void> {
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  await store.save(list);
   notifyHistoryChanged();   // schedules the cloud backup
 }
 
