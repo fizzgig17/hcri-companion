@@ -103,7 +103,7 @@ jobs:
       #  the reason a dev build's own crash stack traces came out
       #  obfuscated, like the react-native-screens one this session spent
       #  a while tracking down).
-      # Dev builds are a separate app ("hCRI Companion (dev)", com.hcricompanion.dev) -- see android/app/build.gradle.
+      # Dev builds are a separate app ("hCRI Dev", com.hcricompanion.dev) -- see android/app/build.gradle.
       # Its version code is just this run's number (it has its own Play listing, so it never clashes with prod's).
       # Builds the APK (sideload) and the AAB (Google Play internal testing).
       - name: Build release APK and AAB
