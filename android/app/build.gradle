@@ -101,13 +101,16 @@ android {
 
     namespace "com.hcricompanion"
     defaultConfig {
-        applicationId "com.hcricompanion"
+        // Dev builds (develop branch, -PdevApp=true) install as a separate app, "hCRI Companion (dev)", with their own
+        // Play listing for the internal testing track, so their version codes never clash with production's.
+        applicationId project.hasProperty('devApp') ? "com.hcricompanion.dev" : "com.hcricompanion"
+        manifestPlaceholders = [appLabel: project.hasProperty('devApp') ? "hCRI Companion (dev)" : "hCRI Companion"]
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         // Also update src/buildInfo.ts (APP_VERSION/BUILD_DATE) in the same
         // commit -- that's the JS-visible copy of this, shown at the top of
         // Settings. Gradle values here aren't reachable from JS directly.
-        versionCode 61
+        versionCode project.hasProperty('devVersionCode') ? devVersionCode.toInteger() : 61
         versionName "2026.10.18.2"
     }
     signingConfigs {

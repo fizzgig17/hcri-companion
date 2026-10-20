@@ -103,11 +103,16 @@ jobs:
       #  the reason a dev build's own crash stack traces came out
       #  obfuscated, like the react-native-screens one this session spent
       #  a while tracking down).
-      - name: Build release APK
+      # Dev builds are a separate app ("hCRI Companion (dev)", com.hcricompanion.dev) -- see android/app/build.gradle.
+      # Its version code is just this run's number (it has its own Play listing, so it never clashes with prod's).
+      # Builds the APK (sideload) and the AAB (Google Play internal testing).
+      - name: Build release APK and AAB
         working-directory: android
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleRelease \
+          ./gradlew assembleRelease bundleRelease \
+            -PdevApp=true \
+            -PdevVersionCode=${{ github.run_number }} \
             -PreactNativeArchitectures=arm64-v8a \
             -PdisableMinifyForDev=true \
             -PHCRICOMPANION_RELEASE_STORE_FILE=hcricompanion-release.keystore \
@@ -123,8 +128,10 @@ jobs:
       # hCRICompanion.apk itself (applicationVariants.all{} outputFileName),
       # so this just moves it up next to the workflow rather than renaming
       # an "app-release.apk" that was never actually produced.
-      - name: Move APK
-        run: cp android/app/build/outputs/apk/release/hCRICompanion.apk hCRICompanion.apk
+      - name: Move APK and AAB
+        run: |
+          cp android/app/build/outputs/apk/release/hCRICompanion.apk hCRICompanion.apk
+          cp android/app/build/outputs/bundle/release/app-release.aab hCRICompanion-dev.aab
 
       # Moves (doesn't copy) the "dev-latest" tag to this commit every run,
       # so the release this points to is always the one just built here --
@@ -153,3 +160,18 @@ jobs:
             deploy-master.yml).
           files: |
             hCRICompanion.apk
+            hCRICompanion-dev.aab
+
+      # Uploads the dev AAB to Google Play's INTERNAL testing track for com.hcricompanion.dev (the dev app).
+      # Off until the repo variable PLAY_DEV_UPLOAD is set to "true" -- set it after the dev app exists in Play Console,
+      # its first AAB has been uploaded by hand (Play requires that), and the service account has access to it.
+      # Uses the same PLAY_SERVICE_ACCOUNT_JSON secret as the prod workflow.
+      - name: Upload AAB to Google Play (internal testing)
+        if: vars.PLAY_DEV_UPLOAD == 'true'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.hcricompanion.dev
+          releaseFiles: hCRICompanion-dev.aab
+          track: internal
+          status: ${{ vars.PLAY_DEV_RELEASE_STATUS || 'completed' }}
