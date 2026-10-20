@@ -1,7 +1,7 @@
 // src/screens/tabs/UpdateTab.tsx -- Settings > Update: current version, check, open the Play Store listing.
 
 import React from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useUpdate } from '../../contexts/UpdateContext';
 import { APP_VERSION } from '../../buildInfo';
@@ -58,7 +58,7 @@ export default function UpdateTab() {
 
   const message =
     status === 'checking'
-      ? 'Checking Google Play…'
+      ? (Platform.OS === 'ios' ? 'Checking for a newer version…' : 'Checking Google Play…')
       : status === 'available'
         ? 'A new version is available.'
         : status === 'uptodate'
@@ -77,7 +77,8 @@ export default function UpdateTab() {
         <Text style={[styles.status, { marginTop: 0 }]}>{message}</Text>
       </View>
       {!!detail && status !== 'error' && <Text style={styles.note}>{detail}</Text>}
-      {status === 'error' && (
+      {status === 'error' && Platform.OS === 'ios' && <Text style={styles.note}>{`${error ?? ''} Updates are installed through TestFlight.`}</Text>}
+      {status === 'error' && Platform.OS !== 'ios' && (
         <Text style={styles.note}>
           {notFromPlay
             ? "This copy of the app wasn't installed from Google Play, so Play can't check it. Updates come through Google Play (including the testing track)."
@@ -87,7 +88,7 @@ export default function UpdateTab() {
       {/* One button: "Open in Play Store" once Play has a newer version, else "Check for updates".
           The update itself is installed from the Play Store. */}
       {status === 'available' ? (
-        <PrimaryButton title="Open in Play Store" onPress={openStore} />
+        <PrimaryButton title={Platform.OS === 'ios' ? 'Open in TestFlight' : 'Open in Play Store'} onPress={openStore} />
       ) : (
         <PrimaryButton title={status === 'checking' ? 'Checking…' : 'Check for updates'} onPress={() => check(false)} disabled={status === 'checking'} variant="outline" />
       )}

@@ -42,7 +42,7 @@ export default function UpdateBanner() {
   const translateY = open.interpolate({ inputRange: [0, 1], outputRange: [-(CAPSULE_H + topPad + 20), 0] });
 
   const opacity = open.interpolate({ inputRange: [0, 0.25, 1], outputRange: [0, 1, 1] });
-  const storeName = Platform.OS === 'ios' ? 'App Store' : 'Play Store';
+  const storeName = Platform.OS === 'ios' ? 'TestFlight' : 'Play Store';
 
   const light = scheme === 'light';
   const capsuleBg = light ? '#4b5160' : '#d6d6dc';

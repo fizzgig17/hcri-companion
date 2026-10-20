@@ -90,6 +90,7 @@ import TabBar from '../components/TabBar';
 import VersionStamp from '../components/VersionStamp';
 import UpdateTab from './tabs/UpdateTab';
 import { useUpdate } from '../contexts/UpdateContext';
+import { iosUpdatesSupported } from '../utils/iosUpdate';
 import { hapticTap, hapticSuccess, setTapHapticsEnabled, setResultHapticsEnabled } from '../utils/haptics';
 
 // Labels/order for the Light/Dark/System picker below -- System first since
@@ -1025,8 +1026,8 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
         <TabBar
           tabs={[
             { key: 'settings', label: 'Settings' },
-            // The Update tab checks Google Play, so it is Android-only for now.
-            ...(Platform.OS === 'android' ? [{ key: 'update' as const, label: 'Update', badge: update.status === 'available' }] : []),
+            // The Update tab checks Google Play (Android) or the published production TestFlight build (iOS, production builds only).
+            ...(Platform.OS === 'android' || (Platform.OS === 'ios' && iosUpdatesSupported) ? [{ key: 'update' as const, label: 'Update', badge: update.status === 'available' }] : []),
             { key: 'about', label: 'About' },
           ]}
           active={settingsTab}

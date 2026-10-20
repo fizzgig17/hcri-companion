@@ -7,7 +7,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { useLog } from './LogContext';
+import { Platform } from 'react-native';
 import { checkForUpdate, openPlayStore, updatesSupported } from '../utils/inAppUpdate';
+import { checkIosUpdate, iosUpdatesSupported, openTestFlight } from '../utils/iosUpdate';
 
 export type UpdateStatus = 'idle' | 'checking' | 'uptodate' | 'available' | 'error';
 
@@ -23,7 +25,7 @@ interface UpdateState {
   check: (announce?: boolean) => Promise<void>;
   /** The banner may show (set by the launch check or the test button). */
   bannerEligible: boolean;
-  /** Opens the app's Play Store listing, where the update is installed. */
+  /** Opens the app's Play Store listing (Android) or TestFlight page (iOS), where the update is installed. */
   openStore: () => Promise<void>;
   dismissBanner: () => void;
 }
@@ -43,6 +45,34 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
 
   const check = useCallback(async (announce: boolean = false) => {
     if (busy.current) return;
+    if (Platform.OS === 'ios') {
+      // Production iOS installs only (see utils/iosUpdate.ts); development builds update through TestFlight on their own.
+      if (!iosUpdatesSupported) return;
+      busy.current = true;
+      lastCheckRef.current = Date.now();
+      setBannerEligible(false);
+      setStatus('checking');
+      setError(null);
+      try {
+        const info = await checkIosUpdate();
+        const d = info.latest
+          ? `Newest production build ${info.latest}${info.version ? ` (v${info.version})` : ''}; installed build ${info.installed}`
+          : `No production build published yet; installed build ${info.installed}`;
+        setDetail(d);
+        appendLog(`Update check (${announce ? 'automatic' : 'manual'}): ${d}`);
+        setCode(info.latest);
+        setStatus(info.available ? 'available' : 'uptodate');
+        setBannerEligible(announce && info.available);
+      } catch (e: any) {
+        setStatus('error');
+        setError(e?.message || 'Could not check for updates.');
+        setDetail('');
+        appendLog(`Update check failed: ${e?.message || 'unknown error'}`);
+      } finally {
+        busy.current = false;
+      }
+      return;
+    }
     if (!updatesSupported) {
       setStatus('error');
       setError('Update checks are only available on Android.');
@@ -92,7 +122,7 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
       bannerDismissed: dismissedCode === availableVersionCode && availableVersionCode !== 0,
       check,
       bannerEligible,
-      openStore: openPlayStore,
+      openStore: Platform.OS === 'ios' ? openTestFlight : openPlayStore,
       dismissBanner: () => setDismissedCode(availableVersionCode),
     }),
     [status, availableVersionCode, detail, error, dismissedCode, check, bannerEligible],
