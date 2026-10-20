@@ -33,6 +33,9 @@ name: Upload iOS build to TestFlight
 on:
   workflow_dispatch: {}
 
+permissions:
+  contents: write
+
 concurrency:
   group: ios-testflight
   cancel-in-progress: false
@@ -285,6 +288,28 @@ jobs:
                                                                    'relationships': {'build': {'data': {'type': 'builds', 'id': build_id}}}}})
           print('Labeled build', os.environ['BUILD_NUMBER'], 'as', branch)
           PY
+
+      # Production (master) uploads only: record the newest production build number in a GitHub release that the app's
+      # update check reads (src/utils/iosUpdate.ts). Runs after the build has been processed by TestFlight (the label
+      # step above waits for that), so the app never announces an update that isn't installable yet. Development
+      # (develop) uploads never touch this release, so the app only ever shows production updates.
+      - name: Publish production build number (for the app's update check)
+        if: github.ref_name == 'master'
+        run: |
+          VERSION=$(grep -m1 'MARKETING_VERSION' ios/hCRICompanion.xcodeproj/project.pbxproj | sed -E 's/.*= *([0-9.]+);.*/\1/')
+          printf 'Production iOS build, published by ios-testflight.yml.\n\nbuild: %s\nversion: %s\n' "${{ github.run_number }}" "$VERSION" > ios-prod-release.md
+          git tag -f ios-prod-latest
+          git push origin -f ios-prod-latest
+
+      - name: Publish ios-prod-latest release
+        if: github.ref_name == 'master'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ios-prod-latest
+          name: "iOS production build ${{ github.run_number }}"
+          prerelease: true
+          make_latest: false
+          body_path: ios-prod-release.md
 
       # `gh` in the authoring sandbox can't download logs, so surface the real errors as annotations on failure.
       - name: Annotate errors
