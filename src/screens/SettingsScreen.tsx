@@ -1035,7 +1035,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
         />
       </View>
       )}
-      {settingsTab === 'update' && Platform.OS === 'android' ? (
+      {settingsTab === 'update' && (Platform.OS === 'android' || iosUpdatesSupported) ? (
         <ScrollView automaticallyAdjustKeyboardInsets style={styles.scrollArea} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat} keyboardShouldPersistTaps="handled">
           <VersionStamp />
           <UpdateTab />
