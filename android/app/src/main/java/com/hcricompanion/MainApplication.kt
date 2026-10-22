@@ -19,6 +19,7 @@ class MainApplication : Application(), ReactApplication {
           add(GestureExclusionPackage())
           add(InAppUpdatePackage())
           add(GalleryPickerPackage())
+          add(ImageClipboardPackage())
         },
     )
   }

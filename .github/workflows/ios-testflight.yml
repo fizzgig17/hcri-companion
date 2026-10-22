@@ -25,6 +25,14 @@
 #        IOS_PROFILE_NAME        the profile's name (informational; the name inside the file is what is used)
 # Without them it falls back to automatic signing (-allowProvisioningUpdates) with the API key. The API key is still
 # used either way, to upload to TestFlight and to write each build's "What to Test" text.
+#
+# Development builds (branch develop) are a SEPARATE app: bundle ID io.hcri.companion.dev, name "hCRI Dev", icon with a
+# DEV band, its own App Store Connect app. One-time setup for it:
+#   a. developer.apple.com -> Identifiers: register io.hcri.companion.dev (same capabilities as the main app).
+#   b. App Store Connect -> Apps -> + -> New App with that bundle ID; note its numeric Apple ID (App Information).
+#   c. developer.apple.com -> Profiles: create an App Store profile for it using the same Apple Distribution certificate.
+#   d. GitHub secret IOS_DEV_PROFILE = base64 of that .mobileprovision; GitHub variable IOS_DEV_APP_ID = the numeric Apple ID.
+# Until IOS_DEV_PROFILE is set, a develop build falls back to automatic signing with the API key.
 # The build number is the GitHub run number, so every upload has a higher one than the last.
 # The version shown to testers is MARKETING_VERSION in the Xcode project (bump it with each release).
 
@@ -100,6 +108,26 @@ jobs:
           echo "export const GIT_COMMIT = '${GITHUB_SHA::7}';" > src/gitCommit.ts
           echo "export const IOS_BUILD_NUMBER = '${{ github.run_number }}';" > src/buildNumber.ts
 
+      # Development builds are a separate app (see the header): different bundle ID, name and icon.
+      - name: Make this a development app (develop only)
+        if: github.ref_name != 'master'
+        run: |
+          bundle exec ruby -e '
+            require "xcodeproj"
+            proj = Xcodeproj::Project.open("ios/hCRICompanion.xcodeproj")
+            target = proj.targets.find { |t| t.name == "hCRICompanion" } or abort("target hCRICompanion not found")
+            target.build_configurations.each { |c| c.build_settings["PRODUCT_BUNDLE_IDENTIFIER"] = "io.hcri.companion.dev" }
+            proj.save
+          '
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName "hCRI Dev"' ios/hCRICompanion/Info.plist
+          /usr/libexec/PlistBuddy -c 'Set :CFBundleName "hCRI Dev"' ios/hCRICompanion/Info.plist
+          cp ios/dev/AppIcon-1024.png ios/hCRICompanion/Images.xcassets/AppIcon.appiconset/AppIcon-1024.png
+          echo "BUNDLE_ID=io.hcri.companion.dev" >> "$GITHUB_ENV"
+
+      - name: Record the production bundle ID (master only)
+        if: github.ref_name == 'master'
+        run: echo "BUNDLE_ID=io.hcri.companion" >> "$GITHUB_ENV"
+
       - name: Cache CocoaPods
         uses: actions/cache@v4
         with:
@@ -123,7 +151,7 @@ jobs:
         env:
           IOS_DIST_P12: ${{ secrets.IOS_DIST_P12 }}
           IOS_DIST_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
-          IOS_PROFILE: ${{ secrets.IOS_PROFILE }}
+          IOS_PROFILE: ${{ github.ref_name == 'master' && secrets.IOS_PROFILE || secrets.IOS_DEV_PROFILE }}
         run: |
           if [ -z "$IOS_DIST_P12" ] || [ -z "$IOS_PROFILE" ]; then
             echo "No IOS_DIST_P12 / IOS_PROFILE secrets: using automatic signing."
@@ -199,7 +227,7 @@ jobs:
           set -o pipefail
           if [ "$SIGN_MANUAL" = "1" ]; then
             SIGN_STYLE=manual
-            SIGN_EXTRA="<key>signingCertificate</key><string>Apple Distribution</string><key>provisioningProfiles</key><dict><key>io.hcri.companion</key><string>${PROFILE_NAME}</string></dict>"
+            SIGN_EXTRA="<key>signingCertificate</key><string>Apple Distribution</string><key>provisioningProfiles</key><dict><key>${BUNDLE_ID}</key><string>${PROFILE_NAME}</string></dict>"
           else
             SIGN_STYLE=automatic
             SIGN_EXTRA=""
@@ -240,12 +268,15 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           BUILD_NUMBER: ${{ github.run_number }}
           BRANCH: ${{ github.ref_name }}
+          ASC_APP_ID: ${{ github.ref_name == 'master' && '6821508876' || vars.IOS_DEV_APP_ID }}
         run: |
           python3 -m pip install --quiet --break-system-packages pyjwt cryptography || python3 -m pip install --quiet pyjwt cryptography
           python3 - <<'PY'
           import json, os, subprocess, time, urllib.request, urllib.error, jwt
 
-          APP_ID = '6821508876'
+          APP_ID = os.environ.get('ASC_APP_ID', '')
+          if not APP_ID:
+              raise SystemExit('No App Store Connect app id for this build (set the IOS_DEV_APP_ID variable); skipping the label.')
           key = open(os.path.join(os.environ['RUNNER_TEMP'], 'asc', 'AuthKey.p8')).read()
           sha = os.environ.get('GITHUB_SHA', '')[:7]
           subject = subprocess.run(['git', 'log', '-1', '--pretty=%s'], capture_output=True, text=True).stdout.strip()
