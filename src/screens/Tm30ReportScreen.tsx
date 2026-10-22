@@ -25,6 +25,7 @@ import { useLog } from '../contexts/LogContext';
 import { buildTm30Html, buildTm30ImageHtml, buildTm30PdfHtml, TM30_PDF_PAGE, Tm30Input } from '../utils/tm30Report';
 import { withBackgroundDisconnectSuppressed } from '../ble/backgroundDisconnectGuard';
 import PhotoScreen from './PhotoScreen';
+import ShareCardModal from '../components/ShareCardModal';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
 
 
@@ -39,6 +40,7 @@ export default function Tm30ReportScreen({ route, navigation, panel }: any) {
   // (iOS: Save Image; Android: Photos / Files / any app).
   const [imageHtml, setImageHtml] = useState<string | null>(null);
   const imageBusy = useRef(false);
+  const [cardOpen, setCardOpen] = useState(false);
 
   // Pager: 0 = report, 1 = photo. The photo page is only built the first time it's shown.
   const pagerRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
@@ -212,6 +214,7 @@ export default function Tm30ReportScreen({ route, navigation, panel }: any) {
           onError={() => onImageMessage('err:the image page failed to load')}
         />
       )}
+      <ShareCardModal visible={cardOpen} input={input} onClose={() => setCardOpen(false)} />
       <View style={styles.dock}>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <TouchableOpacity
@@ -224,6 +227,17 @@ export default function Tm30ReportScreen({ route, navigation, panel }: any) {
           >
             {imageHtml ? <ActivityIndicator size="small" color={colors.text} /> : <Icon name="download" color={colors.text} size={ICON_SIZE.pill} />}
             <Text style={[styles.iconBtnText, { color: colors.text }]} numberOfLines={1}>{imageHtml ? 'Making image…' : 'Save image'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.iconBtn, !!built.error && { opacity: 0.5 }]}
+            onPress={() => setCardOpen(true)}
+            disabled={!!built.error}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Share card"
+          >
+            <Icon name="photo" color={colors.text} size={ICON_SIZE.pill} />
+            <Text style={[styles.iconBtnText, { color: colors.text }]} numberOfLines={1}>Card</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.iconBtn, { borderColor: colors.accent }, (sharing || !!built.error) && { opacity: 0.5 }]}
