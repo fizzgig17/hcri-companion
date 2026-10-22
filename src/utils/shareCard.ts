@@ -37,6 +37,8 @@ export interface ShareCardModel {
   refVals: number[];
   /** 16 color-vector-graphic points, reference normalised to a unit circle. */
   cvg: [number, number][];
+  /** Reference illuminant's 16 points (the arrows start here). */
+  cvgRef: [number, number][];
   footer: string;
 }
 
@@ -123,6 +125,7 @@ export function buildShareCardModel(input: Tm30Input, look: ShareCardLook, versi
     vals,
     refVals,
     cvg: d.cvgTest,
+    cvgRef: d.cvgRef,
     footer: `hcri.io  ·  LED Color Rendering Analysis  ·  Companion v${version}`,
   };
 }
@@ -266,49 +269,66 @@ export function buildShareCardHtml(m: ShareCardModel): string {
     ctx.fillStyle = dimCol; ctx.font = '10px ' + MONO; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     ctx.fillText('COLOR VECTOR GRAPHIC', 16, y + 12);
     y += 18;
-    var cvgR = 220 * 0.36;
+    // Wheel: the same drawing as the TM-30 report (utils/tm30Report.ts cvgWheel), scaled from its 108 radius to R.
+    var R = 84, k = R / 108;
     ctx.textBaseline = 'top';
     ctx.fillStyle = rfCol; ctx.font = 'bold 25px ' + MONO; ctx.textAlign = 'left'; ctx.fillText(String(Rf), 16, y);
     ctx.fillStyle = dimCol; ctx.font = '11px ' + MONO; ctx.fillText('Rf', 16, y + 27);
     ctx.fillStyle = rgCol; ctx.font = 'bold 25px ' + MONO; ctx.textAlign = 'right'; ctx.fillText(String(Rg), 524, y);
     ctx.fillStyle = dimCol; ctx.font = '11px ' + MONO; ctx.fillText('Rg', 524, y + 27);
-    var cvgCy = y + 39 + cvgR + 10;
+    var cx = 270, cvgCy = y + 1.25 * R + 12;
+    function pt(r, aDeg){ var a = aDeg * Math.PI / 180; return [cx + r * Math.cos(a), cvgCy - r * Math.sin(a)]; }
     for (var h = 0; h < 16; h++) {
-      var a1 = (90 - h * 22.5) * Math.PI / 180, a2 = (90 - (h + 1) * 22.5) * Math.PI / 180;
-      var hc = hueToRGB(h * 22.5 + 11.25), mix = dark ? 0.4 : 0.35;
-      ctx.beginPath(); ctx.moveTo(270, cvgCy); ctx.arc(270, cvgCy, cvgR + 220 * 0.36 * 0.3194, a2, a1); ctx.closePath();
-      ctx.fillStyle = 'rgb(' + Math.min(255, Math.round(160 + (hc[0] - 160) * mix)) + ',' + Math.min(255, Math.round(160 + (hc[1] - 160) * mix)) + ',' + Math.min(255, Math.round(160 + (hc[2] - 160) * mix)) + ')';
+      var hc = hueToRGB(h * 22.5 + 11.25), mix = 0.45;
+      var p1 = pt(R + 16 * k, h * 22.5), p2 = pt(R + 16 * k, h * 22.5 + 22.5);
+      ctx.beginPath(); ctx.moveTo(cx, cvgCy); ctx.lineTo(p1[0], p1[1]);
+      ctx.arc(cx, cvgCy, R + 16 * k, -(h * 22.5) * Math.PI / 180, -(h * 22.5 + 22.5) * Math.PI / 180, true);
+      ctx.closePath();
+      ctx.fillStyle = 'rgb(' + Math.trunc(170 + (hc[0] - 170) * mix) + ',' + Math.trunc(170 + (hc[1] - 170) * mix) + ',' + Math.trunc(170 + (hc[2] - 170) * mix) + ')';
       ctx.fill();
     }
-    ctx.beginPath(); ctx.arc(270, cvgCy, cvgR, 0, Math.PI * 2); ctx.fillStyle = dark ? 'rgba(240,244,250,1)' : 'rgba(255,255,255,1)'; ctx.fill();
-    [0.25, 0.5, 0.75, 1].forEach(function(f){ ctx.beginPath(); ctx.arc(270, cvgCy, cvgR * f, 0, Math.PI * 2); if (f === 1) return; ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 0.4; ctx.stroke(); });
-    ctx.strokeStyle = 'rgba(0,0,0,0.07)'; ctx.lineWidth = 0.3;
-    for (h = 0; h < 16; h++) { var ar = (90 - h * 22.5) * Math.PI / 180; ctx.beginPath(); ctx.moveTo(270 + 11 * Math.cos(ar), cvgCy - 11 * Math.sin(ar)); ctx.lineTo(270 + cvgR * Math.cos(ar), cvgCy - cvgR * Math.sin(ar)); ctx.stroke(); }
-    var scaled = D.cvg.map(function(p){
-      var r = Math.max(0.05, Math.min(1.45, Math.sqrt(p[0] * p[0] + p[1] * p[1]))), a = Math.atan2(p[1], p[0]);
-      return [270 + cvgR * r * Math.cos(a), cvgCy - cvgR * r * Math.sin(a)];
+    ctx.beginPath(); ctx.arc(cx, cvgCy, R, 0, Math.PI * 2); ctx.fillStyle = '#f8f9fc'; ctx.fill();
+    [0.25, 0.5, 0.75, 1].forEach(function(f){
+      ctx.beginPath(); ctx.arc(cx, cvgCy, R * f, 0, Math.PI * 2);
+      ctx.strokeStyle = f === 1 ? '#1e1e1e' : '#b4bed2'; ctx.lineWidth = (f === 1 ? 1.6 : 0.6) * k; ctx.stroke();
     });
-    if (scaled.length) {
-      ctx.beginPath(); ctx.moveTo(scaled[0][0], scaled[0][1]);
-      scaled.slice(1).forEach(function(p){ ctx.lineTo(p[0], p[1]); });
-      ctx.closePath(); ctx.fillStyle = 'rgba(200,30,30,0.1)'; ctx.fill();
-      ctx.strokeStyle = 'rgba(190,25,25,0.9)'; ctx.lineWidth = 1.8; ctx.stroke();
-      scaled.forEach(function(p){ ctx.beginPath(); ctx.arc(p[0], p[1], 3, 0, Math.PI * 2); ctx.fillStyle = 'rgba(170,15,15,0.9)'; ctx.fill(); });
+    ctx.strokeStyle = '#c8d2dc'; ctx.lineWidth = 0.5 * k;
+    for (h = 0; h < 16; h++) { var s1 = pt(17 * k, h * 22.5), s2 = pt(R, h * 22.5); ctx.beginPath(); ctx.moveTo(s1[0], s1[1]); ctx.lineTo(s2[0], s2[1]); ctx.stroke(); }
+    function mapPt(p){
+      var r = Math.max(0.05, Math.min(1.45, Math.sqrt(p[0] * p[0] + p[1] * p[1]))), a = Math.atan2(p[1], p[0]);
+      return [cx + R * r * Math.cos(a), cvgCy - R * r * Math.sin(a)];
     }
-    ctx.beginPath(); ctx.arc(270, cvgCy, cvgR, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 0.8; ctx.stroke();
-    ctx.font = 'bold 9px ' + MONO; ctx.fillStyle = 'rgba(20,20,20,0.8)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    for (h = 0; h < 16; h++) { var al = (90 - h * 22.5) * Math.PI / 180; ctx.fillText(String(h + 1), 270 + 92 * Math.cos(al), cvgCy - 92 * Math.sin(al)); }
-    // CCT / Duv stacked in the middle of the wheel, well inside the circle.
-    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-    var line1 = cvgCy + cvgR * 0.34, line2 = cvgCy + cvgR * 0.56;
+    var tp = D.cvg.map(mapPt), rp = D.cvgRef.map(mapPt);
+    if (tp.length) {
+      ctx.beginPath(); ctx.moveTo(tp[0][0], tp[0][1]);
+      tp.slice(1).forEach(function(q){ ctx.lineTo(q[0], q[1]); });
+      ctx.closePath(); ctx.fillStyle = 'rgba(190,25,25,0.12)'; ctx.fill();
+      ctx.strokeStyle = '#be1919'; ctx.lineWidth = 2 * k; ctx.lineJoin = 'round'; ctx.stroke();
+      rp.forEach(function(r0, i){
+        var t = tp[i], dx = t[0] - r0[0], dy = t[1] - r0[1], len = Math.sqrt(dx * dx + dy * dy);
+        if (len < 1.2 * k) return;
+        var ux = dx / len, uy = dy / len, hd = 4 * k, hw = 1.6 * k;
+        ctx.strokeStyle = '#1e3c96'; ctx.lineWidth = 1 * k;
+        ctx.beginPath(); ctx.moveTo(r0[0], r0[1]); ctx.lineTo(t[0], t[1]); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(t[0], t[1]); ctx.lineTo(t[0] - ux * hd - uy * hw, t[1] - uy * hd + ux * hw); ctx.lineTo(t[0] - ux * hd + uy * hw, t[1] - uy * hd - ux * hw); ctx.closePath();
+        ctx.fillStyle = '#1e3c96'; ctx.fill();
+      });
+      tp.forEach(function(q){ ctx.beginPath(); ctx.arc(q[0], q[1], 2.6 * k, 0, Math.PI * 2); ctx.fillStyle = '#aa0f0f'; ctx.fill(); });
+    }
+    ctx.beginPath(); ctx.arc(cx, cvgCy, R, 0, Math.PI * 2); ctx.strokeStyle = '#141414'; ctx.lineWidth = 1.6 * k; ctx.stroke();
+    ctx.font = 'bold 10px ' + MONO; ctx.fillStyle = '#141414'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (h = 0; h < 16; h++) { var lp = pt(R + 27 * k, h * 22.5 + 11.25); ctx.fillText(String(h + 1), lp[0], lp[1]); }
+    // CCT / Duv stacked in the middle of the wheel.
+    ctx.textBaseline = 'alphabetic';
+    var line1 = cvgCy + R * 0.34, line2 = cvgCy + R * 0.56;
     ctx.font = 'bold 13px ' + MONO;
     [['CCT', cct + ' K', line1], ['Duv', duvTxt, line2]].forEach(function(t){
-      var wl = ctx.measureText(t[0] + '  ').width, wv = ctx.measureText(t[1]).width, x0 = 270 - (wl + wv) / 2;
+      var wl = ctx.measureText(t[0] + '  ').width, wv = ctx.measureText(t[1]).width, x0 = cx - (wl + wv) / 2;
       ctx.textAlign = 'left';
       ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillText(t[0], x0, t[2]);
       ctx.fillStyle = '#0a0a0a'; ctx.fillText(t[1], x0 + wl, t[2]);
     });
-    y = cvgCy + cvgR + 220 * 0.13;
+    y = cvgCy + 1.25 * R + 14;
 
     // Source / notes
     if (hasSource || hasNotes) {
