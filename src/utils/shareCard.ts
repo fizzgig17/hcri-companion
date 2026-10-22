@@ -316,7 +316,7 @@ export function buildShareCardHtml(m: ShareCardModel): string {
       tp.forEach(function(q){ ctx.beginPath(); ctx.arc(q[0], q[1], 2.6 * k, 0, Math.PI * 2); ctx.fillStyle = '#aa0f0f'; ctx.fill(); });
     }
     ctx.beginPath(); ctx.arc(cx, cvgCy, R, 0, Math.PI * 2); ctx.strokeStyle = '#141414'; ctx.lineWidth = 1.6 * k; ctx.stroke();
-    ctx.font = 'bold 10px ' + MONO; ctx.fillStyle = '#141414'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = 'bold 10px ' + MONO; ctx.fillStyle = dark ? 'rgba(210,230,250,0.95)' : '#141414'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     for (h = 0; h < 16; h++) { var lp = pt(R + 27 * k, h * 22.5 + 11.25); ctx.fillText(String(h + 1), lp[0], lp[1]); }
     // CCT / Duv stacked in the middle of the wheel.
     ctx.textBaseline = 'alphabetic';
