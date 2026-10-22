@@ -99,8 +99,6 @@ interface Props {
   onSaveLive: () => void;
   /** Opens the in-app TM-30 report for the current reading. */
   onShowTm30: () => void;
-  /** Opens the share card (save / copy an image of the reading). */
-  onShowCard?: () => void;
   /** iPad only: opens "See it on a photo" for the current reading. Omit to hide the button. */
   onShowPhoto?: () => void;
 }
@@ -269,7 +267,6 @@ export default function ActionBar(p: Props) {
             />
           )}
           {idle && p.hasReading && !p.canSaveLive && <SideButton icon="report" label="TM-30" onPress={p.onShowTm30} hint="TM-30 report" />}
-          {idle && p.hasReading && !p.canSaveLive && p.onShowCard && <SideButton icon="card" label="Card" onPress={p.onShowCard} hint="Share card: save or copy an image of this reading" />}
           {idle && p.hasReading && !p.canSaveLive && p.onShowPhoto && <SideButton icon="photo" label="Photo" onPress={p.onShowPhoto} />}
         </View>
       </View>

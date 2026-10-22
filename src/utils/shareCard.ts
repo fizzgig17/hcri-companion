@@ -281,7 +281,7 @@ export function buildShareCardHtml(m: ShareCardModel): string {
       ctx.fill();
     }
     ctx.beginPath(); ctx.arc(270, cvgCy, cvgR, 0, Math.PI * 2); ctx.fillStyle = dark ? 'rgba(240,244,250,1)' : 'rgba(255,255,255,1)'; ctx.fill();
-    [0.25, 0.5, 0.75, 1].forEach(function(f){ ctx.beginPath(); ctx.arc(270, cvgCy, cvgR * f, 0, Math.PI * 2); ctx.strokeStyle = f === 1 ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.1)'; ctx.lineWidth = f === 1 ? 1.2 : 0.4; ctx.stroke(); });
+    [0.25, 0.5, 0.75, 1].forEach(function(f){ ctx.beginPath(); ctx.arc(270, cvgCy, cvgR * f, 0, Math.PI * 2); if (f === 1) return; ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.lineWidth = 0.4; ctx.stroke(); });
     ctx.strokeStyle = 'rgba(0,0,0,0.07)'; ctx.lineWidth = 0.3;
     for (h = 0; h < 16; h++) { var ar = (90 - h * 22.5) * Math.PI / 180; ctx.beginPath(); ctx.moveTo(270 + 11 * Math.cos(ar), cvgCy - 11 * Math.sin(ar)); ctx.lineTo(270 + cvgR * Math.cos(ar), cvgCy - cvgR * Math.sin(ar)); ctx.stroke(); }
     var scaled = D.cvg.map(function(p){
@@ -295,7 +295,7 @@ export function buildShareCardHtml(m: ShareCardModel): string {
       ctx.strokeStyle = 'rgba(190,25,25,0.9)'; ctx.lineWidth = 1.8; ctx.stroke();
       scaled.forEach(function(p){ ctx.beginPath(); ctx.arc(p[0], p[1], 3, 0, Math.PI * 2); ctx.fillStyle = 'rgba(170,15,15,0.9)'; ctx.fill(); });
     }
-    ctx.beginPath(); ctx.arc(270, cvgCy, cvgR, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 1.3; ctx.stroke();
+    ctx.beginPath(); ctx.arc(270, cvgCy, cvgR, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 0.8; ctx.stroke();
     ctx.font = 'bold 9px ' + MONO; ctx.fillStyle = 'rgba(20,20,20,0.8)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     for (h = 0; h < 16; h++) { var al = (90 - h * 22.5) * Math.PI / 180; ctx.fillText(String(h + 1), 270 + 92 * Math.cos(al), cvgCy - 92 * Math.sin(al)); }
     // CCT / Duv stacked in the middle of the wheel, well inside the circle.

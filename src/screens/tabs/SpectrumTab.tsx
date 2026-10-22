@@ -31,11 +31,15 @@ import type { FlickerReading } from '../../ble/liveSessions';
 import type { FlickerSettingsApi } from '../../components/FlickerSettingsModal';
 import type { FlickerUploadApi } from '../../components/FlickerChart';
 import SwipablePages from '../../components/SwipablePages';
+import HintPressable from '../../components/HintPressable';
+import { Icon } from '../../components/icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { MeterResult } from '../../ble/parseResult';
 import { SpectralAnalysis } from '../../utils/spectralAnalysis';
 
 interface Props {
+  /** Opens the share card for this reading (a small button at the right of the dots row). */
+  onShowCard?: () => void;
   result: MeterResult | null;
   /** Spectrum-derived x/y/CCT/Duv/Ra/R9 for `result`, computed once in HomeScreen via analyzeSpectrum() -- the exact port of hCRI.io's own algorithm, so this matches what hCRI.io itself will show for the same upload. */
   analysis: SpectralAnalysis | null;
@@ -105,7 +109,7 @@ function FixedBox({ h, center, children }: { h: number; center?: boolean; childr
   return <View style={{ height: h, justifyContent: center ? 'center' : 'flex-start' }}>{h > 0 ? children(h) : null}</View>;
 }
 
-export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 0, regionHeight, sampleLabel, flicker, pagerResetKey, tall, onPageKey }: Props) {
+export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 0, regionHeight, sampleLabel, flicker, pagerResetKey, tall, onPageKey, onShowCard }: Props) {
   const source = sampleLabel
     ? `This is a sample from a public hCRI.io report (${sampleLabel}), not a reading from your own meter. It isn't saved to History and can't be uploaded or shared.`
     : 'This comes from the reading your meter just took.';
@@ -196,6 +200,11 @@ export default function SpectrumTab({ result, analysis, extraHorizontalChrome = 
 
   return (
     <SwipablePages
+      rightAction={onShowCard && hasReading ? (
+        <HintPressable hint="Share card: save or copy an image of this reading" onPress={onShowCard} hitSlop={8} accessibilityRole="button" accessibilityLabel="Share card" style={{ width: 24, height: 24, borderRadius: 12, borderWidth: 1, borderColor: colors.cardBorder, alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name="card" color={colors.muted} size={14} />
+        </HintPressable>
+      ) : undefined}
       resetKey={pagerResetKey ?? result}
       onPageKey={onPageKey}
       goTo={flicker ? { key: 'flicker', n: flicker.focusNonce } : undefined}

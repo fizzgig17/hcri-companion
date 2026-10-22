@@ -62,6 +62,8 @@ export interface FoundDevice {
 }
 
 interface Props {
+  /** Opens the share card for the current reading (small button under the chart). */
+  onShowCard?: () => void;
   /** LED suggestion card (floats over the lower part of the chart; never resizes it or covers the action bar). */
   ledSuggestion?: LedSuggestion | null;
   /** LED details already confirmed for the current reading (shown on the LED pill in the title box). */
@@ -175,6 +177,7 @@ interface Props {
 }
 
 export default function MainTab({
+  onShowCard,
   status,
   isBusy,
   result,
@@ -496,10 +499,10 @@ export default function MainTab({
           ) : portrait ? (
             // Upright tablet: the same swipeable pages as on a phone (spectrum, CIE, R-values, flicker), sized to this region.
             <ContentWidthContext.Provider value={chartRegionW + 62}>
-              <SpectrumTab tall result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} sampleLabel={result?.sampleLabel} flicker={flicker} pagerResetKey={pagerResetKey} onPageKey={setPageKey} />
+              <SpectrumTab tall onShowCard={onShowCard} result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} sampleLabel={result?.sampleLabel} flicker={flicker} pagerResetKey={pagerResetKey} onPageKey={setPageKey} />
             </ContentWidthContext.Provider>
           ) : (
-          <SpectrumTab result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} sampleLabel={result?.sampleLabel} flicker={flicker} pagerResetKey={pagerResetKey} onPageKey={setPageKey} />
+          <SpectrumTab onShowCard={onShowCard} result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} sampleLabel={result?.sampleLabel} flicker={flicker} pagerResetKey={pagerResetKey} onPageKey={setPageKey} />
           )}
           {!hasReading && emptyState && !(flicker && pageKey === 'flicker') && (
             <View style={styles.emptyOverlay} pointerEvents="box-none">

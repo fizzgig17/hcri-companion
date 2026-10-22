@@ -1860,6 +1860,10 @@ export default function HomeScreen({ navigation }: any) {
       activeTab === 'main' ? (
       <View style={styles.mainArea}>
           <MainTab
+          onShowCard={() => {
+            if (!result || !analysis) return;
+            setCardInput(tm30InputFromReading(result, analysis, result.sampleLabel || uploadTitle.trim() || 'Current reading', Date.now(), currentLeds[0] ?? undefined, currentLeds));
+          }}
             status={status}
             connectStage={status === 'connecting' ? connectStage : status === 'disconnected' ? btBlocked : null}
             isBusy={isBusy}
@@ -1952,10 +1956,6 @@ export default function HomeScreen({ navigation }: any) {
           onToggleFlicker={() => setFlickerFocus((n) => n + 1)}
           canSaveLive={!!liveUnsaved}
           savingLive={savingLive}
-          onShowCard={() => {
-            if (!result || !analysis) return;
-            setCardInput(tm30InputFromReading(result, analysis, result.sampleLabel || uploadTitle.trim() || 'Current reading', Date.now(), currentLeds[0] ?? undefined, currentLeds));
-          }}
           onShowTm30={() => {
             if (!result || !analysis) return;
             navigation.navigate('Tm30Report', {
