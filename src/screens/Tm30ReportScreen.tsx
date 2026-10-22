@@ -236,7 +236,7 @@ export default function Tm30ReportScreen({ route, navigation, panel }: any) {
             accessibilityRole="button"
             accessibilityLabel="Share card"
           >
-            <Icon name="photo" color={colors.text} size={ICON_SIZE.pill} />
+            <Icon name="card" color={colors.text} size={ICON_SIZE.pill} />
             <Text style={[styles.iconBtnText, { color: colors.text }]} numberOfLines={1}>Card</Text>
           </TouchableOpacity>
           <TouchableOpacity

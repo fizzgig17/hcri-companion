@@ -45,7 +45,8 @@ import { uploadReadingToHcri } from '../hcri/uploadFlickerToHcri';
 import { getReportLink } from '../hcri/getReportLink';
 import { shareSingleReadingCsv, shareAllReadingsCsv } from '../utils/shareCsv';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
-import { tm30InputFromReading } from '../utils/tm30Report';
+import { tm30InputFromReading, Tm30Input } from '../utils/tm30Report';
+import ShareCardModal from '../components/ShareCardModal';
 import { analyzeSpectrum } from '../utils/spectralAnalysis';
 import LedPickerModal from '../components/LedPickerModal';
 import { EMPTY_LED_LISTS, getCachedLedLists, LedLists, refreshLedLists } from '../hcri/ledLists';
@@ -97,6 +98,7 @@ export default function HistoryScreen({ navigation, embedded, refreshKey, onRena
   // (needs the API token and internet; quietly does nothing otherwise).
   const [ledLists, setLedLists] = useState<LedLists>(EMPTY_LED_LISTS);
   const [ledPickFor, setLedPickFor] = useState<SavedReading | null>(null);
+  const [cardInput, setCardInput] = useState<Tm30Input | null>(null);
   useEffect(() => {
     let live = true;
     getCachedLedLists().then((l) => live && setLedLists(l));
@@ -508,10 +510,19 @@ export default function HistoryScreen({ navigation, embedded, refreshKey, onRena
               Alert.alert('Could not open the TM-30 report', String(e?.message ?? e));
             }
           }}
+          onOpenCard={(reading) => {
+            try {
+              const analysis = reading.analysis ?? analyzeSpectrum(reading.result.spectrum);
+              setCardInput(tm30InputFromReading(reading.result, analysis, reading.label, reading.savedAt, reading.led, ledsOfReading(reading)));
+            } catch (e: any) {
+              Alert.alert('Could not make the share card', String(e?.message ?? e));
+            }
+          }}
           copyingLinkId={copyingLinkId}
         />
         )}
       </ScrollView>
+      {cardInput && <ShareCardModal visible input={cardInput} onClose={() => setCardInput(null)} />}
       <FlickerPickerModal
         visible={!!flickerPickFor}
         readingLabel={flickerPickFor?.label ?? ''}

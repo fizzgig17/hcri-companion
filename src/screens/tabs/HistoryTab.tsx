@@ -83,6 +83,7 @@ interface Props {
   onOpenReport: (reading: SavedReading, tm30: boolean) => void;
   /** Opens the in-app TM-30 report, generated on the phone from the stored spectrum (works for readings that were never uploaded). */
   onOpenTm30: (reading: SavedReading) => void;
+  onOpenCard: (reading: SavedReading) => void;
   /** LED details: accept a suggestion, open the picker ("Other"), or drop the suggestion for a reading. */
   onLedConfirm: (id: string, d: { brand?: string; model?: string; cct?: string }) => void;
   onLedPick: (reading: SavedReading) => void;
@@ -132,6 +133,7 @@ function HistoryRow({
   copyingLink,
   onOpenReport,
   onOpenTm30,
+  onOpenCard,
   onLedConfirm,
   onLedPick,
   onLedDismiss,
@@ -157,6 +159,7 @@ function HistoryRow({
   onOpenReport: (reading: SavedReading, tm30: boolean) => void;
   /** Opens the in-app TM-30 report, generated on the phone from the stored spectrum (works for readings that were never uploaded). */
   onOpenTm30: (reading: SavedReading) => void;
+  onOpenCard: (reading: SavedReading) => void;
   onLedConfirm: (id: string, d: { brand?: string; model?: string; cct?: string }) => void;
   onLedPick: (reading: SavedReading) => void;
   onLedDismiss: (id: string) => void;
@@ -457,10 +460,14 @@ function HistoryRow({
               </TouchableOpacity>
             </>
           )}
-          <TouchableOpacity onPress={() => onOpenTm30(reading)} style={[styles.copyLinkPill, styles.linkPill]}>
+          <HintPressable hint="TM-30 report" onPress={() => onOpenTm30(reading)} style={[styles.copyLinkPill, styles.linkPill]}>
             <View style={styles.copyLinkIcon}><Icon name="report" color={colors.accent} size={ICON_SIZE.inline} /></View>
             <Text style={styles.copyLinkLabel}>TM-30</Text>
-          </TouchableOpacity>
+          </HintPressable>
+          <HintPressable hint="Share card: save or copy an image of this reading" onPress={() => onOpenCard(reading)} style={[styles.copyLinkPill, styles.linkPill]}>
+            <View style={styles.copyLinkIcon}><Icon name="card" color={colors.accent} size={ICON_SIZE.inline} /></View>
+            <Text style={styles.copyLinkLabel}>Card</Text>
+          </HintPressable>
         </View>
       )}
     </>
@@ -526,6 +533,7 @@ export default function HistoryTab({
   copyingLinkId,
   onOpenReport,
   onOpenTm30,
+  onOpenCard,
   onLedConfirm,
   onLedPick,
   onLedDismiss,
@@ -833,6 +841,7 @@ export default function HistoryTab({
           copyingLink={copyingLinkId === r.id}
           onOpenReport={onOpenReport}
           onOpenTm30={onOpenTm30}
+          onOpenCard={onOpenCard}
           onLedConfirm={onLedConfirm}
           onLedPick={onLedPick}
           onLedDismiss={onLedDismiss}
@@ -866,6 +875,7 @@ export default function HistoryTab({
                 copyingLink={copyingLinkId === r.id}
                 onOpenReport={onOpenReport}
           onOpenTm30={onOpenTm30}
+          onOpenCard={onOpenCard}
           onLedConfirm={onLedConfirm}
           onLedPick={onLedPick}
           onLedDismiss={onLedDismiss}
