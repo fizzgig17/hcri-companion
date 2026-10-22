@@ -61,6 +61,8 @@ export interface Page {
 }
 
 interface Props {
+  /** Optional small control shown at the right end of the dots row (mirrors the ? button on the left). */
+  rightAction?: React.ReactNode;
   pages: Page[];
   /** Total horizontal chrome (both sides combined) already reserved by whatever wraps this component, beyond... well, instead of the default screen-only padding. Pass this whenever a host screen adds its own card/padding around SpectrumTab, so pages come out the real width rather than an estimate that's too wide. */
   horizontalChrome?: number;
@@ -79,7 +81,7 @@ interface Props {
 // Dots row footprint in fill mode (26 tall + 8 above + 4 below, same as the flow layout).
 const DOTS_H = 38;
 
-export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZONTAL_PADDING, fixedHeight, fill, resetKey, goTo: goToTarget, onPageKey }: Props) {
+export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZONTAL_PADDING, fixedHeight, fill, resetKey, goTo: goToTarget, onPageKey, rightAction }: Props) {
   const { colors } = useTheme();
   // Confirmed 2026-10-03: measuring this via onLayout at all -- even
   // seeded with a close estimate that onLayout then "corrects" -- means
@@ -169,6 +171,7 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
 
   const styles = StyleSheet.create({
     dotsRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 8, marginBottom: 4, height: 26 },
+    actionRight: { position: 'absolute', right: 4, top: 0, bottom: 0, justifyContent: 'center' },
     infoLeft: { position: 'absolute', left: 4, top: 0, bottom: 0, justifyContent: 'center' },
     dotTouchable: { padding: 4 },
     dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.cardBorder },
@@ -235,6 +238,7 @@ export default function SwipablePages({ pages, horizontalChrome = SCREEN_HORIZON
                 />
               </View>
             )}
+            {rightAction ? <View style={styles.actionRight}>{rightAction}</View> : null}
             {pages.map((p, i) => (
               <HintPressable key={p.key} hint={p.label} onPress={() => goTo(i)} hitSlop={8} style={styles.dotTouchable} accessibilityLabel={p.label}>
                 <View style={[styles.dot, i === activeIndex && styles.dotActive]} />

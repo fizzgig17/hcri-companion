@@ -13,9 +13,10 @@ import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'rea
 import Svg, { Path } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
 import { hapticTap } from '../utils/haptics';
+import HintPressable from './HintPressable';
 import type { Status } from '../screens/tabs/MainTab';
 
-type IconName = 'play' | 'stop' | 'bluetooth' | 'upload' | 'power' | 'copy' | 'check' | 'activity' | 'live' | 'flicker' | 'save' | 'report' | 'photo';
+type IconName = 'play' | 'stop' | 'bluetooth' | 'upload' | 'power' | 'copy' | 'check' | 'activity' | 'live' | 'flicker' | 'save' | 'report' | 'photo' | 'card';
 
 // Paths come from the shared icon set (components/icons.tsx).
 const ICON_PATHS: Record<Exclude<IconName, 'play' | 'stop'>, string> = {
@@ -23,6 +24,7 @@ const ICON_PATHS: Record<Exclude<IconName, 'play' | 'stop'>, string> = {
   flicker: ICONS.bolt,
   report: ICONS.report,
   photo: ICONS.photo,
+  card: ICONS.card,
   save: ICONS.save,
   bluetooth: ICONS.bluetooth,
   upload: ICONS.upload,
@@ -147,6 +149,7 @@ export default function ActionBar(p: Props) {
     disabled,
     accent,
     busy,
+    hint,
   }: {
     icon: IconName;
     label: string;
@@ -154,8 +157,13 @@ export default function ActionBar(p: Props) {
     disabled?: boolean;
     accent?: boolean;
     busy?: boolean;
-  }) => (
-    <TouchableOpacity
+    /** Long-press tooltip (icon buttons). */
+    hint?: string;
+  }) => {
+    const Btn: any = hint ? HintPressable : TouchableOpacity;
+    return (
+    <Btn
+      {...(hint ? { hint } : {})}
       style={[styles.side, disabled && styles.disabled]}
       onPress={onPress && (() => { hapticTap(); onPress(); })}
       disabled={disabled || !onPress}
@@ -169,8 +177,9 @@ export default function ActionBar(p: Props) {
         <Icon name={icon} size={ICON_SIZE.primary} color={accent ? colors.accent : colors.muted} />
       )}
       <Text style={[styles.sideLabel, accent && styles.sideLabelAccent]} numberOfLines={1} adjustsFontSizeToFit>{label}</Text>
-    </TouchableOpacity>
-  );  // SideButton must keep one identity across renders. When it was a fresh component each render, every
+    </Btn>
+  );
+  };  // SideButton must keep one identity across renders. When it was a fresh component each render, every
   // parent re-render (a Live update every ~150ms) remounted the buttons and swallowed taps mid-press.
   const renderSideRef = useRef(renderSide);
   renderSideRef.current = renderSide;
@@ -257,7 +266,7 @@ export default function ActionBar(p: Props) {
               accent={p.activeMode === 'flicker'}
             />
           )}
-          {idle && p.hasReading && !p.canSaveLive && <SideButton icon="report" label="TM-30" onPress={p.onShowTm30} />}
+          {idle && p.hasReading && !p.canSaveLive && <SideButton icon="report" label="TM-30" onPress={p.onShowTm30} hint="TM-30 report" />}
           {idle && p.hasReading && !p.canSaveLive && p.onShowPhoto && <SideButton icon="photo" label="Photo" onPress={p.onShowPhoto} />}
         </View>
       </View>

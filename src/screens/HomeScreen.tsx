@@ -20,7 +20,8 @@ import type { FlickerUploadApi } from '../components/FlickerChart';
 import { initializeMeter, takeMeasurement, EMPTY_READING_ERROR } from '../ble/takeMeasurement';
 import { CMD_STOP_SAMPLING } from '../ble/protocol';
 import { MeterResult } from '../ble/parseResult';
-import { tm30InputFromReading } from '../utils/tm30Report';
+import { tm30InputFromReading, Tm30Input } from '../utils/tm30Report';
+import ShareCardModal from '../components/ShareCardModal';
 import { analyzeSpectrum } from '../utils/spectralAnalysis';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { buildCsv, defaultLabel } from '../hcri/buildCsv';
@@ -134,6 +135,7 @@ export default function HomeScreen({ navigation }: any) {
   const { colors } = useTheme();
   const { log, appendLog, clearLog, refreshVerboseLogging } = useLog();
   const [activeTab, setActiveTab] = useState<TabKey>('main');
+  const [cardInput, setCardInput] = useState<Tm30Input | null>(null);
   const [status, setStatus] = useState<Status>('disconnected');
   const [result, setResult] = useState<MeterResult | null>(null);
   const [deviceName, setDeviceName] = useState<string | null>(null);
@@ -1858,6 +1860,10 @@ export default function HomeScreen({ navigation }: any) {
       activeTab === 'main' ? (
       <View style={styles.mainArea}>
           <MainTab
+          onShowCard={() => {
+            if (!result || !analysis) return;
+            setCardInput(tm30InputFromReading(result, analysis, result.sampleLabel || uploadTitle.trim() || 'Current reading', Date.now(), currentLeds[0] ?? undefined, currentLeds));
+          }}
             status={status}
             connectStage={status === 'connecting' ? connectStage : status === 'disconnected' ? btBlocked : null}
             isBusy={isBusy}
@@ -1969,6 +1975,7 @@ export default function HomeScreen({ navigation }: any) {
           onSaveLive={saveLive}
         />
       )}
+      {cardInput && <ShareCardModal visible input={cardInput} onClose={() => setCardInput(null)} />}
       </View>
       {wide && layoutMode === 'dashboard' && (
         <View style={[styles.historyBeside, { width: sideW }]}>
