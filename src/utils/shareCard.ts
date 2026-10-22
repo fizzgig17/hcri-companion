@@ -297,13 +297,17 @@ export function buildShareCardHtml(m: ShareCardModel): string {
     }
     ctx.beginPath(); ctx.arc(270, cvgCy, cvgR, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 1.3; ctx.stroke();
     ctx.font = 'bold 9px ' + MONO; ctx.fillStyle = 'rgba(20,20,20,0.8)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    for (h = 0; h < 16; h++) { var al = (90 - h * 22.5) * Math.PI / 180; ctx.fillText(String(h + 1), 270 + 101.2 * Math.cos(al), cvgCy - 101.2 * Math.sin(al)); }
-    var ccY = cvgCy + cvgR * 0.4;
-    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.font = 'bold 11px ' + MONO; ctx.fillText('CCT', 270 - cvgR * 0.82, ccY);
-    ctx.fillStyle = '#0a0a0a'; ctx.font = 'bold 14px ' + MONO; ctx.fillText(cct + ' K', 270 - cvgR * 0.82, ccY + 17);
-    ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.font = 'bold 11px ' + MONO; ctx.fillText('Duv', 270 + cvgR * 0.82, ccY);
-    ctx.fillStyle = '#0a0a0a'; ctx.font = 'bold 14px ' + MONO; ctx.fillText(duvTxt, 270 + cvgR * 0.82, ccY + 17);
+    for (h = 0; h < 16; h++) { var al = (90 - h * 22.5) * Math.PI / 180; ctx.fillText(String(h + 1), 270 + 92 * Math.cos(al), cvgCy - 92 * Math.sin(al)); }
+    // CCT / Duv stacked in the middle of the wheel, well inside the circle.
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    var line1 = cvgCy + cvgR * 0.34, line2 = cvgCy + cvgR * 0.56;
+    ctx.font = 'bold 13px ' + MONO;
+    [['CCT', cct + ' K', line1], ['Duv', duvTxt, line2]].forEach(function(t){
+      var wl = ctx.measureText(t[0] + '  ').width, wv = ctx.measureText(t[1]).width, x0 = 270 - (wl + wv) / 2;
+      ctx.textAlign = 'left';
+      ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillText(t[0], x0, t[2]);
+      ctx.fillStyle = '#0a0a0a'; ctx.fillText(t[1], x0 + wl, t[2]);
+    });
     y = cvgCy + cvgR + 220 * 0.13;
 
     // Source / notes
