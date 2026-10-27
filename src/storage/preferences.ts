@@ -310,3 +310,18 @@ export async function loadTkWindowPreference(fallback: number): Promise<number> 
 export async function saveTkWindowPreference(v: number): Promise<void> {
   await AsyncStorage.setItem(TK_WINDOW_KEY, String(v));
 }
+
+// TKLamp: trim the dark readings before the light came on when a run is stopped (default on).
+const TK_TRIM_KEY = 'hcri.io.pref.tklampTrimLeading';
+
+export async function loadTkTrimPreference(): Promise<boolean> {
+  try {
+    return (await AsyncStorage.getItem(TK_TRIM_KEY)) !== 'false';
+  } catch {
+    return true;
+  }
+}
+
+export async function saveTkTrimPreference(v: boolean): Promise<void> {
+  await AsyncStorage.setItem(TK_TRIM_KEY, v ? 'true' : 'false');
+}

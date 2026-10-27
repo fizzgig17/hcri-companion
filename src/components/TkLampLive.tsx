@@ -11,10 +11,10 @@ import RuntimeChart from './RuntimeChart';
 import { useTheme } from '../contexts/ThemeContext';
 import PrimaryButton from './PrimaryButton';
 import type { MeterConnection } from '../ble/MeterConnection';
-import { TK_RAW_PER_LM_DEFAULT, TkRecorder, TkSmoother, defaultRunLabel, getTkRawPerLm, getTkWindowS, onTkRawPerLm, onTkRunToggle, onTkWindowS, setTkRunState, setTkWindowS, resampleRun, scaleFromLamp, setTkRawPerLm, tkLumens, type TkSample } from '../ble/tklamp';
+import { TK_RAW_PER_LM_DEFAULT, TkRecorder, TkSmoother, defaultRunLabel, getTkRawPerLm, getTkTrim, getTkWindowS, onTkRawPerLm, onTkRunToggle, onTkWindowS, setTkRunState, setTkTrim, setTkWindowS, trimLeading, resampleRun, scaleFromLamp, setTkRawPerLm, tkLumens, type TkSample } from '../ble/tklamp';
 import { addRuntime, updateRuntime } from '../storage/runtimeHistory';
 import { loadHcriCredentials } from '../storage/secureStorage';
-import { loadTkScalePreference, loadTkWindowPreference, saveTkScalePreference } from '../storage/preferences';
+import { loadTkScalePreference, loadTkTrimPreference, loadTkWindowPreference, saveTkScalePreference } from '../storage/preferences';
 import { uploadRuntimeToHcri } from '../hcri/uploadRuntimeToHcri';
 
 const TRACE_GAP_S = 0.5;     // the on-screen trace keeps one point per half second
@@ -60,6 +60,7 @@ export default function TkLampLive({ conn }: Props) {
   useEffect(() => {
     loadTkScalePreference(TK_RAW_PER_LM_DEFAULT).then(setTkRawPerLm);
     loadTkWindowPreference(getTkWindowS()).then(setTkWindowS);
+    loadTkTrimPreference().then(setTkTrim);
     const offW = onTkWindowS(setWindowS);
     const offS = onTkRawPerLm((v) => {
       scaleRef.current = v;
@@ -161,7 +162,7 @@ export default function TkLampLive({ conn }: Props) {
     setFinished(recorder.current.count > 1);
     if (recorder.current.count <= 1) setNote('Nothing recorded. Make sure readings are coming in, then try again.');
     // Keep every finished run on the phone (History > Runtime), whether or not it is uploaded.
-    const r = resampleRun(recorder.current.points());
+    const r = resampleRun(getTkTrim() ? trimLeading(recorder.current.points()) : recorder.current.points());
     savedId.current = null;
     if (r) {
       const l = label.trim() || defaultRunLabel();
@@ -171,7 +172,7 @@ export default function TkLampLive({ conn }: Props) {
     }
   };
   const upload = async () => {
-    const r = resampleRun(recorder.current.points());
+    const r = resampleRun(getTkTrim() ? trimLeading(recorder.current.points()) : recorder.current.points());
     if (!r) {
       setNote('The recording is too short to upload.');
       return;

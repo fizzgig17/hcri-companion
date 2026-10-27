@@ -165,3 +165,26 @@ export function onTkRunToggle(cb: () => void): () => void {
   runCommandListeners.add(cb);
   return () => { runCommandListeners.delete(cb); };
 }
+
+/**
+ * Drops the near-dark readings at the start of a run (before the light came on): everything before the output first reaches
+ * `fraction` of the run's peak, keeping `keepS` seconds of lead-in. Times are shifted so the run starts at 0. Returns the
+ * points unchanged if nothing would be dropped or the run never gets above the threshold.
+ */
+export function trimLeading(points: TkPoint[], fraction = 0.02, keepS = 1): TkPoint[] {
+  if (points.length < 2) return points;
+  const peak = points.reduce((m, p) => (p.lm > m ? p.lm : m), 0);
+  if (!(peak > 0)) return points;
+  const i = points.findIndex((p) => p.lm >= peak * fraction);
+  if (i <= 0) return points;
+  const start = points[i].t - keepS;
+  const kept = points.filter((p) => p.t >= start);
+  if (kept.length < 2 || kept.length === points.length) return points;
+  const t0 = kept[0].t;
+  return kept.map((p) => ({ t: p.t - t0, lm: p.lm }));
+}
+
+// Settings > TKLamp tester > "Trim the dark start of a run" (on by default).
+let trimOn = true;
+export function getTkTrim(): boolean { return trimOn; }
+export function setTkTrim(v: boolean): void { trimOn = v; }

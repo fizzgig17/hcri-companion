@@ -1,4 +1,4 @@
-import { parseTkSample, TkSmoother, TkRecorder, resampleRun, tkLumens, TK_RAW_PER_LM_DEFAULT, defaultRunLabel } from '../src/ble/tklamp';
+import { trimLeading, parseTkSample, TkSmoother, TkRecorder, resampleRun, tkLumens, TK_RAW_PER_LM_DEFAULT, defaultRunLabel } from '../src/ble/tklamp';
 
 const pkt = (ms: number, raw: number) => {
   const b = new Uint8Array(9);
@@ -72,5 +72,22 @@ describe('lamp calibration', () => {
   it('refuses nonsense', () => {
     expect(scaleFromLamp(0, 313.2, 2150)).toBeNull();
     expect(scaleFromLamp(2000, 313.2, 0)).toBeNull();
+  });
+});
+
+describe('trimLeading', () => {
+  const pts = (v: number[]) => v.map((lm, i) => ({ t: i, lm }));
+  it('drops the dark start, keeps 1 s lead-in and rebases time', () => {
+    const out = trimLeading(pts([0, 0, 0, 0, 0, 1000, 990, 980]));
+    expect(out.map((p) => p.lm)).toEqual([0, 1000, 990, 980]);
+    expect(out[0].t).toBe(0);
+  });
+  it('leaves a run that starts lit alone', () => {
+    const p = pts([1000, 990, 980]);
+    expect(trimLeading(p)).toBe(p);
+  });
+  it('leaves an all-dark run alone', () => {
+    const p = pts([0, 0, 0]);
+    expect(trimLeading(p)).toBe(p);
   });
 });
