@@ -71,6 +71,8 @@ interface Props {
   /** ColorMunki behind the bridge: replaces the centre button's caption/colour/enabled state, and a note shows above the bar. */
   mainOverride?: { caption: string; tint?: string; disabled?: boolean; icon?: 'play' | 'stop'; onPress?: () => void };
   meterNote?: string;
+  /** TKLamp: the Upload button uploads the stopped run instead of a spectrum reading. */
+  uploadOverride?: { label: string; disabled: boolean; busy: boolean; done?: boolean };
   /** Caption while busy, when it is not a reading ("Calibrating…"). */
   busyCaption?: string;
   disconnect: () => void;
@@ -138,7 +140,7 @@ export default function ActionBar(p: Props) {
   const [barH, setBarH] = useState(0);
   const { status } = p;
   const busyLabel = status === 'connecting' ? 'Connecting…' : status === 'measuring' ? (p.busyCaption ?? 'Measuring…') : null;
-  const uploadDisabled = p.uploading || !p.hasReading || p.isSample;
+  const uploadDisabled = p.uploadOverride ? p.uploadOverride.disabled : p.uploading || !p.hasReading || p.isSample;
   const connected = status === 'connected' || status === 'uploading';
   const idle = p.activeMode === 'idle';
 
@@ -225,19 +227,20 @@ export default function ActionBar(p: Props) {
           {connected && idle && p.canSaveLive && (
             <SideButton icon="save" label="Save" onPress={p.onSaveLive} disabled={p.savingLive} busy={p.savingLive} accent />
           )}
-          {connected && idle && !p.canSaveLive && !p.isSample && !p.uploadSucceeded && (
+          {connected && idle && !p.canSaveLive && !p.isSample && (p.uploadOverride ? !p.uploadOverride.done : !p.uploadSucceeded) && (
             <SideButton
               icon="upload"
-              label="Upload reading"
+              label={p.uploadOverride?.label ?? 'Upload reading'}
               onPress={p.onUpload}
               disabled={uploadDisabled}
-              busy={status === 'uploading'}
+              busy={p.uploadOverride ? p.uploadOverride.busy : status === 'uploading'}
             />
           )}
-          {idle && !p.canSaveLive && p.uploadSucceeded && p.canCopyLink && (
+          {connected && p.uploadOverride?.done && <SideButton icon="check" label="Uploaded" accent />}
+          {!p.uploadOverride && idle && !p.canSaveLive && p.uploadSucceeded && p.canCopyLink && (
             <SideButton icon="copy" label="Copy link" onPress={p.onCopyLink} disabled={p.copyingLink} accent busy={p.copyingLink} />
           )}
-          {idle && !p.canSaveLive && p.uploadSucceeded && !p.canCopyLink && <SideButton icon="check" label="Uploaded" accent />}
+          {!p.uploadOverride && idle && !p.canSaveLive && p.uploadSucceeded && !p.canCopyLink && <SideButton icon="check" label="Uploaded" accent />}
         </View>
 
         {status === 'disconnected' && mainButton('bluetooth', 'Connect to Meter', p.connect, p.onResetConnection)}

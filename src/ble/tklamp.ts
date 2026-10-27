@@ -145,13 +145,13 @@ export function onTkWindowS(cb: (v: number) => void): () => void {
 }
 
 // The bottom-bar main button starts and stops a run; the live panel does the recording and reports its state back here.
-export interface TkRunState { recording: boolean; canRecord: boolean }
-let runState: TkRunState = { recording: false, canRecord: false };
+export interface TkRunState { recording: boolean; canRecord: boolean; /** A stopped run is waiting to be uploaded. */ canUpload: boolean; uploading: boolean; /** The last stopped run has been uploaded. */ uploaded: boolean }
+let runState: TkRunState = { recording: false, canRecord: false, canUpload: false, uploading: false, uploaded: false };
 const runStateListeners = new Set<(s: TkRunState) => void>();
 const runCommandListeners = new Set<() => void>();
 export function getTkRunState(): TkRunState { return runState; }
 export function setTkRunState(s: TkRunState): void {
-  if (s.recording === runState.recording && s.canRecord === runState.canRecord) return;
+  if (s.recording === runState.recording && s.canRecord === runState.canRecord && s.canUpload === runState.canUpload && s.uploading === runState.uploading && s.uploaded === runState.uploaded) return;
   runState = s;
   runStateListeners.forEach((cb) => cb(s));
 }
@@ -188,3 +188,11 @@ export function trimLeading(points: TkPoint[], fraction = 0.02, keepS = 1): TkPo
 let trimOn = true;
 export function getTkTrim(): boolean { return trimOn; }
 export function setTkTrim(v: boolean): void { trimOn = v; }
+
+/** The bottom bar's Upload button asks the live panel to upload the run that was just stopped. */
+const uploadListeners = new Set<() => void>();
+export function requestTkUpload(): void { uploadListeners.forEach((cb) => cb()); }
+export function onTkUploadRequest(cb: () => void): () => void {
+  uploadListeners.add(cb);
+  return () => { uploadListeners.delete(cb); };
+}
