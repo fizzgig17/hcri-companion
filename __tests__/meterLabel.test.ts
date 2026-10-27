@@ -33,7 +33,7 @@ describe('bridgeAttachedFromAdv', () => {
 describe('bridge with a TKLamp tester', () => {
   it('reads attached = 3 from the advertisement', () => {
     // FF FF 'h' 'C' 03 -> base64
-    const b64 = Buffer.from([0xff, 0xff, 0x68, 0x43, 3]).toString('base64');
+    const b64 = '//9oQwM=';
     expect(bridgeAttachedFromAdv(b64)).toBe('TKLamp');
   });
 });
