@@ -14,7 +14,7 @@
 //   ...0004 status  (notify/read): [state u8][try u8][exposure_ms f32]
 //     state: 0 ready, 1 scanning, 2 done, 3 error (no USB / timeout), 4 done but not locked,
 //            5 not done (ColorMunki: the reason is in the 'try' byte, see colorMunkiFailMessage)
-//     bytes 6-7 (newer firmware): meter kind (0 Torch Bearer, 1 ColorMunki) and ColorMunki flags:
+//     bytes 6-7 (newer firmware): meter kind (0 Torch Bearer, 1 ColorMunki, 2 TKLamp tester) and ColorMunki flags:
 //       bit7 dial known, bits0-1 dial position (0 projector, 1 surface, 2 calibration, 3 ambient), bit2 dark calibration done,
 //       bit3 high-gain dark references taken (very dim light)
 //       bit5 readings are high resolution (3.33 nm); one flagged low light (summary status 2) is the standard 10 nm
@@ -25,6 +25,7 @@
 //   02 | npts u16 | start_nm u16 | step_nm u8 | total_bytes u16      (header; float32 values follow)
 //   03 | seq u8 | bytes...                                           (data chunks, seq from 0)
 //   04 | chunks u8                                                   (end marker)
+//   06 | ms u32 | raw u32                                             (TKLamp tester: one live reading, see tklamp.ts)
 //   05 | id u8 | seq u8 | last u8 | bytes...                         (ColorMunki diagnostics after the end marker:
 //        id 1 = the reading's raw sensor data, id 2 = the calibration block; logged for offline work, see onDiag)
 
@@ -63,6 +64,8 @@ export const TB_STATE_FAILED = 5;
 
 export const TB_KIND_TORCH_BEARER = 0;
 export const TB_KIND_COLORMUNKI = 1;
+/** TKLamp TK2303D integrating-sphere tester behind the bridge: no spectrum, live lumen readings (result packet 06, see tklamp.ts). */
+export const TB_KIND_TKLAMP = 2;
 export const MUNKI_DIAL_PROJECTOR = 0;
 export const MUNKI_DIAL_SURFACE = 1;
 export const MUNKI_DIAL_CALIBRATION = 2;

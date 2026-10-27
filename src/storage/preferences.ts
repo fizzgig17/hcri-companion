@@ -276,3 +276,20 @@ export async function saveMunkiBridgeId(id: string, isMunki: boolean): Promise<R
   await AsyncStorage.setItem(MUNKI_BRIDGES_KEY, JSON.stringify(next));
   return next;
 }
+
+// TKLamp tester: raw sensor counts per lumen. 313.2 was measured on a calibrated unit; it changes if the tester is recalibrated.
+const TK_SCALE_KEY = 'hcri.io.pref.tklampRawPerLumen';
+
+export async function loadTkScalePreference(fallback: number): Promise<number> {
+  try {
+    const raw = await AsyncStorage.getItem(TK_SCALE_KEY);
+    const n = raw === null ? fallback : Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export async function saveTkScalePreference(v: number): Promise<void> {
+  await AsyncStorage.setItem(TK_SCALE_KEY, String(v));
+}
