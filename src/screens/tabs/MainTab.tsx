@@ -19,7 +19,7 @@ import { meterListLabel } from '../../ble/meterLabel';
 
 /** What is plugged into the connected bridge, or null when the connected meter is an HPCS. */
 const bridgeAttached = (connectedName: string | null | undefined): string | null =>
-  connectedName === 'ColorMunki' || connectedName === 'Torch Bearer' ? connectedName : null;
+  connectedName === 'ColorMunki' || connectedName === 'Torch Bearer' || connectedName === 'TKLamp' ? connectedName : null;
 import { APP_VERSION } from '../../buildInfo';
 import { Icon, ICON_SIZE } from '../../components/icons';
 import React, { useEffect, useRef, useState } from 'react';
@@ -58,7 +58,7 @@ export interface FoundDevice {
   name: string | null;
   rssi: number | null;
   /** What a bridge says is plugged into it (null = unknown, e.g. older bridge firmware or not a bridge). */
-  attached?: 'ColorMunki' | 'Torch Bearer' | 'none' | null;
+  attached?: 'ColorMunki' | 'Torch Bearer' | 'TKLamp' | 'none' | null;
 }
 
 interface Props {
@@ -94,6 +94,8 @@ interface Props {
   devicePickerDevices: FoundDevice[] | null;
   /** BLE ids of bridges last seen running as a ColorMunki (labels them in the picker before connecting). */
   munkiBridgeIds?: Record<string, boolean>;
+  /** TKLamp tester behind the bridge: shown in place of the stat grid and charts. */
+  liveContent?: React.ReactNode;
   /** Whether the picker overlay itself is open right now -- separate from devicePickerDevices (which outlives the overlay being dismissed, see above). True right after connect()'s scan finds more than one match, or after tapping the "switch meter" icon. */
   devicePickerVisible: boolean;
   /** Reopens the overlay using the already-known devicePickerDevices list (the "switch meter" icon) -- never triggers a fresh scan. */
@@ -190,6 +192,7 @@ export default function MainTab({
   resetConnection,
   devicePickerDevices,
   munkiBridgeIds,
+  liveContent,
   devicePickerVisible,
   onOpenDevicePicker,
   onSelectDevice,
@@ -456,6 +459,9 @@ export default function MainTab({
           than the shorter pre-reading layout that used to put Take
           Reading/Disconnect ABOVE this card and then move them below it
           (in a second copy) the moment a result came in. */}
+      {liveContent ? (
+      <View style={styles.resultCard}>{liveContent}</View>
+      ) : (
       <View style={styles.resultCard}>
         <View style={styles.statGrid}>
           {/* Which measurements show here, and in what order, is the
@@ -567,6 +573,7 @@ export default function MainTab({
         )}
 
       </View>
+      )}
 
       {/* Title editor: a popup at the top of the screen instead of typing into the
           box in place, so the keyboard can never cover it and the charts

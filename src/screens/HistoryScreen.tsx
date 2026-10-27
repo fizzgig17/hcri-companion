@@ -37,6 +37,9 @@ import {
 } from '../storage/readingHistory';
 import { loadFlickers, updateFlicker, deleteFlickers, flickersForReading, attachedReading, SavedFlicker } from '../storage/flickerHistory';
 import FlickerHistoryTab from './tabs/FlickerHistoryTab';
+import RuntimeHistoryTab from './tabs/RuntimeHistoryTab';
+import { loadRuntimes, updateRuntime, deleteRuntime, onRuntimeHistoryChanged, SavedRuntime } from '../storage/runtimeHistory';
+import { uploadRuntimeToHcri } from '../hcri/uploadRuntimeToHcri';
 import FlickerPickerModal from '../components/FlickerPickerModal';
 import { uploadFlickerToHcri } from '../hcri/uploadFlickerToHcri';
 import { loadHcriCredentials } from '../storage/secureStorage';
@@ -81,7 +84,15 @@ export default function HistoryScreen({ navigation, embedded, refreshKey, onRena
   const [copyingLinkId, setCopyingLinkId] = useState<string | null>(null);
 
   // Saved standalone flicker samples (the "Flicker" list), and the picker for attaching one to a reading.
-  const [section, setSection] = useState<'readings' | 'flicker'>('readings');
+  const [section, setSection] = useState<'readings' | 'flicker' | 'runtime'>('readings');
+  // Recorded TKLamp runs (the "Runtime" list).
+  const [runs, setRuns] = useState<SavedRuntime[]>([]);
+  const [runUploadingId, setRunUploadingId] = useState<string | null>(null);
+  useEffect(() => {
+    const load = () => loadRuntimes().then(setRuns).catch(() => {});
+    load();
+    return onRuntimeHistoryChanged(load);
+  }, []);
   const [flickers, setFlickers] = useState<SavedFlicker[]>([]);
   const [flickerUploadingId, setFlickerUploadingId] = useState<string | null>(null);
   const [flickerPickFor, setFlickerPickFor] = useState<SavedReading | null>(null);
@@ -154,6 +165,25 @@ export default function HistoryScreen({ navigation, embedded, refreshKey, onRena
   const renameFlicker = useCallback(async (id: string, label: string) => {
     await updateFlicker(id, { label });
     setFlickers((prev) => prev.map((f) => (f.id === id ? { ...f, label } : f)));
+  }, []);
+
+  const renameRun = useCallback(async (id: string, label: string) => {
+    await updateRuntime(id, { label, uploaded: false });   // a new name is a new curve on hCRI.io, so it counts as not uploaded yet
+  }, []);
+  const deleteRun = useCallback((id: string) => {
+    Alert.alert('Delete this run?', "It is removed from this phone. A copy already on hCRI.io stays there (delete it from Explore > Runtime).", [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => { deleteRuntime(id).catch(() => {}); } },
+    ]);
+  }, []);
+  const uploadSavedRun = useCallback(async (r: SavedRuntime) => {
+    const creds = await loadHcriCredentials();
+    if (!creds?.token) { Alert.alert('Sign in first', 'Add your hCRI.io account in Settings to upload.'); return; }
+    setRunUploadingId(r.id);
+    const err = await uploadRuntimeToHcri({ label: r.label, group: 'TKLamp', unit: 'lm', intervalSeconds: r.intervalSeconds, values: r.values }, creds.token);
+    setRunUploadingId(null);
+    if (err) { Alert.alert('Upload failed', err); return; }
+    await updateRuntime(r.id, { uploaded: true });
   }, []);
 
   const deleteFlicker = useCallback((id: string) => {
@@ -468,16 +498,18 @@ export default function HistoryScreen({ navigation, embedded, refreshKey, onRena
       <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>History</Text>
         <View style={styles.switchRow}>
-          {(['readings', 'flicker'] as const).map((k) => {
+          {(['readings', 'flicker', 'runtime'] as const).map((k) => {
             const active = section === k;
             return (
               <TouchableOpacity key={k} style={[styles.switchBtn, active && styles.switchBtnActive]} onPress={() => setSection(k)} accessibilityRole="button" accessibilityState={{ selected: active }}>
-                <Text style={[styles.switchText, active && styles.switchTextActive]}>{k === 'readings' ? 'Readings' : `Flicker${flickers.length ? ` (${flickers.length})` : ''}`}</Text>
+                <Text style={[styles.switchText, active && styles.switchTextActive]}>{k === 'readings' ? 'Readings' : k === 'flicker' ? `Flicker${flickers.length ? ` (${flickers.length})` : ''}` : `Runtime${runs.length ? ` (${runs.length})` : ''}`}</Text>
               </TouchableOpacity>
             );
           })}
         </View>
-        {section === 'flicker' ? (
+        {section === 'runtime' ? (
+          <RuntimeHistoryTab runs={runs} loading={historyLoading} uploadingId={runUploadingId} onRename={renameRun} onDelete={deleteRun} onUpload={uploadSavedRun} />
+        ) : section === 'flicker' ? (
           <FlickerHistoryTab flickers={flickers} readings={history} loading={historyLoading} uploadingId={flickerUploadingId} onRename={renameFlicker} onDelete={deleteFlicker} onUpload={uploadSavedFlicker} />
         ) : (
         <HistoryTab

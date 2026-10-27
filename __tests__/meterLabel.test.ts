@@ -29,3 +29,11 @@ describe('bridgeAttachedFromAdv', () => {
     expect(bridgeAttachedFromAdv(b64([0x4c, 0x00, 1, 2, 3]))).toBeNull();
   });
 });
+
+describe('bridge with a TKLamp tester', () => {
+  it('reads attached = 3 from the advertisement', () => {
+    // FF FF 'h' 'C' 03 -> base64
+    const b64 = '//9oQwM=';
+    expect(bridgeAttachedFromAdv(b64)).toBe('TKLamp');
+  });
+});

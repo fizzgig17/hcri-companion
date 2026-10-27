@@ -29,6 +29,7 @@ import {
   isTorchBearerName, TbReassembler, tbToMeterResult, tbSummarySignature, parseTbSummary,
 } from './torchBearer';
 import { getTbFlip, onTbFlip } from './tbDisplay';
+import { parseTkSample, type TkSample } from './tklamp';
 import type { MeterResult } from './parseResult';
 import {
   saveLastDeviceId,
@@ -279,6 +280,7 @@ export class MeterConnection {
   // The bridge's status characteristic, decoded (kind of meter behind it, ColorMunki dial position and calibration).
   private tbMeterStatus: TbMeterStatus | null = null;
   private tbStatusListeners = new Set<(s: TbMeterStatus | null) => void>();
+  private tkListeners = new Set<(s: TkSample) => void>();
   private tbCalWaiter: { resolve: () => void; reject: (e: Error) => void } | null = null;
 
   /** Lets the app accept a reading that was started by pressing the button on the Torch Bearer itself. */
@@ -574,6 +576,14 @@ export class MeterConnection {
     this.tbStatusListeners.forEach((cb) => cb(stamped));
   }
 
+  /** TKLamp tester behind the bridge: called for every live reading (result packet 06, about 4-5 a second). */
+  onTkSample(cb: (s: TkSample) => void): () => void {
+    this.tkListeners.add(cb);
+    return () => {
+      this.tkListeners.delete(cb);
+    };
+  }
+
   isTorchBearer(): boolean {
     return this.tbMode && this.isConnected();
   }
@@ -601,7 +611,7 @@ export class MeterConnection {
         this.setTbMeterStatus(parseTbStatus(st));
         if (st[0] === TB_STATE_ERROR) {
           await connected.cancelConnection().catch(() => {});
-          throw new Error('The bridge is on, but no instrument is plugged into it. Plug the Torch Bearer or ColorMunki in, then connect again.');
+          throw new Error('The bridge is on, but no instrument is plugged into it. Plug the Torch Bearer, ColorMunki or TKLamp tester in, then connect again.');
         }
       }
     } catch (e: any) {
@@ -649,6 +659,11 @@ export class MeterConnection {
         }
         if (!char?.value) return;
         const arr = new Uint8Array(Buffer.from(char.value, 'base64'));
+        if (arr[0] === 0x06) {   // TKLamp live reading: not part of a spectrum, and too frequent to log
+          const ts = parseTkSample(arr);
+          if (ts) this.tkListeners.forEach((cb) => cb(ts));
+          return;
+        }
         this.log(`<- Bridge result (${arr.length}B): ${toHex(arr.subarray(0, 12))}${arr.length > 12 ? ' ...' : ''}`, true);
         try {
           const scan = this.tbReassembler.push(arr);

@@ -1,1 +1,1 @@
-New: unfolded foldables (Galaxy Fold) now get a dashboard layout with a History/Data switch on the right, and swipeable charts on smaller square screens. Also: iPad and tablet layouts, Compare readings side by side, Settings and TM-30 in windows, flicker on tablets.
+New: TKLamp tester support through the hCRI ESP32 bridge: live lumens, Start/Stop run, a chart with a time scale, and runs saved in History > Runtime and uploaded to Runtime on hCRI.io. Also unfolded foldable, iPad and tablet layouts, Compare readings side by side.

@@ -12,6 +12,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BackHandler, useWindowDimensions, Platform, View, ScrollView, StyleSheet, Alert, AppState, Keyboard, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MeterConnection } from '../ble/MeterConnection';
+import TkLampLive from '../components/TkLampLive';
 import type { BatteryStatus } from '../ble/protocol';
 import { deviceSupportsLive, deviceSupportsFlicker } from '../ble/protocol';
 import { startLiveSpectrum, startFlicker, captureFlickerOnce, readFlickerSettings, writeFlickerSetting, type LiveSession, type FlickerReading } from '../ble/liveSessions';
@@ -44,7 +45,8 @@ import { shareDebugLog } from '../utils/shareLog';
 import { shareSingleReadingCsv } from '../utils/shareCsv';
 import { hapticSuccess, hapticFailure } from '../utils/haptics';
 import { hpcsModelName } from '../ble/meterLabel';
-import { getMunkiCalHours, setMunkiCalHours, munkiButtonMode, TB_KIND_COLORMUNKI, MUNKI_DIAL_CALIBRATION, type TbMeterStatus } from '../ble/torchBearer';
+import { getTkRunState, onTkRunState, requestTkUpload, toggleTkRun } from '../ble/tklamp';
+import { getMunkiCalHours, setMunkiCalHours, munkiButtonMode, TB_KIND_COLORMUNKI, TB_KIND_TKLAMP, MUNKI_DIAL_CALIBRATION, type TbMeterStatus } from '../ble/torchBearer';
 import { enableKeepAwake, disableKeepAwake } from '../utils/keepAwake';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLayoutMode, isSquareWindow, sideColumnWidth, MIN_GRID_WIDTH } from '../layout';
@@ -1690,7 +1692,14 @@ export default function HomeScreen({ navigation }: any) {
   const isBusy = status === 'connecting' || status === 'measuring' || status === 'uploading';
   // ColorMunki behind the bridge: the centre button follows the dial. Calibration position -> an orange "Calibrate"; Ambient
   // (once calibrated) -> "Take reading"; any other position (or not calibrated) -> disabled, with a note above it.
-  const munkiMain: { override?: { caption: string; tint?: string; disabled?: boolean }; note?: string } = (() => {
+  const [tkRun, setTkRun] = useState(getTkRunState());
+  useEffect(() => onTkRunState(setTkRun), []);
+  const munkiMain: { override?: { caption: string; tint?: string; disabled?: boolean; icon?: 'play' | 'stop'; onPress?: () => void }; note?: string } = (() => {
+    if (tbMeter?.kind === TB_KIND_TKLAMP && (status === 'connected' || status === 'uploading')) {
+      return tkRun.recording
+        ? { override: { caption: 'Stop run', tint: '#D64545', icon: 'stop', onPress: toggleTkRun } }
+        : { override: { caption: 'Start run', disabled: !tkRun.canRecord, onPress: toggleTkRun } };
+    }
     if (!tbMeter || tbMeter.kind !== TB_KIND_COLORMUNKI || (status !== 'connected' && status !== 'uploading')) return {};
     const mode = munkiButtonMode(tbMeter, getMunkiCalHours(), calClock);
     if (mode.kind === 'calibrate') return { override: { caption: 'Calibrate', tint: '#E8922E' }, note: 'Dial is on calibration: press Calibrate, keep the instrument still.' };
@@ -1877,6 +1886,7 @@ export default function HomeScreen({ navigation }: any) {
             resetConnection={resetConnection}
             devicePickerDevices={multiMeterCandidates}
             munkiBridgeIds={munkiBridgeIds}
+            liveContent={tbMeter?.kind === TB_KIND_TKLAMP && (status === 'connected' || status === 'uploading') ? <TkLampLive conn={connRef.current} /> : undefined}
             devicePickerVisible={devicePickerVisible}
             onOpenDevicePicker={openDevicePicker}
             onSelectDevice={selectDeviceFromPicker}
@@ -1888,7 +1898,7 @@ export default function HomeScreen({ navigation }: any) {
             copyingLink={copyingLink}
             onCopyLink={copyReportLink}
             statIds={statIds}
-            connectedDeviceName={tbMeter ? (tbMeter.kind === TB_KIND_COLORMUNKI ? 'ColorMunki' : 'Torch Bearer') : hpcsModelName(deviceName)}
+            connectedDeviceName={tbMeter ? (tbMeter.kind === TB_KIND_COLORMUNKI ? 'ColorMunki' : tbMeter.kind === TB_KIND_TKLAMP ? 'TKLamp' : 'Torch Bearer') : hpcsModelName(deviceName)}
             connectedDeviceId={status === 'connected' || status === 'measuring' ? connRef.current?.getDeviceId() ?? null : null}
             battery={battery}
             uploadTitle={uploadTitle}
@@ -1939,7 +1949,8 @@ export default function HomeScreen({ navigation }: any) {
           disconnect={disconnect}
           onShowTestReading={showTestReading}
           loadingTestReading={loadingTestReading}
-          onUpload={upload}
+          onUpload={tbMeter?.kind === TB_KIND_TKLAMP ? requestTkUpload : upload}
+          uploadOverride={tbMeter?.kind === TB_KIND_TKLAMP ? { label: 'Upload run', disabled: !tkRun.canUpload || tkRun.uploading, busy: tkRun.uploading, done: tkRun.uploaded } : undefined}
           uploading={status === 'uploading'}
           uploadSucceeded={uploadSucceeded}
           canCopyLink={!!lastUploadedReport}

@@ -276,3 +276,52 @@ export async function saveMunkiBridgeId(id: string, isMunki: boolean): Promise<R
   await AsyncStorage.setItem(MUNKI_BRIDGES_KEY, JSON.stringify(next));
   return next;
 }
+
+// TKLamp tester: raw sensor counts per lumen. 313.2 was measured on a calibrated unit; it changes if the tester is recalibrated.
+const TK_SCALE_KEY = 'hcri.io.pref.tklampRawPerLumen';
+
+export async function loadTkScalePreference(fallback: number): Promise<number> {
+  try {
+    const raw = await AsyncStorage.getItem(TK_SCALE_KEY);
+    const n = raw === null ? fallback : Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export async function saveTkScalePreference(v: number): Promise<void> {
+  await AsyncStorage.setItem(TK_SCALE_KEY, String(v));
+}
+
+// TKLamp live chart: seconds shown across the screen (the chart scrolls sideways for the rest of the run).
+const TK_WINDOW_KEY = 'hcri.io.pref.tklampWindowSeconds';
+
+export async function loadTkWindowPreference(fallback: number): Promise<number> {
+  try {
+    const raw = await AsyncStorage.getItem(TK_WINDOW_KEY);
+    const n = raw === null ? fallback : Number(raw);
+    return Number.isFinite(n) && n >= 10 ? n : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export async function saveTkWindowPreference(v: number): Promise<void> {
+  await AsyncStorage.setItem(TK_WINDOW_KEY, String(v));
+}
+
+// TKLamp: trim the dark readings before the light came on when a run is stopped (default on).
+const TK_TRIM_KEY = 'hcri.io.pref.tklampTrimLeading';
+
+export async function loadTkTrimPreference(): Promise<boolean> {
+  try {
+    return (await AsyncStorage.getItem(TK_TRIM_KEY)) !== 'false';
+  } catch {
+    return true;
+  }
+}
+
+export async function saveTkTrimPreference(v: boolean): Promise<void> {
+  await AsyncStorage.setItem(TK_TRIM_KEY, v ? 'true' : 'false');
+}

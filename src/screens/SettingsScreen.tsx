@@ -71,10 +71,16 @@ import {
   saveTbCorrectionPreference,
   loadMunkiCalHoursPreference,
   saveMunkiCalHoursPreference,
+  loadTkScalePreference,
+  saveTkScalePreference,
+  saveTkWindowPreference,
+  loadTkTrimPreference,
+  saveTkTrimPreference,
 } from '../storage/preferences';
 import { setTbCorrectionEnabled } from '../ble/tbCorrection';
 import { setTbFlip } from '../ble/tbDisplay';
 import { setMunkiCalHours } from '../ble/torchBearer';
+import { TK_RAW_PER_LM_DEFAULT, getTkRawPerLm, getTkTrim, getTkWindowS, setTkRawPerLm, setTkTrim, setTkWindowS } from '../ble/tklamp';
 import {
   StatDisplayPrefs,
   loadStatDisplayPrefs,
@@ -164,6 +170,11 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   const [tbCorrection, setTbCorrection] = useState(false);
   const [tbFlipped, setTbFlipped] = useState(false);
   const [munkiHours, setMunkiHours] = useState('1');
+  const [tkScale, setTkScale] = useState(String(getTkRawPerLm()));
+  const [tkTrim, setTkTrimState] = useState(getTkTrim());
+  useEffect(() => { loadTkTrimPreference().then((v) => { setTkTrim(v); setTkTrimState(v); }); }, []);
+  const toggleTkTrim = async (v: boolean) => { setTkTrimState(v); setTkTrim(v); await saveTkTrimPreference(v); };
+  const [tkWindow, setTkWindow] = useState(String(getTkWindowS()));
   const [help, setHelp] = useState<{ title: string; text: string } | null>(null);
   const [flickerWithReading, setFlickerWithReading] = useState(false);
   const [sideTabMode, setSideTabMode] = useState<SideTabMode>('remember');
@@ -223,6 +234,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
     loadTestReportIdPreference().then(setTestReportId);
     loadTbCorrectionPreference().then(setTbCorrection);
     loadMunkiCalHoursPreference().then((h) => setMunkiHours(String(h)));
+    loadTkScalePreference(TK_RAW_PER_LM_DEFAULT).then((v) => { setTkRawPerLm(v); setTkScale(String(v)); });
     loadTbFlipPreference().then((v) => setTbFlipped(v === true));
     loadFlickerWithReadingPreference().then(setFlickerWithReading);
     loadSideTabModePreference().then(setSideTabMode).catch(() => {});
@@ -299,6 +311,22 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
     setTbFlipped(value);
     setTbFlip(value); // sent to a connected Torch Bearer right away, and to the next one that connects
     await saveTbFlipPreference(value);
+  };
+
+  const commitTkWindow = async () => {
+    const n = Number(tkWindow.replace(',', '.'));
+    const v = Number.isFinite(n) && n >= 10 ? Math.min(Math.round(n), 86400) : getTkWindowS();
+    setTkWindow(String(v));
+    setTkWindowS(v);
+    await saveTkWindowPreference(v);
+  };
+
+  const commitTkScale = async () => {
+    const n = Number(tkScale.replace(',', '.'));
+    const v = Number.isFinite(n) && n > 0 ? n : getTkRawPerLm();
+    setTkScale(String(v));
+    setTkRawPerLm(v);
+    await saveTkScalePreference(v);
   };
 
   const commitMunkiHours = async () => {
@@ -949,6 +977,41 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
           maxLength={5}
         />
       )}
+
+      {sectionHeader('TKLamp tester')}
+      {settingRow(
+        'Counts per lumen',
+        "The TKLamp tester sends a raw sensor count, and the app divides it by this number to show lumens. The default, 313.2, was measured on one calibrated tester using its 2150 lm calibration lamp. Each tester (and each recalibration) can come out a little different, so if the app disagrees with the lamp, set it from the live screen with a lamp of known output, or type a number here. A bigger number shows fewer lumens.",
+        <TextInput
+          accessibilityLabel="TKLamp counts per lumen"
+          style={[styles.input, { width: 84, textAlign: 'center', marginTop: 0 }]}
+          value={tkScale}
+          onChangeText={setTkScale}
+          onEndEditing={commitTkScale}
+          onBlur={commitTkScale}
+          keyboardType="decimal-pad"
+          returnKeyType="done"
+          maxLength={8}
+        />
+      )}
+
+      {settingRow(
+        'Chart width (seconds)',
+        'How many seconds the live and saved runtime charts show across the screen. The lumen scale starts at 0 and only grows, so it never changes when you swipe. A longer run scrolls sideways: swipe the chart to look back, or tap Latest to jump to now.',
+        <TextInput
+          accessibilityLabel="TKLamp chart width in seconds"
+          style={[styles.input, { width: 84, textAlign: 'center', marginTop: 0 }]}
+          value={tkWindow}
+          onChangeText={setTkWindow}
+          onEndEditing={commitTkWindow}
+          onBlur={commitTkWindow}
+          keyboardType="number-pad"
+          returnKeyType="done"
+          maxLength={5}
+        />
+      )}
+
+      {switchRow('Trim the dark start of a run', 'On by default. When you stop a TKLamp run, the near-dark readings before the light came on are dropped (everything before the output first reaches 2 percent of the run\'s peak, keeping one second of lead-in), so the saved and uploaded curve starts when the light does. Turn off to keep every reading from the moment you tapped Start run.', tkTrim, toggleTkTrim)}
 
       {sectionHeader('Readings')}
       {switchRow('LED suggestions', "On by default. After a reading, hCRI.io suggests the LED (brand, model and CCT) from the shape of the spectrum and the reading's title, and you confirm it with one tap. Turn off to stop those requests and hide the suggestion cards. You can still add LED details yourself with the LED button.", ledSuggestions, toggleLedSuggestions)}
