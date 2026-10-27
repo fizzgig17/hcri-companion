@@ -611,7 +611,7 @@ export class MeterConnection {
         this.setTbMeterStatus(parseTbStatus(st));
         if (st[0] === TB_STATE_ERROR) {
           await connected.cancelConnection().catch(() => {});
-          throw new Error('The bridge is on, but no instrument is plugged into it. Plug the Torch Bearer or ColorMunki in, then connect again.');
+          throw new Error('The bridge is on, but no instrument is plugged into it. Plug the Torch Bearer, ColorMunki or TKLamp tester in, then connect again.');
         }
       }
     } catch (e: any) {
