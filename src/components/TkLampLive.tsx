@@ -5,21 +5,20 @@
 // hCRI.io (label, 1 s curve in lumens). Lumens = the tester's raw count / "counts per lumen" (editable, saved on the
 // phone); see ble/tklamp.ts for where 313.2 comes from.
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TextInput, Alert, StyleSheet } from 'react-native';
-import Svg, { Polyline, Line, Text as SvgText } from 'react-native-svg';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, TextInput, Alert, Modal, TouchableOpacity, StyleSheet } from 'react-native';
+import RuntimeChart from './RuntimeChart';
 import { useTheme } from '../contexts/ThemeContext';
 import PrimaryButton from './PrimaryButton';
 import type { MeterConnection } from '../ble/MeterConnection';
-import { TK_RAW_PER_LM_DEFAULT, TkRecorder, TkSmoother, defaultRunLabel, getTkRawPerLm, onTkRawPerLm, resampleRun, scaleFromLamp, setTkRawPerLm, tkLumens, type TkSample } from '../ble/tklamp';
+import { TK_RAW_PER_LM_DEFAULT, TkRecorder, TkSmoother, defaultRunLabel, getTkRawPerLm, getTkWindowS, onTkRawPerLm, onTkWindowS, setTkWindowS, resampleRun, scaleFromLamp, setTkRawPerLm, tkLumens, type TkSample } from '../ble/tklamp';
 import { addRuntime, deleteRuntime, updateRuntime } from '../storage/runtimeHistory';
 import { loadHcriCredentials } from '../storage/secureStorage';
-import { loadTkScalePreference, saveTkScalePreference } from '../storage/preferences';
+import { loadTkScalePreference, loadTkWindowPreference, saveTkScalePreference } from '../storage/preferences';
 import { uploadRuntimeToHcri } from '../hcri/uploadRuntimeToHcri';
 
-const WINDOW_S = 120;       // chart shows the last two minutes
-const CHART_H = 140;
-const CHART_W = 320;
+const TRACE_GAP_S = 0.5;     // the on-screen trace keeps one point per half second
+const TRACE_MAX = 20000;     // about 2.7 hours; beyond that every other point is dropped
 
 interface Props {
   conn: MeterConnection | null;
@@ -46,6 +45,8 @@ export default function TkLampLive({ conn }: Props) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
+  const [windowS, setWindowS] = useState(getTkWindowS());
+  const [calOpen, setCalOpen] = useState(false);
 
   const smoother = useRef(new TkSmoother(5));
   const recorder = useRef(new TkRecorder());
@@ -58,11 +59,14 @@ export default function TkLampLive({ conn }: Props) {
 
   useEffect(() => {
     loadTkScalePreference(TK_RAW_PER_LM_DEFAULT).then(setTkRawPerLm);
-    return onTkRawPerLm((v) => {
+    loadTkWindowPreference(getTkWindowS()).then(setTkWindowS);
+    const offW = onTkWindowS(setWindowS);
+    const offS = onTkRawPerLm((v) => {
       scaleRef.current = v;
       setRawPerLm(v);
       smoother.current.reset();
     });
+    return () => { offW(); offS(); };
   }, []);
 
   useEffect(() => {
@@ -73,9 +77,11 @@ export default function TkLampLive({ conn }: Props) {
       const t = (s.ms - t0.current) / 1000;
       const v = tkLumens(s.raw, scaleRef.current);
       const avg = smoother.current.push(v);
-      traceRef.current.push({ t, lm: avg });
-      const cutoff = t - WINDOW_S;
-      while (traceRef.current.length && traceRef.current[0].t < cutoff) traceRef.current.shift();
+      const tr = traceRef.current;
+      if (!tr.length || t - tr[tr.length - 1].t >= TRACE_GAP_S) {
+        tr.push({ t, lm: avg });
+        if (tr.length > TRACE_MAX) traceRef.current = tr.filter((_, i) => i % 2 === 0);
+      }
       if (recordingRef.current) recorder.current.add(s, scaleRef.current);
       const now = Date.now();
       if (now - lastDraw.current > 250) {   // redraw about 4 times a second, however fast readings arrive
@@ -98,6 +104,17 @@ export default function TkLampLive({ conn }: Props) {
     };
   }, [conn]);
 
+  // Wipe the chart and the number (not allowed mid-recording, which keeps its own copy).
+  const clearScreen = () => {
+    traceRef.current = [];
+    t0.current = null;
+    smoother.current.reset();
+    setTrace([]);
+    setLm(null);
+    setStale(false);
+    lastRx.current = 0;
+  };
+
   // Calibrate from a lamp of known output: a steady reading of it, taken at the current scale, sets the new scale.
   const calibrate = useCallback(() => {
     const known = Number(lampDraft.replace(',', '.'));
@@ -108,7 +125,7 @@ export default function TkLampLive({ conn }: Props) {
     }
     Alert.alert('Use this scale?', `The lamp reads ${smoother.current.value().toFixed(0)} lm now. A scale of ${v} counts per lumen would make it read ${known}.`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Use it', onPress: () => { setTkRawPerLm(v); saveTkScalePreference(v).catch(() => {}); setLampDraft(''); } },
+      { text: 'Use it', onPress: () => { setTkRawPerLm(v); saveTkScalePreference(v).catch(() => {}); setLampDraft(''); setCalOpen(false); } },
     ]);
   }, [lampDraft]);
 
@@ -181,36 +198,24 @@ export default function TkLampLive({ conn }: Props) {
     }
   };
 
-  const chart = useMemo(() => {
-    if (trace.length < 2) return null;
-    const tMax = trace[trace.length - 1].t;
-    const tMin = Math.max(trace[0].t, tMax - WINDOW_S);
-    const span = Math.max(1, tMax - tMin);
-    const vals = trace.map((p) => p.lm);
-    const lo = Math.min(...vals);
-    const hi = Math.max(...vals);
-    const pad = Math.max(1, (hi - lo) * 0.15, hi * 0.01);
-    const yLo = Math.max(0, lo - pad);
-    const yHi = hi + pad;
-    const X = (t: number) => ((t - tMin) / span) * (CHART_W - 8) + 4;
-    const Y = (v: number) => CHART_H - 16 - ((v - yLo) / (yHi - yLo)) * (CHART_H - 28);
-    return {
-      pts: trace.map((p) => `${X(p.t).toFixed(1)},${Y(p.lm).toFixed(1)}`).join(' '),
-      yHi, yLo, span,
-    };
-  }, [trace]);
-
   const styles = StyleSheet.create({
     wrap: { flex: 1 },
     big: { color: colors.text, fontSize: 64, fontWeight: '700', textAlign: 'center', marginTop: 4 },
     unit: { color: colors.muted, fontSize: 16, textAlign: 'center', marginTop: -6 },
     stale: { color: colors.danger, fontSize: 13, textAlign: 'center', marginTop: 4 },
-    chartBox: { marginTop: 10, alignItems: 'center' },
+    chartBox: { marginTop: 10 },
     row: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
     fieldLabel: { color: colors.muted, fontSize: 11, marginBottom: 4 },
     input: { flex: 1, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 8, color: colors.text, paddingHorizontal: 10, paddingVertical: 8, fontSize: 14 },
     rec: { color: colors.danger, fontSize: 14, fontWeight: '600', textAlign: 'center', marginTop: 10 },
     note: { color: colors.warning, fontSize: 13, marginTop: 8, textAlign: 'center' },
+    link: { color: colors.accent, fontSize: 12, textAlign: 'center', marginTop: 14, paddingVertical: 6 },
+    backdrop: { flex: 1, backgroundColor: '#000a', justifyContent: 'flex-start', paddingTop: 90, paddingHorizontal: 20 },
+    card: { backgroundColor: colors.card, borderRadius: 14, padding: 16 },
+    cardTitle: { color: colors.text, fontSize: 16, fontWeight: '700', marginBottom: 8 },
+    modalRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 14 },
+    modalBtn: { paddingVertical: 8, paddingHorizontal: 14 },
+    modalBtnText: { color: colors.accent, fontWeight: '700', fontSize: 15 },
     small: { color: colors.muted, fontSize: 11, marginTop: 8, textAlign: 'center' },
   });
 
@@ -221,18 +226,14 @@ export default function TkLampLive({ conn }: Props) {
       {stale && <Text style={styles.stale}>No readings for 5 s. Is the tester still on and connected?</Text>}
 
       <View style={styles.chartBox}>
-        <Svg width={CHART_W} height={CHART_H}>
-          <Line x1={4} y1={CHART_H - 16} x2={CHART_W - 4} y2={CHART_H - 16} stroke={colors.cardBorder} strokeWidth={1} />
-          {chart && <Polyline points={chart.pts} fill="none" stroke={colors.accent} strokeWidth={2} />}
-          {chart && <SvgText x={6} y={11} fontSize={10} fill={colors.muted}>{Math.round(chart.yHi)}</SvgText>}
-          {chart && <SvgText x={6} y={CHART_H - 20} fontSize={10} fill={colors.muted}>{Math.round(chart.yLo)}</SvgText>}
-          <SvgText x={CHART_W - 6} y={CHART_H - 3} fontSize={10} fill={colors.muted} textAnchor="end">last {Math.min(WINDOW_S, Math.round(chart?.span ?? 0))} s</SvgText>
-        </Svg>
+        <RuntimeChart points={trace} windowS={windowS} follow />
       </View>
+      <Text style={styles.small}>Scale 0–top in lumens, {windowS >= 60 ? `${Math.round(windowS / 60 * 10) / 10} min` : `${windowS} s`} across the screen. Swipe the chart to look back.</Text>
 
       {recording && <Text style={styles.rec}>● Recording {fmtDur(recSeconds)} ({recCount} readings)</Text>}
 
       {!recording && !finished && <PrimaryButton title="Record run" onPress={start} disabled={lm == null || stale} />}
+      {!recording && !finished && trace.length > 0 && <PrimaryButton title="Clear screen" onPress={clearScreen} variant="muted" />}
       {recording && <PrimaryButton title="Stop recording" onPress={stop} variant="danger" />}
       {finished && !recording && (
         <View>
@@ -245,23 +246,33 @@ export default function TkLampLive({ conn }: Props) {
       )}
       {note && <Text style={styles.note}>{note}</Text>}
 
-      <View style={{ marginTop: 'auto' as any }}>
-        <Text style={styles.fieldLabel}>Calibrate with a lamp of known output</Text>
-        <View style={styles.row}>
-          <TextInput
-            style={styles.input}
-            value={lampDraft}
-            onChangeText={setLampDraft}
-            placeholder="Lamp lumens, e.g. 2150"
-            placeholderTextColor={colors.muted}
-            keyboardType="decimal-pad"
-            returnKeyType="done"
-            accessibilityLabel="Known lumens of the calibration lamp"
-          />
-          <PrimaryButton title="Set scale" onPress={calibrate} variant="muted" style={{ marginTop: 0, marginLeft: 8, paddingHorizontal: 14 }} disabled={lm == null || stale} />
+      <TouchableOpacity onPress={() => setCalOpen(true)} accessibilityRole="button" accessibilityLabel="Set the scale from a lamp of known output">
+        <Text style={styles.link}>Scale: {rawPerLm} counts per lumen. Tap to set it from a lamp</Text>
+      </TouchableOpacity>
+
+      <Modal visible={calOpen} transparent animationType="fade" onRequestClose={() => setCalOpen(false)}>
+        <View style={styles.backdrop}>
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Set scale from a lamp</Text>
+            <Text style={styles.fieldLabel}>Put the lamp in the sphere, wait for a steady number ({lm == null ? '—' : lm.toFixed(0)} lm now), then enter its rated lumens.</Text>
+            <TextInput
+              style={styles.input}
+              value={lampDraft}
+              onChangeText={setLampDraft}
+              placeholder="Lamp lumens, e.g. 2150"
+              placeholderTextColor={colors.muted}
+              keyboardType="decimal-pad"
+              returnKeyType="done"
+              autoFocus
+              accessibilityLabel="Known lumens of the calibration lamp"
+            />
+            <View style={styles.modalRow}>
+              <TouchableOpacity style={styles.modalBtn} onPress={() => setCalOpen(false)}><Text style={styles.modalBtnText}>Cancel</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.modalBtn} onPress={calibrate} disabled={lm == null || stale}><Text style={styles.modalBtnText}>Set scale</Text></TouchableOpacity>
+            </View>
+          </View>
         </View>
-        <Text style={styles.small}>Scale: {rawPerLm} counts per lumen (also in Settings).</Text>
-      </View>
+      </Modal>
     </View>
   );
 }

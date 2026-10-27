@@ -293,3 +293,20 @@ export async function loadTkScalePreference(fallback: number): Promise<number> {
 export async function saveTkScalePreference(v: number): Promise<void> {
   await AsyncStorage.setItem(TK_SCALE_KEY, String(v));
 }
+
+// TKLamp live chart: seconds shown across the screen (the chart scrolls sideways for the rest of the run).
+const TK_WINDOW_KEY = 'hcri.io.pref.tklampWindowSeconds';
+
+export async function loadTkWindowPreference(fallback: number): Promise<number> {
+  try {
+    const raw = await AsyncStorage.getItem(TK_WINDOW_KEY);
+    const n = raw === null ? fallback : Number(raw);
+    return Number.isFinite(n) && n >= 10 ? n : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export async function saveTkWindowPreference(v: number): Promise<void> {
+  await AsyncStorage.setItem(TK_WINDOW_KEY, String(v));
+}

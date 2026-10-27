@@ -128,3 +128,18 @@ export function defaultRunLabel(d: Date = new Date()): string {
   const p = (n: number) => String(n).padStart(2, '0');
   return `TKLamp run ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
+
+// How many seconds the live chart shows across the screen before you have to swipe back (Settings > TKLamp tester).
+export const TK_WINDOW_DEFAULT_S = 120;
+let currentWindowS = TK_WINDOW_DEFAULT_S;
+const windowListeners = new Set<(v: number) => void>();
+export function getTkWindowS(): number { return currentWindowS; }
+export function setTkWindowS(v: number): void {
+  if (!(v >= 10) || v === currentWindowS) return;
+  currentWindowS = v;
+  windowListeners.forEach((cb) => cb(v));
+}
+export function onTkWindowS(cb: (v: number) => void): () => void {
+  windowListeners.add(cb);
+  return () => { windowListeners.delete(cb); };
+}

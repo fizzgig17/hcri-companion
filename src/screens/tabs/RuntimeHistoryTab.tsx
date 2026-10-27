@@ -7,6 +7,8 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Modal, ActivityIndicator, StyleSheet } from 'react-native';
 import Svg, { Polyline } from 'react-native-svg';
+import RuntimeChart from '../../components/RuntimeChart';
+import { getTkWindowS } from '../../ble/tklamp';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Icon, ICON_SIZE } from '../../components/icons';
 import HintPressable from '../../components/HintPressable';
@@ -50,6 +52,8 @@ export default function RuntimeHistoryTab({ runs, loading, uploadingId, onRename
   const { colors } = useTheme();
   const [editing, setEditing] = useState<SavedRuntime | null>(null);
   const [draft, setDraft] = useState('');
+  const [viewing, setViewing] = useState<SavedRuntime | null>(null);
+  const [fit, setFit] = useState(false);
 
   const styles = StyleSheet.create({
     empty: { color: colors.muted, fontSize: 13, textAlign: 'center', paddingVertical: 28, lineHeight: 19 },
@@ -59,6 +63,7 @@ export default function RuntimeHistoryTab({ runs, loading, uploadingId, onRename
     label: { color: colors.text, fontSize: 15, fontWeight: '600', marginTop: 6 },
     stats: { color: colors.muted, fontSize: 13, marginTop: 2 },
     buttons: { flexDirection: 'row', alignItems: 'center' },
+    open: { color: colors.accent, fontSize: 11, marginTop: 2 },
     badge: { alignSelf: 'flex-start', marginTop: 8, borderRadius: 10, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2 },
     badgeText: { fontSize: 11, fontWeight: '600' },
     backdrop: { flex: 1, backgroundColor: '#000a', justifyContent: 'center', padding: 20 },
@@ -98,14 +103,40 @@ export default function RuntimeHistoryTab({ runs, loading, uploadingId, onRename
             <Text style={styles.label} numberOfLines={2}>{r.label}</Text>
           </TouchableOpacity>
           <Text style={styles.stats}>{runtimeSummary(r)}</Text>
-          <Svg width={W} height={H} style={{ marginTop: 6 }}>
-            <Polyline points={spark(r.values)} fill="none" stroke={colors.accent} strokeWidth={2} />
-          </Svg>
+          <TouchableOpacity onPress={() => { setViewing(r); setFit(false); }} accessibilityRole="button" accessibilityLabel="Open the full chart of this run">
+            <Svg width={W} height={H} style={{ marginTop: 6 }}>
+              <Polyline points={spark(r.values)} fill="none" stroke={colors.accent} strokeWidth={2} />
+            </Svg>
+            <Text style={styles.open}>Tap for the full chart</Text>
+          </TouchableOpacity>
           <View style={[styles.badge, { borderColor: r.uploaded ? colors.accent : colors.cardBorder }]}>
             <Text style={[styles.badgeText, { color: r.uploaded ? colors.accent : colors.muted }]}>{r.uploaded ? 'Uploaded' : 'On this phone'}</Text>
           </View>
         </View>
       ))}
+
+      <Modal visible={!!viewing} animationType="slide" onRequestClose={() => setViewing(null)}>
+        <View style={{ flex: 1, backgroundColor: colors.background, padding: 16, paddingTop: 48 }}>
+          {viewing && (
+            <>
+              <Text style={styles.cardTitle}>{viewing.label}</Text>
+              <Text style={styles.stats}>{new Date(viewing.savedAt).toLocaleString()}</Text>
+              <Text style={[styles.stats, { marginBottom: 12 }]}>{runtimeSummary(viewing)}</Text>
+              <RuntimeChart
+                points={viewing.values.map((lm, i) => ({ t: i * viewing.intervalSeconds, lm }))}
+                windowS={fit ? 0 : getTkWindowS()}
+                height={220}
+              />
+              <TouchableOpacity onPress={() => setFit(!fit)} accessibilityRole="button">
+                <Text style={styles.open}>{fit ? 'Show at the Settings scale (swipe)' : 'Fit the whole run on screen'}</Text>
+              </TouchableOpacity>
+            </>
+          )}
+          <View style={styles.modalRow}>
+            <TouchableOpacity style={styles.modalBtn} onPress={() => setViewing(null)}><Text style={styles.modalBtnText}>Close</Text></TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={!!editing} transparent animationType="fade" onRequestClose={() => setEditing(null)}>
         <View style={styles.backdrop}>

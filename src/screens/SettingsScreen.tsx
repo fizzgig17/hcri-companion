@@ -73,11 +73,12 @@ import {
   saveMunkiCalHoursPreference,
   loadTkScalePreference,
   saveTkScalePreference,
+  saveTkWindowPreference,
 } from '../storage/preferences';
 import { setTbCorrectionEnabled } from '../ble/tbCorrection';
 import { setTbFlip } from '../ble/tbDisplay';
 import { setMunkiCalHours } from '../ble/torchBearer';
-import { TK_RAW_PER_LM_DEFAULT, getTkRawPerLm, setTkRawPerLm } from '../ble/tklamp';
+import { TK_RAW_PER_LM_DEFAULT, getTkRawPerLm, getTkWindowS, setTkRawPerLm, setTkWindowS } from '../ble/tklamp';
 import {
   StatDisplayPrefs,
   loadStatDisplayPrefs,
@@ -168,6 +169,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   const [tbFlipped, setTbFlipped] = useState(false);
   const [munkiHours, setMunkiHours] = useState('1');
   const [tkScale, setTkScale] = useState(String(getTkRawPerLm()));
+  const [tkWindow, setTkWindow] = useState(String(getTkWindowS()));
   const [help, setHelp] = useState<{ title: string; text: string } | null>(null);
   const [flickerWithReading, setFlickerWithReading] = useState(false);
   const [sideTabMode, setSideTabMode] = useState<SideTabMode>('remember');
@@ -304,6 +306,14 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
     setTbFlipped(value);
     setTbFlip(value); // sent to a connected Torch Bearer right away, and to the next one that connects
     await saveTbFlipPreference(value);
+  };
+
+  const commitTkWindow = async () => {
+    const n = Number(tkWindow.replace(',', '.'));
+    const v = Number.isFinite(n) && n >= 10 ? Math.min(Math.round(n), 86400) : getTkWindowS();
+    setTkWindow(String(v));
+    setTkWindowS(v);
+    await saveTkWindowPreference(v);
   };
 
   const commitTkScale = async () => {
@@ -977,6 +987,22 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
           keyboardType="decimal-pad"
           returnKeyType="done"
           maxLength={8}
+        />
+      )}
+
+      {settingRow(
+        'Chart width (seconds)',
+        'How many seconds the live and saved runtime charts show across the screen. The lumen scale starts at 0 and only grows, so it never changes when you swipe. A longer run scrolls sideways: swipe the chart to look back, or tap Latest to jump to now.',
+        <TextInput
+          accessibilityLabel="TKLamp chart width in seconds"
+          style={[styles.input, { width: 84, textAlign: 'center', marginTop: 0 }]}
+          value={tkWindow}
+          onChangeText={setTkWindow}
+          onEndEditing={commitTkWindow}
+          onBlur={commitTkWindow}
+          keyboardType="number-pad"
+          returnKeyType="done"
+          maxLength={5}
         />
       )}
 
