@@ -29,8 +29,8 @@ export function scaleFromLamp(rawAvgLm: number, scale: number, knownLm: number):
   if (!(rawAvgLm > 0) || !(knownLm > 0) || !(scale > 0)) return null;
   return Math.round((scale * rawAvgLm / knownLm) * 10) / 10;
 }
-/** Longest curve hCRI.io accepts. */
-export const TK_MAX_POINTS = 5000;
+/** Longest curve hCRI.io accepts (24 hours at one reading a second is 86,400). */
+export const TK_MAX_POINTS = 100000;
 
 export interface TkSample {
   /** Bridge uptime in ms when the reading arrived. */

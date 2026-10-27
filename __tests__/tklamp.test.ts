@@ -51,9 +51,14 @@ describe('recording and resampling', () => {
     expect(out.values).toEqual([100, 100, 100, 50]);
   });
   it('widens the step for very long runs', () => {
-    const out = resampleRun([{ t: 0, lm: 1 }, { t: 20000, lm: 1 }])!;
-    expect(out.intervalSeconds).toBe(5);
-    expect(out.values.length).toBeLessThanOrEqual(5000);
+    const out = resampleRun([{ t: 0, lm: 1 }, { t: 200000, lm: 1 }])!;
+    expect(out.intervalSeconds).toBe(3);
+    expect(out.values.length).toBeLessThanOrEqual(100000);
+  });
+  it('keeps 1 s steps for a 24 hour run', () => {
+    const out = resampleRun([{ t: 0, lm: 1 }, { t: 86400, lm: 1 }])!;
+    expect(out.intervalSeconds).toBe(1);
+    expect(out.values.length).toBe(86401);
   });
   it('needs at least two points', () => {
     expect(resampleRun([{ t: 0, lm: 1 }])).toBeNull();
