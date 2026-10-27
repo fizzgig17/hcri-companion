@@ -6,13 +6,13 @@
 // phone); see ble/tklamp.ts for where 313.2 comes from.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, TextInput, Alert, Modal, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TextInput, Alert, Modal, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import RuntimeChart from './RuntimeChart';
 import { useTheme } from '../contexts/ThemeContext';
 import PrimaryButton from './PrimaryButton';
 import type { MeterConnection } from '../ble/MeterConnection';
-import { TK_RAW_PER_LM_DEFAULT, TkRecorder, TkSmoother, defaultRunLabel, getTkRawPerLm, getTkWindowS, onTkRawPerLm, onTkWindowS, setTkWindowS, resampleRun, scaleFromLamp, setTkRawPerLm, tkLumens, type TkSample } from '../ble/tklamp';
-import { addRuntime, deleteRuntime, updateRuntime } from '../storage/runtimeHistory';
+import { TK_RAW_PER_LM_DEFAULT, TkRecorder, TkSmoother, defaultRunLabel, getTkRawPerLm, getTkWindowS, onTkRawPerLm, onTkRunToggle, onTkWindowS, setTkRunState, setTkWindowS, resampleRun, scaleFromLamp, setTkRawPerLm, tkLumens, type TkSample } from '../ble/tklamp';
+import { addRuntime, updateRuntime } from '../storage/runtimeHistory';
 import { loadHcriCredentials } from '../storage/secureStorage';
 import { loadTkScalePreference, loadTkWindowPreference, saveTkScalePreference } from '../storage/preferences';
 import { uploadRuntimeToHcri } from '../hcri/uploadRuntimeToHcri';
@@ -104,6 +104,20 @@ export default function TkLampLive({ conn }: Props) {
     };
   }, [conn]);
 
+  // The main button in the bottom bar starts and stops a run.
+  const lmRef = useRef<number | null>(null);
+  lmRef.current = lm;
+  const staleRef = useRef(false);
+  staleRef.current = stale;
+  useEffect(() => onTkRunToggle(() => {
+    if (recordingRef.current) stop();
+    else if (lmRef.current != null && !staleRef.current) start();
+  }));   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setTkRunState({ recording, canRecord: lm != null && !stale });
+  }, [recording, lm, stale]);
+  useEffect(() => () => setTkRunState({ recording: false, canRecord: false }), []);
+
   // Wipe the chart and the number (not allowed mid-recording, which keeps its own copy).
   const clearScreen = () => {
     traceRef.current = [];
@@ -155,13 +169,6 @@ export default function TkLampLive({ conn }: Props) {
         .then((e) => { savedId.current = e.id; })
         .catch(() => setNote('The run could not be saved on this phone.'));
     }
-  };
-  const discard = () => {
-    recorder.current.reset();
-    if (savedId.current) deleteRuntime(savedId.current).catch(() => {});
-    savedId.current = null;
-    setFinished(false);
-    setNote(null);
   };
   const upload = async () => {
     const r = resampleRun(recorder.current.points());
@@ -220,7 +227,7 @@ export default function TkLampLive({ conn }: Props) {
   });
 
   return (
-    <View style={styles.wrap}>
+    <ScrollView style={styles.wrap} contentContainerStyle={{ paddingBottom: 8 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
       <Text style={styles.big}>{lm == null ? '—' : lm >= 100 ? lm.toFixed(0) : lm.toFixed(1)}</Text>
       <Text style={styles.unit}>lumens (1 s average)</Text>
       {stale && <Text style={styles.stale}>No readings for 5 s. Is the tester still on and connected?</Text>}
@@ -230,18 +237,16 @@ export default function TkLampLive({ conn }: Props) {
       </View>
       <Text style={styles.small}>Scale 0–top in lumens, {windowS >= 60 ? `${Math.round(windowS / 60 * 10) / 10} min` : `${windowS} s`} across the screen. Swipe the chart to look back.</Text>
 
+      {!recording && !finished && lm != null && <Text style={styles.small}>Press Start run below to record.</Text>}
       {recording && <Text style={styles.rec}>● Recording {fmtDur(recSeconds)} ({recCount} readings)</Text>}
 
-      {!recording && !finished && <PrimaryButton title="Record run" onPress={start} disabled={lm == null || stale} />}
       {!recording && !finished && trace.length > 0 && <PrimaryButton title="Clear screen" onPress={clearScreen} variant="muted" />}
-      {recording && <PrimaryButton title="Stop recording" onPress={stop} variant="danger" />}
       {finished && !recording && (
         <View>
           <Text style={styles.fieldLabel}>Name on hCRI.io (same name replaces an earlier run)</Text>
           <TextInput style={styles.input} value={label} onChangeText={setLabel} autoCapitalize="none" autoCorrect={false} maxLength={160} />
           <Text style={styles.small}>{fmtDur(recSeconds)} recorded, {recCount} readings</Text>
           <PrimaryButton title={busy ? 'Uploading…' : 'Upload to Runtime'} onPress={upload} disabled={busy} />
-          <PrimaryButton title="Discard" onPress={discard} variant="muted" disabled={busy} />
         </View>
       )}
       {note && <Text style={styles.note}>{note}</Text>}
@@ -273,6 +278,6 @@ export default function TkLampLive({ conn }: Props) {
           </View>
         </View>
       </Modal>
-    </View>
+    </ScrollView>
   );
 }

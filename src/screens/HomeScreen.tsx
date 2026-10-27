@@ -45,6 +45,7 @@ import { shareDebugLog } from '../utils/shareLog';
 import { shareSingleReadingCsv } from '../utils/shareCsv';
 import { hapticSuccess, hapticFailure } from '../utils/haptics';
 import { hpcsModelName } from '../ble/meterLabel';
+import { getTkRunState, onTkRunState, toggleTkRun } from '../ble/tklamp';
 import { getMunkiCalHours, setMunkiCalHours, munkiButtonMode, TB_KIND_COLORMUNKI, TB_KIND_TKLAMP, MUNKI_DIAL_CALIBRATION, type TbMeterStatus } from '../ble/torchBearer';
 import { enableKeepAwake, disableKeepAwake } from '../utils/keepAwake';
 import { useTheme } from '../contexts/ThemeContext';
@@ -1691,8 +1692,14 @@ export default function HomeScreen({ navigation }: any) {
   const isBusy = status === 'connecting' || status === 'measuring' || status === 'uploading';
   // ColorMunki behind the bridge: the centre button follows the dial. Calibration position -> an orange "Calibrate"; Ambient
   // (once calibrated) -> "Take reading"; any other position (or not calibrated) -> disabled, with a note above it.
-  const munkiMain: { override?: { caption: string; tint?: string; disabled?: boolean }; note?: string } = (() => {
-    if (tbMeter?.kind === TB_KIND_TKLAMP && (status === 'connected' || status === 'uploading')) return { override: { caption: 'Live readings', disabled: true }, note: 'The TKLamp tester sends readings by itself. Use Record run to save one.' };
+  const [tkRun, setTkRun] = useState(getTkRunState());
+  useEffect(() => onTkRunState(setTkRun), []);
+  const munkiMain: { override?: { caption: string; tint?: string; disabled?: boolean; icon?: 'play' | 'stop'; onPress?: () => void }; note?: string } = (() => {
+    if (tbMeter?.kind === TB_KIND_TKLAMP && (status === 'connected' || status === 'uploading')) {
+      return tkRun.recording
+        ? { override: { caption: 'Stop run', tint: '#D64545', icon: 'stop', onPress: toggleTkRun } }
+        : { override: { caption: 'Start run', disabled: !tkRun.canRecord, onPress: toggleTkRun } };
+    }
     if (!tbMeter || tbMeter.kind !== TB_KIND_COLORMUNKI || (status !== 'connected' && status !== 'uploading')) return {};
     const mode = munkiButtonMode(tbMeter, getMunkiCalHours(), calClock);
     if (mode.kind === 'calibrate') return { override: { caption: 'Calibrate', tint: '#E8922E' }, note: 'Dial is on calibration: press Calibrate, keep the instrument still.' };

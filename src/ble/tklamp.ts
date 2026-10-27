@@ -143,3 +143,25 @@ export function onTkWindowS(cb: (v: number) => void): () => void {
   windowListeners.add(cb);
   return () => { windowListeners.delete(cb); };
 }
+
+// The bottom-bar main button starts and stops a run; the live panel does the recording and reports its state back here.
+export interface TkRunState { recording: boolean; canRecord: boolean }
+let runState: TkRunState = { recording: false, canRecord: false };
+const runStateListeners = new Set<(s: TkRunState) => void>();
+const runCommandListeners = new Set<() => void>();
+export function getTkRunState(): TkRunState { return runState; }
+export function setTkRunState(s: TkRunState): void {
+  if (s.recording === runState.recording && s.canRecord === runState.canRecord) return;
+  runState = s;
+  runStateListeners.forEach((cb) => cb(s));
+}
+export function onTkRunState(cb: (s: TkRunState) => void): () => void {
+  runStateListeners.add(cb);
+  return () => { runStateListeners.delete(cb); };
+}
+/** Start a run, or stop the one in progress. */
+export function toggleTkRun(): void { runCommandListeners.forEach((cb) => cb()); }
+export function onTkRunToggle(cb: () => void): () => void {
+  runCommandListeners.add(cb);
+  return () => { runCommandListeners.delete(cb); };
+}

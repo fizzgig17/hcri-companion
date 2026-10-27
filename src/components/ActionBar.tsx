@@ -69,7 +69,7 @@ interface Props {
   onCancelMeasure?: () => void;
   measure: () => void;
   /** ColorMunki behind the bridge: replaces the centre button's caption/colour/enabled state, and a note shows above the bar. */
-  mainOverride?: { caption: string; tint?: string; disabled?: boolean };
+  mainOverride?: { caption: string; tint?: string; disabled?: boolean; icon?: 'play' | 'stop'; onPress?: () => void };
   meterNote?: string;
   /** Caption while busy, when it is not a reading ("Calibrating…"). */
   busyCaption?: string;
@@ -245,7 +245,7 @@ export default function ActionBar(p: Props) {
           ? mainButton('bluetooth', 'Tap to cancel', p.onCancelConnect)
           : mainButton('play', p.onCancelMeasure ? `${busyLabel} Tap to cancel` : busyLabel, p.onCancelMeasure))}
         {connected && (p.mainOverride
-          ? mainButton('play', p.mainOverride.caption, p.mainOverride.disabled || !idle ? undefined : p.measure, undefined, p.mainOverride.tint)
+          ? mainButton(p.mainOverride.icon ?? 'play', p.mainOverride.caption, p.mainOverride.disabled || !idle ? undefined : (p.mainOverride.onPress ?? p.measure), undefined, p.mainOverride.tint)
           : mainButton('play', 'Take reading', idle ? p.measure : undefined))}
 
         <View style={[styles.slot, styles.slotRight]}>
