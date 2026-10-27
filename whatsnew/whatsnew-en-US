@@ -1,1 +1,1 @@
-New: TKLamp tester support through the hCRI ESP32 bridge: live lumens, Start/Stop run, a chart with a time scale, and runs saved in History > Runtime and uploaded to Runtime on hCRI.io. Also unfolded foldable, iPad and tablet layouts, Compare readings side by side.
+New: update the app without leaving it. Tap Update, confirm once, keep using the app while it downloads, then Restart. Also TKLamp tester support through the hCRI ESP32 bridge: live lumens, Start/Stop run, and runs uploaded to Runtime on hCRI.io.
