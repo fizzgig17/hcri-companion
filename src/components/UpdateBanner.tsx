@@ -3,8 +3,9 @@
 // A floating grey capsule that slides down from the top and hovers just below the top edge
 // (below the DEV BUILD strip, or the status bar on production builds), overlaying the app without
 // moving it. Shown only when the launch check (or the test button) found a newer version in Google
-// Play. "Update" opens the app's Play Store listing, where the update is installed; the x hides it
-// until the next launch. Light grey on the dark theme, darker slate on the light theme; the Update
+// Play. "Update" runs Play's in-app update (one confirmation, then it downloads in the background);
+// the capsule then shows the progress, and "Restart" installs it. If Play will not do it in-app, Update opens
+// the Play Store listing. The x hides it until the next launch. Light grey on the dark theme, darker slate on the light theme; the Update
 // pill is blue so it reads as the action.
 
 import React, { useEffect, useRef } from 'react';
@@ -24,7 +25,7 @@ const BLUE_LIGHT_THEME = '#3d7af0';
 export default function UpdateBanner() {
   const { scheme } = useTheme();
   const insets = useSafeAreaInsets();
-  const { dismissBanner, openStore } = useUpdate();
+  const { dismissBanner, install, restartToUpdate, installState, progress } = useUpdate();
   const visible = useBannerVisible();
   const open = useRef(new Animated.Value(0)).current;
 
@@ -86,10 +87,18 @@ export default function UpdateBanner() {
         pointerEvents={visible ? 'box-none' : 'none'}
       >
         <View style={styles.capsule} accessibilityRole="alert">
-          <Text style={styles.text} numberOfLines={1}>Update available</Text>
-          <TouchableOpacity style={styles.action} onPress={openStore} accessibilityLabel={`Open ${storeName} to update`}>
-            <Text style={styles.actionText}>Update</Text>
-          </TouchableOpacity>
+          <Text style={styles.text} numberOfLines={1}>
+            {installState === 'ready' ? 'Update ready' : installState === 'downloading' ? `Downloading update${progress > 0 ? ` ${Math.round(progress * 100)}%` : '…'}` : 'Update available'}
+          </Text>
+          {installState === 'ready' ? (
+            <TouchableOpacity style={styles.action} onPress={restartToUpdate} accessibilityLabel="Restart the app to finish updating">
+              <Text style={styles.actionText}>Restart</Text>
+            </TouchableOpacity>
+          ) : installState === 'downloading' ? null : (
+            <TouchableOpacity style={styles.action} onPress={install} accessibilityLabel={Platform.OS === 'ios' ? `Open ${storeName} to update` : 'Update the app'}>
+              <Text style={styles.actionText}>Update</Text>
+            </TouchableOpacity>
+          )}
           <HintPressable hint="Dismiss" style={styles.close} onPress={dismissBanner} accessibilityLabel="Dismiss">
             <Text style={styles.closeText}>×</Text>
           </HintPressable>
