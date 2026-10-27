@@ -1,17 +1,21 @@
 // src/contexts/UpdateContext.tsx
 //
 // Checks Google Play for a newer version each time the app loads, and
-// shares the result with the banner and the Settings > Update tab. It only
-// checks; installing the update happens in the Play Store.
+// shares the result with the banner and the Settings > Update tab. On Android
+// the update runs through Google Play's in-app (flexible) flow: confirm once,
+// it downloads in the background, then Restart installs it. The Play Store
+// listing is the fallback when Play will not do it in-app.
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { useLog } from './LogContext';
 import { Platform } from 'react-native';
-import { checkForUpdate, openPlayStore, updatesSupported } from '../utils/inAppUpdate';
+import { checkForUpdate, completeInAppUpdate, onUpdateProgress, openPlayStore, startInAppUpdate, updatesSupported } from '../utils/inAppUpdate';
 import { checkIosUpdate, iosUpdatesSupported, openTestFlight } from '../utils/iosUpdate';
 
 export type UpdateStatus = 'idle' | 'checking' | 'uptodate' | 'available' | 'error';
+/** Android in-app update: nothing started, downloading in the background, or downloaded and waiting for a restart. */
+export type InstallState = 'none' | 'downloading' | 'ready';
 
 interface UpdateState {
   status: UpdateStatus;
@@ -28,6 +32,13 @@ interface UpdateState {
   /** Opens the app's Play Store listing (Android) or TestFlight page (iOS), where the update is installed. */
   openStore: () => Promise<void>;
   dismissBanner: () => void;
+  installState: InstallState;
+  /** Download progress 0..1 while installState is 'downloading' (0 when unknown). */
+  progress: number;
+  /** Starts the in-app update on Android (falls back to opening the Play Store); opens TestFlight on iOS. */
+  install: () => Promise<void>;
+  /** Installs the downloaded update and restarts the app. */
+  restartToUpdate: () => Promise<void>;
 }
 
 const Ctx = createContext<UpdateState | null>(null);
@@ -42,6 +53,8 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
   const [dismissedCode, setDismissedCode] = useState(0);
   const [bannerEligible, setBannerEligible] = useState(false);
   const busy = useRef(false);
+  const [installState, setInstallState] = useState<InstallState>('none');
+  const [progress, setProgress] = useState(0);
 
   const check = useCallback(async (announce: boolean = false) => {
     if (busy.current) return;
@@ -90,8 +103,10 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
       setDetail(d);
       appendLog(`Update check (${announce ? 'automatic' : 'manual'}): ${d}`);
       setCode(info.versionCode);
-      setStatus(info.available ? 'available' : 'uptodate');
-      setBannerEligible(announce && info.available);
+      if (info.installStatus === 11) setInstallState('ready');
+      else if (info.installStatus === 2) setInstallState((s) => (s === 'ready' ? s : 'downloading'));
+      setStatus(info.available || info.installStatus === 11 || info.installStatus === 2 ? 'available' : 'uptodate');
+      setBannerEligible(announce && (info.available || info.installStatus === 11));
     } catch (e: any) {
       // Typically: not installed from Google Play (sideloaded/debug build).
       setStatus('error');
@@ -101,6 +116,37 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
     } finally {
       busy.current = false;
     }
+  }, [appendLog]);
+
+  // Progress of a background download started by install().
+  useEffect(() => onUpdateProgress((p) => {
+    if (p.status === 2 || p.status === 1) {
+      setInstallState('downloading');
+      setProgress(p.totalBytes > 0 ? Math.min(1, p.bytesDownloaded / p.totalBytes) : 0);
+    } else if (p.status === 11) {
+      setInstallState('ready');
+      setProgress(1);
+      appendLog('Update downloaded; waiting for restart.');
+    } else if (p.status === 5 || p.status === 6) {
+      setInstallState('none');
+      appendLog(`Update download ended (Play status ${p.status}).`);
+    }
+  }), [appendLog]);
+
+  const install = useCallback(async () => {
+    if (Platform.OS === 'ios') { await openTestFlight(); return; }
+    try {
+      const r = await startInAppUpdate();
+      appendLog(`In-app update: ${r}`);
+      if (r === 'accepted') setInstallState('downloading');
+    } catch (e: any) {
+      appendLog(`In-app update not possible (${e?.message || 'unknown'}); opening the Play Store.`);
+      await openPlayStore();
+    }
+  }, [appendLog]);
+
+  const restartToUpdate = useCallback(async () => {
+    try { await completeInAppUpdate(); } catch (e: any) { appendLog(`Restart to update failed: ${e?.message || 'unknown'}`); }
   }, [appendLog]);
 
   // When the app loads, and again each time it returns to the foreground
@@ -124,8 +170,12 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
       bannerEligible,
       openStore: Platform.OS === 'ios' ? openTestFlight : openPlayStore,
       dismissBanner: () => setDismissedCode(availableVersionCode),
+      installState,
+      progress,
+      install,
+      restartToUpdate,
     }),
-    [status, availableVersionCode, detail, error, dismissedCode, check, bannerEligible],
+    [status, availableVersionCode, detail, error, dismissedCode, check, bannerEligible, installState, progress, install, restartToUpdate],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
@@ -133,7 +183,7 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
 /** True while the "new version" banner is showing (it takes the top inset on production builds). */
 export function useBannerVisible(): boolean {
   const u = useUpdate();
-  return u.status === 'available' && u.bannerEligible && !u.bannerDismissed;
+  return (u.status === 'available' && u.bannerEligible && !u.bannerDismissed) || u.installState === 'ready' || u.installState === 'downloading';
 }
 
 export function useUpdate(): UpdateState {

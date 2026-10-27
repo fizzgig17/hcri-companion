@@ -43,7 +43,7 @@ function DevBuildCard() {
 
 export default function UpdateTab() {
   const { colors } = useTheme();
-  const { status, error, detail, check, openStore } = useUpdate();
+  const { status, error, detail, check, install, restartToUpdate, installState, progress } = useUpdate();
   const styles = StyleSheet.create({
     card: { backgroundColor: colors.card, borderRadius: 12, borderWidth: 1, borderColor: colors.cardBorder, padding: 16 },
     title: { color: colors.text, fontSize: 16, fontWeight: '700' },
@@ -85,10 +85,13 @@ export default function UpdateTab() {
             : `${error ?? ''} Updates come through Google Play, so this only works on an install from the Play Store.`}
         </Text>
       )}
-      {/* One button: "Open in Play Store" once Play has a newer version, else "Check for updates".
-          The update itself is installed from the Play Store. */}
-      {status === 'available' ? (
-        <PrimaryButton title={Platform.OS === 'ios' ? 'Open in TestFlight' : 'Open in Play Store'} onPress={openStore} />
+      {/* One button: "Update now" once Play has a newer version (downloads in the background, then Restart), else "Check for updates". */}
+      {installState === 'ready' ? (
+        <PrimaryButton title="Restart to finish updating" onPress={restartToUpdate} />
+      ) : installState === 'downloading' ? (
+        <PrimaryButton title={`Downloading update${progress > 0 ? ` ${Math.round(progress * 100)}%` : '…'}`} onPress={() => {}} disabled />
+      ) : status === 'available' ? (
+        <PrimaryButton title={Platform.OS === 'ios' ? 'Open in TestFlight' : 'Update now'} onPress={install} />
       ) : (
         <PrimaryButton title={status === 'checking' ? 'Checking…' : 'Check for updates'} onPress={() => check(false)} disabled={status === 'checking'} variant="outline" />
       )}
