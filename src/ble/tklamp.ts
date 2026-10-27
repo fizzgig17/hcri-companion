@@ -10,6 +10,25 @@
 // A run is recorded as (seconds, lumens) points, resampled to a fixed interval and uploaded as one Runtime curve.
 
 export const TK_RAW_PER_LM_DEFAULT = 313.2;
+
+// The scale in force right now. Settings and the live panel both change it (and save it); the live panel follows.
+let currentRawPerLm = TK_RAW_PER_LM_DEFAULT;
+const scaleListeners = new Set<(v: number) => void>();
+export function getTkRawPerLm(): number { return currentRawPerLm; }
+export function setTkRawPerLm(v: number): void {
+  if (!(v > 0) || v === currentRawPerLm) return;
+  currentRawPerLm = v;
+  scaleListeners.forEach((cb) => cb(v));
+}
+export function onTkRawPerLm(cb: (v: number) => void): () => void {
+  scaleListeners.add(cb);
+  return () => { scaleListeners.delete(cb); };
+}
+/** The scale that makes a steady `rawAvgLm` reading (taken at `scale`) come out as `knownLm`. */
+export function scaleFromLamp(rawAvgLm: number, scale: number, knownLm: number): number | null {
+  if (!(rawAvgLm > 0) || !(knownLm > 0) || !(scale > 0)) return null;
+  return Math.round((scale * rawAvgLm / knownLm) * 10) / 10;
+}
 /** Longest curve hCRI.io accepts. */
 export const TK_MAX_POINTS = 5000;
 

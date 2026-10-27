@@ -62,3 +62,15 @@ describe('recording and resampling', () => {
     expect(defaultRunLabel(new Date(2026, 9, 27, 9, 5))).toBe('TKLamp run 2026-10-27 09:05');
   });
 });
+
+describe('lamp calibration', () => {
+  const { scaleFromLamp } = require('../src/ble/tklamp');
+  it('computes the scale that makes the lamp read its rated lumens', () => {
+    // The lamp reads 2153 lm at 313.2; it is really 2150 lm -> a slightly bigger scale.
+    expect(scaleFromLamp(2153, 313.2, 2150)).toBe(313.6);
+  });
+  it('refuses nonsense', () => {
+    expect(scaleFromLamp(0, 313.2, 2150)).toBeNull();
+    expect(scaleFromLamp(2000, 313.2, 0)).toBeNull();
+  });
+});

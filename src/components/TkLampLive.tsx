@@ -11,7 +11,8 @@ import Svg, { Polyline, Line, Text as SvgText } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
 import PrimaryButton from './PrimaryButton';
 import type { MeterConnection } from '../ble/MeterConnection';
-import { TK_RAW_PER_LM_DEFAULT, TkRecorder, TkSmoother, defaultRunLabel, resampleRun, tkLumens, type TkSample } from '../ble/tklamp';
+import { TK_RAW_PER_LM_DEFAULT, TkRecorder, TkSmoother, defaultRunLabel, getTkRawPerLm, onTkRawPerLm, resampleRun, scaleFromLamp, setTkRawPerLm, tkLumens, type TkSample } from '../ble/tklamp';
+import { addRuntime, deleteRuntime, updateRuntime } from '../storage/runtimeHistory';
 import { loadHcriCredentials } from '../storage/secureStorage';
 import { loadTkScalePreference, saveTkScalePreference } from '../storage/preferences';
 import { uploadRuntimeToHcri } from '../hcri/uploadRuntimeToHcri';
@@ -32,8 +33,9 @@ function fmtDur(s: number): string {
 
 export default function TkLampLive({ conn }: Props) {
   const { colors } = useTheme();
-  const [rawPerLm, setRawPerLm] = useState(TK_RAW_PER_LM_DEFAULT);
-  const [scaleDraft, setScaleDraft] = useState(String(TK_RAW_PER_LM_DEFAULT));
+  const [rawPerLm, setRawPerLm] = useState(getTkRawPerLm());
+  const [lampDraft, setLampDraft] = useState('');
+  const savedId = useRef<string | null>(null);
   const [lm, setLm] = useState<number | null>(null);
   const [trace, setTrace] = useState<{ t: number; lm: number }[]>([]);
   const [recording, setRecording] = useState(false);
@@ -55,10 +57,11 @@ export default function TkLampLive({ conn }: Props) {
   const t0 = useRef<number | null>(null);
 
   useEffect(() => {
-    loadTkScalePreference(TK_RAW_PER_LM_DEFAULT).then((v) => {
+    loadTkScalePreference(TK_RAW_PER_LM_DEFAULT).then(setTkRawPerLm);
+    return onTkRawPerLm((v) => {
       scaleRef.current = v;
       setRawPerLm(v);
-      setScaleDraft(String(v));
+      smoother.current.reset();
     });
   }, []);
 
@@ -95,17 +98,19 @@ export default function TkLampLive({ conn }: Props) {
     };
   }, [conn]);
 
-  const applyScale = useCallback(() => {
-    const n = Number(scaleDraft.replace(',', '.'));
-    if (!Number.isFinite(n) || n <= 0) {
-      setScaleDraft(String(rawPerLm));
+  // Calibrate from a lamp of known output: a steady reading of it, taken at the current scale, sets the new scale.
+  const calibrate = useCallback(() => {
+    const known = Number(lampDraft.replace(',', '.'));
+    const v = scaleFromLamp(smoother.current.value(), scaleRef.current, known);
+    if (v == null) {
+      Alert.alert('Enter the lamp\'s lumens', 'Put the lamp in the sphere, wait for a steady number, then enter its rated lumens (for example 2150).');
       return;
     }
-    scaleRef.current = n;
-    setRawPerLm(n);
-    saveTkScalePreference(n).catch(() => {});
-    smoother.current.reset();
-  }, [scaleDraft, rawPerLm]);
+    Alert.alert('Use this scale?', `The lamp reads ${smoother.current.value().toFixed(0)} lm now. A scale of ${v} counts per lumen would make it read ${known}.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Use it', onPress: () => { setTkRawPerLm(v); saveTkScalePreference(v).catch(() => {}); setLampDraft(''); } },
+    ]);
+  }, [lampDraft]);
 
   const start = () => {
     recorder.current.reset();
@@ -124,9 +129,20 @@ export default function TkLampLive({ conn }: Props) {
     setRecCount(recorder.current.count);
     setFinished(recorder.current.count > 1);
     if (recorder.current.count <= 1) setNote('Nothing recorded. Make sure readings are coming in, then try again.');
+    // Keep every finished run on the phone (History > Runtime), whether or not it is uploaded.
+    const r = resampleRun(recorder.current.points());
+    savedId.current = null;
+    if (r) {
+      const l = label.trim() || defaultRunLabel();
+      addRuntime({ label: l, intervalSeconds: r.intervalSeconds, values: r.values, rawPerLm: scaleRef.current })
+        .then((e) => { savedId.current = e.id; })
+        .catch(() => setNote('The run could not be saved on this phone.'));
+    }
   };
   const discard = () => {
     recorder.current.reset();
+    if (savedId.current) deleteRuntime(savedId.current).catch(() => {});
+    savedId.current = null;
     setFinished(false);
     setNote(null);
   };
@@ -154,6 +170,8 @@ export default function TkLampLive({ conn }: Props) {
       if (err) {
         setNote(err);
       } else {
+        if (savedId.current) await updateRuntime(savedId.current, { label: label.trim() || defaultRunLabel(), uploaded: true }).catch(() => {});
+        savedId.current = null;
         setFinished(false);
         recorder.current.reset();
         Alert.alert('Uploaded', `${label.trim() || 'Run'} is in your Runtime list on hCRI.io (Explore > Runtime).`);
@@ -227,20 +245,23 @@ export default function TkLampLive({ conn }: Props) {
       )}
       {note && <Text style={styles.note}>{note}</Text>}
 
-      <View style={[styles.row, { marginTop: 'auto' as any }]}>
-        <Text style={[styles.fieldLabel, { marginBottom: 0, marginRight: 8 }]}>Counts per lumen</Text>
-        <TextInput
-          style={styles.input}
-          value={scaleDraft}
-          onChangeText={setScaleDraft}
-          onBlur={applyScale}
-          onSubmitEditing={applyScale}
-          keyboardType="decimal-pad"
-          returnKeyType="done"
-          accessibilityLabel="TKLamp counts per lumen"
-        />
+      <View style={{ marginTop: 'auto' as any }}>
+        <Text style={styles.fieldLabel}>Calibrate with a lamp of known output</Text>
+        <View style={styles.row}>
+          <TextInput
+            style={styles.input}
+            value={lampDraft}
+            onChangeText={setLampDraft}
+            placeholder="Lamp lumens, e.g. 2150"
+            placeholderTextColor={colors.muted}
+            keyboardType="decimal-pad"
+            returnKeyType="done"
+            accessibilityLabel="Known lumens of the calibration lamp"
+          />
+          <PrimaryButton title="Set scale" onPress={calibrate} variant="muted" style={{ marginTop: 0, marginLeft: 8, paddingHorizontal: 14 }} disabled={lm == null || stale} />
+        </View>
+        <Text style={styles.small}>Scale: {rawPerLm} counts per lumen (also in Settings).</Text>
       </View>
-      <Text style={styles.small}>313.2 was measured on a calibrated tester. Change it if you recalibrate.</Text>
     </View>
   );
 }
