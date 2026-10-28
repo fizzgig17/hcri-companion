@@ -12,6 +12,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ThemeMode } from '../theme';
+import type { TkLimits } from '../ble/tklamp';
 
 const KEEP_AWAKE_KEY = 'hcri.io.pref.keepAwakeWhileConnected';
 
@@ -324,4 +325,28 @@ export async function loadTkTrimPreference(): Promise<boolean> {
 
 export async function saveTkTrimPreference(v: boolean): Promise<void> {
   await AsyncStorage.setItem(TK_TRIM_KEY, v ? 'true' : 'false');
+}
+
+// TKLamp run limits: start level, stop level, time limit and the no-readings timeout (see ble/tklamp.ts TkLimits).
+const TK_LIMITS_KEY = 'hcri.io.pref.tklampLimits';
+
+export async function loadTkLimitsPreference(fallback: TkLimits): Promise<TkLimits> {
+  try {
+    const raw = await AsyncStorage.getItem(TK_LIMITS_KEY);
+    if (!raw) return fallback;
+    const j = JSON.parse(raw);
+    const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null);
+    return {
+      startAtLm: num(j.startAtLm),
+      stopBelowLm: num(j.stopBelowLm),
+      durationMin: num(j.durationMin),
+      idleMin: typeof j.idleMin === 'number' && Number.isFinite(j.idleMin) && j.idleMin >= 0 ? j.idleMin : fallback.idleMin,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+export async function saveTkLimitsPreference(v: TkLimits): Promise<void> {
+  await AsyncStorage.setItem(TK_LIMITS_KEY, JSON.stringify(v));
 }

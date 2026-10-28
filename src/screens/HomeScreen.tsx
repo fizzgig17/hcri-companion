@@ -1696,9 +1696,9 @@ export default function HomeScreen({ navigation }: any) {
   useEffect(() => onTkRunState(setTkRun), []);
   const munkiMain: { override?: { caption: string; tint?: string; disabled?: boolean; icon?: 'play' | 'stop'; onPress?: () => void }; note?: string } = (() => {
     if (tbMeter?.kind === TB_KIND_TKLAMP && (status === 'connected' || status === 'uploading')) {
-      return tkRun.recording
-        ? { override: { caption: 'Stop run', tint: '#D64545', icon: 'stop', onPress: toggleTkRun } }
-        : { override: { caption: 'Start run', disabled: !tkRun.canRecord, onPress: toggleTkRun } };
+      if (tkRun.recording) return { override: { caption: 'Stop run', tint: '#D64545', icon: 'stop', onPress: toggleTkRun } };
+      if (tkRun.armed) return { override: { caption: 'Cancel', tint: '#D64545', icon: 'stop', onPress: toggleTkRun } };
+      return { override: { caption: 'Start run', disabled: !tkRun.canRecord, onPress: toggleTkRun } };
     }
     if (!tbMeter || tbMeter.kind !== TB_KIND_COLORMUNKI || (status !== 'connected' && status !== 'uploading')) return {};
     const mode = munkiButtonMode(tbMeter, getMunkiCalHours(), calClock);
