@@ -34,7 +34,7 @@ class InAppUpdateModule(private val ctx: ReactApplicationContext) : ReactContext
   private var startPromise: Promise? = null
   private var listening = false
 
-  private val installListener = InstallStateUpdatedListener { state ->
+  private val installListener: InstallStateUpdatedListener = InstallStateUpdatedListener { state ->
     val map = Arguments.createMap()
     map.putInt("status", state.installStatus())
     map.putDouble("bytesDownloaded", state.bytesDownloaded().toDouble())
