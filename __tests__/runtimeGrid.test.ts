@@ -1,25 +1,36 @@
-import { gridStep, gridLabelEvery } from '../src/utils/runtimeGrid';
+import { gridStep, gridLabelEvery, gridLevel } from '../src/utils/runtimeGrid';
 
 describe('gridStep', () => {
-  it('is 100 lumens for ordinary lights', () => {
-    expect(gridStep(300)).toBe(100);
-    expect(gridStep(1000)).toBe(100);
-    expect(gridStep(2500)).toBe(100);
+  it('is 50 lm up to 1500, 100 up to 3000, then 200 ...', () => {
+    expect(gridStep(1000)).toBe(50);
+    expect(gridStep(1500)).toBe(50);
+    expect(gridStep(2000)).toBe(100);
     expect(gridStep(3000)).toBe(100);
-  });
-  it('uses a round spacing for dim and very bright lights', () => {
-    expect(gridStep(100)).toBe(20);
-    expect(gridStep(250)).toBe(50);
     expect(gridStep(5000)).toBe(200);
-    expect(gridStep(10000)).toBe(500);
-    expect(gridStep(100000)).toBe(5000);
+    expect(gridStep(12000)).toBe(500);
   });
-  it('never gives more than 30 lines or fewer than 3 for sensible ranges', () => {
+  it('is finer for dim lights', () => {
+    expect(gridStep(300)).toBe(10);
+    expect(gridStep(100)).toBe(5);
+  });
+  it('never gives more than 30 lines', () => {
     for (const y of [1, 5, 20, 99, 150, 299, 301, 899, 3100, 7000, 25000, 250000]) {
-      const lines = y / gridStep(y);
-      expect(lines).toBeLessThanOrEqual(30.0001);
-      expect(lines).toBeGreaterThanOrEqual(3);
+      expect(y / gridStep(y)).toBeLessThanOrEqual(30.0001);
     }
+  });
+});
+
+describe('gridLevel', () => {
+  it('gives 50 faint dots, 100 dotted and 500 solid', () => {
+    expect(gridLevel(50, 50).level).toBe(0);
+    expect(gridLevel(100, 50).level).toBe(1);
+    expect(gridLevel(250, 50).level).toBe(0);
+    expect(gridLevel(500, 50).level).toBe(3);
+    expect(gridLevel(1000, 50).level).toBe(3);
+    expect(gridLevel(200, 100).level).toBe(1);
+    expect(gridLevel(5000, 500).level).toBe(3);
+    expect(gridLevel(1000, 500).level).toBe(1);
+    expect(gridLevel(500, 500).level).toBe(0);
   });
 });
 

@@ -4,15 +4,15 @@
 // (to a round number above the highest reading so far), so a light that is slowly dimming looks like it is slowly dimming
 // and swiping back never changes it. The horizontal scale is `windowS` seconds across the screen; the chart is wider than
 // the screen once the run is longer, and you swipe sideways to look back. `windowS` 0 fits the whole run on screen.
-// Light dotted lines run across the whole chart at every 100 lumens (see gridStep), with a tick on the axis and a number on
-// every few of them. Time labels run along the bottom (m:ss, or h:mm once past an hour). While `follow` is on, it sticks to the newest data
+// Grid lines run across the whole chart (see runtimeGrid.ts): faint dots every 50 lm, dotted every 100, dashed every 250,
+// solid every 500, each with a tick on the axis and a number on every few of them. Time labels run along the bottom (m:ss, or h:mm once past an hour). While `follow` is on, it sticks to the newest data
 // until you swipe away; "Latest" jumps back.
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import Svg, { Polyline, Line, Text as SvgText } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
-import { gridLabelEvery, gridStep } from '../utils/runtimeGrid';
+import { gridLabelEvery, gridLevel, gridStep } from '../utils/runtimeGrid';
 
 export interface RuntimePoint {
   t: number;   // seconds from the start of the run
@@ -82,7 +82,7 @@ export default function RuntimeChart({ points, windowS, follow = false, height =
     const gridV: number[] = [];
     for (let k = 0; k * gStep <= yMax + 1e-9; k++) gridV.push(+(k * gStep).toFixed(6));
     const every = gridLabelEvery(Math.abs(Y(gStep) - Y(0)));
-    return { pxPerS, contentW, yMax, X, Y, line: pts.join(' '), ticks, gridV, every };
+    return { pxPerS, contentW, yMax, X, Y, line: pts.join(' '), ticks, gridV, every, gStep };
   }, [points, viewW, windowS, total, plotH]);
 
   // Follow the newest data until the user swipes away.
@@ -106,7 +106,7 @@ export default function RuntimeChart({ points, windowS, follow = false, height =
           <Svg width={AXIS_W} height={height} style={styles.axis}>
             {g.gridV.map((v, i) => (
               <React.Fragment key={v}>
-                <Line x1={AXIS_W - 4} x2={AXIS_W} y1={g.Y(v)} y2={g.Y(v)} stroke={colors.muted} strokeWidth={1} />
+                <Line x1={AXIS_W - 3 - (gridLevel(v, g.gStep).level === 3 ? 4 : gridLevel(v, g.gStep).level === 1 ? 2 : 0)} x2={AXIS_W} y1={g.Y(v)} y2={g.Y(v)} stroke={colors.muted} strokeWidth={1} />
                 {i % g.every === 0 && <SvgText x={AXIS_W - 7} y={g.Y(v) + 3.5} fontSize={10} fill={colors.muted} textAnchor="end">{v}</SvgText>}
               </React.Fragment>
             ))}
@@ -128,9 +128,10 @@ export default function RuntimeChart({ points, windowS, follow = false, height =
               scrollEventThrottle={100}
             >
               <Svg width={g.contentW} height={height}>
-                {g.gridV.map((v, i) => (
-                  <Line key={v} x1={0} x2={g.contentW} y1={g.Y(v)} y2={g.Y(v)} stroke={colors.muted} strokeWidth={1} strokeDasharray="2,4" opacity={i % g.every === 0 ? 0.55 : 0.25} />
-                ))}
+                {g.gridV.map((v) => {
+                  const lv = gridLevel(v, g.gStep);
+                  return <Line key={v} x1={0} x2={g.contentW} y1={g.Y(v)} y2={g.Y(v)} stroke={colors.muted} strokeWidth={1} strokeDasharray={lv.dash ?? undefined} opacity={lv.opacity} />;
+                })}
                 {g.ticks.map((t) => (
                   <React.Fragment key={t}>
                     <Line x1={g.X(t)} x2={g.X(t)} y1={plotH - 4} y2={plotH + 1} stroke={colors.muted} strokeWidth={1} />
