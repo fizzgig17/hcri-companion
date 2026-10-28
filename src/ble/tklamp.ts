@@ -145,13 +145,13 @@ export function onTkWindowS(cb: (v: number) => void): () => void {
 }
 
 // The bottom-bar main button starts and stops a run; the live panel does the recording and reports its state back here.
-export interface TkRunState { recording: boolean; canRecord: boolean; /** A stopped run is waiting to be uploaded. */ canUpload: boolean; uploading: boolean; /** The last stopped run has been uploaded. */ uploaded: boolean }
-let runState: TkRunState = { recording: false, canRecord: false, canUpload: false, uploading: false, uploaded: false };
+export interface TkRunState { recording: boolean; /** Waiting for the light to reach the start level. */ armed: boolean; canRecord: boolean; /** A stopped run is waiting to be uploaded. */ canUpload: boolean; uploading: boolean; /** The last stopped run has been uploaded. */ uploaded: boolean }
+let runState: TkRunState = { recording: false, armed: false, canRecord: false, canUpload: false, uploading: false, uploaded: false };
 const runStateListeners = new Set<(s: TkRunState) => void>();
 const runCommandListeners = new Set<() => void>();
 export function getTkRunState(): TkRunState { return runState; }
 export function setTkRunState(s: TkRunState): void {
-  if (s.recording === runState.recording && s.canRecord === runState.canRecord && s.canUpload === runState.canUpload && s.uploading === runState.uploading && s.uploaded === runState.uploaded) return;
+  if (s.recording === runState.recording && s.armed === runState.armed && s.canRecord === runState.canRecord && s.canUpload === runState.canUpload && s.uploading === runState.uploading && s.uploaded === runState.uploaded) return;
   runState = s;
   runStateListeners.forEach((cb) => cb(s));
 }
@@ -188,6 +188,79 @@ export function trimLeading(points: TkPoint[], fraction = 0.02, keepS = 1): TkPo
 let trimOn = true;
 export function getTkTrim(): boolean { return trimOn; }
 export function setTkTrim(v: boolean): void { trimOn = v; }
+
+// Run limits (shown on the TKLamp panel, kept between runs and app restarts): start the recording when the light reaches a
+// level, stop it when the output falls below a level, after a set time, or when readings stop arriving.
+export interface TkLimits {
+  /** Start recording when the 1 s average reaches this many lumens (null: Start run begins at once). */
+  startAtLm: number | null;
+  /** Stop when the output falls below this many lumens (null: off). */
+  stopBelowLm: number | null;
+  /** Stop after this many minutes of recording (null: off). */
+  durationMin: number | null;
+  /** Stop when no reading has arrived for this many minutes (0: off). */
+  idleMin: number;
+}
+export const TK_LIMITS_DEFAULT: TkLimits = { startAtLm: null, stopBelowLm: null, durationMin: null, idleMin: 5 };
+/** The output must stay below the stop level for this long, so a flicker or a noisy reading does not end the run. */
+export const TK_STOP_BELOW_HOLD_S = 3;
+let currentLimits: TkLimits = { ...TK_LIMITS_DEFAULT };
+const limitListeners = new Set<(v: TkLimits) => void>();
+export function getTkLimits(): TkLimits { return currentLimits; }
+export function setTkLimits(v: TkLimits): void {
+  currentLimits = { ...v };
+  limitListeners.forEach((cb) => cb(currentLimits));
+}
+export function onTkLimits(cb: (v: TkLimits) => void): () => void {
+  limitListeners.add(cb);
+  return () => { limitListeners.delete(cb); };
+}
+/** Text from a limit box to a number: blank is "off" (null); anything that is not a number of at least 0 is undefined. */
+export function parseTkLimit(text: string): number | null | undefined {
+  const t = text.trim().replace(',', '.');
+  if (!t) return null;
+  const n = Number(t);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
+}
+
+/**
+ * Decides when a run should start and stop by itself. The stop level only counts once the output has been above it, so a
+ * run started before the light is on does not end at once; it must then stay below it for TK_STOP_BELOW_HOLD_S seconds.
+ */
+export class TkRunGuard {
+  private seenAbove = false;
+  private belowSince: number | null = null;
+  constructor(private limits: TkLimits = TK_LIMITS_DEFAULT) {}
+  setLimits(l: TkLimits): void { this.limits = l; }
+  reset(): void { this.seenAbove = false; this.belowSince = null; }
+  /** True when the reading has reached the level that starts the recording (or no level is set). */
+  shouldStart(avgLm: number): boolean {
+    const a = this.limits.startAtLm;
+    return a == null || avgLm >= a;
+  }
+  /** Called with each smoothed reading while recording; ms is the reading's own clock. Returns why to stop, or null. */
+  onReading(avgLm: number, ms: number): string | null {
+    const b = this.limits.stopBelowLm;
+    if (b == null || b <= 0) return null;
+    if (avgLm >= b) {
+      this.seenAbove = true;
+      this.belowSince = null;
+      return null;
+    }
+    if (!this.seenAbove) return null;
+    if (this.belowSince == null) this.belowSince = ms;
+    if ((ms - this.belowSince) / 1000 >= TK_STOP_BELOW_HOLD_S) return `The output fell below ${b} lm.`;
+    return null;
+  }
+  /** Called about once a second while recording. recSeconds: length so far; silentMs: time since the last reading. */
+  onTimer(recSeconds: number, silentMs: number): string | null {
+    const d = this.limits.durationMin;
+    if (d != null && d > 0 && recSeconds >= d * 60) return `The ${d} minute time limit was reached.`;
+    const i = this.limits.idleMin;
+    if (i > 0 && silentMs >= i * 60000) return `No readings for ${i} minute${i === 1 ? '' : 's'}.`;
+    return null;
+  }
+}
 
 /** The bottom bar's Upload button asks the live panel to upload the run that was just stopped. */
 const uploadListeners = new Set<() => void>();

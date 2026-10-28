@@ -10,11 +10,22 @@ import { View, Text, TextInput, Alert, Modal, ScrollView, TouchableOpacity, Styl
 import RuntimeChart from './RuntimeChart';
 import { useTheme } from '../contexts/ThemeContext';
 import type { MeterConnection } from '../ble/MeterConnection';
-import { TK_RAW_PER_LM_DEFAULT, TkRecorder, TkSmoother, defaultRunLabel, getTkRawPerLm, getTkTrim, getTkWindowS, onTkRawPerLm, onTkRunToggle, onTkUploadRequest, onTkWindowS, setTkRunState, setTkTrim, setTkWindowS, trimLeading, resampleRun, scaleFromLamp, setTkRawPerLm, tkLumens, type TkSample } from '../ble/tklamp';
+import { TK_LIMITS_DEFAULT, TK_RAW_PER_LM_DEFAULT, TK_STOP_BELOW_HOLD_S, TkRecorder, TkRunGuard, TkSmoother, defaultRunLabel, getTkLimits, getTkRawPerLm, getTkTrim, getTkWindowS, onTkRawPerLm, onTkRunToggle, onTkUploadRequest, onTkWindowS, parseTkLimit, setTkLimits, setTkRunState, setTkTrim, setTkWindowS, trimLeading, resampleRun, scaleFromLamp, setTkRawPerLm, tkLumens, type TkLimits, type TkSample } from '../ble/tklamp';
 import { addRuntime, updateRuntime } from '../storage/runtimeHistory';
 import { loadHcriCredentials } from '../storage/secureStorage';
-import { loadTkScalePreference, loadTkTrimPreference, loadTkWindowPreference, saveTkScalePreference } from '../storage/preferences';
+import { loadTkLimitsPreference, loadTkScalePreference, loadTkTrimPreference, loadTkWindowPreference, saveTkLimitsPreference, saveTkScalePreference } from '../storage/preferences';
 import { uploadRuntimeToHcri } from '../hcri/uploadRuntimeToHcri';
+
+const LIMIT_FIELDS: { key: keyof TkLimits; label: string }[] = [
+  { key: 'startAtLm', label: 'Start at (lumens)' },
+  { key: 'stopBelowLm', label: 'Stop below (lumens)' },
+  { key: 'durationMin', label: 'Stop after (minutes)' },
+  { key: 'idleMin', label: 'Stop if no readings (min)' },
+];
+function limitDrafts(l: TkLimits): Record<keyof TkLimits, string> {
+  const t = (v: number | null) => (v == null || v === 0 ? '' : String(v));
+  return { startAtLm: t(l.startAtLm), stopBelowLm: t(l.stopBelowLm), durationMin: t(l.durationMin), idleMin: t(l.idleMin) };
+}
 
 const TRACE_GAP_S = 0.5;     // the on-screen trace keeps one point per half second
 const TRACE_MAX = 20000;     // about 2.7 hours; beyond that every other point is dropped
@@ -47,6 +58,9 @@ export default function TkLampLive({ conn }: Props) {
   const [stale, setStale] = useState(false);
   const [windowS, setWindowS] = useState(getTkWindowS());
   const [calOpen, setCalOpen] = useState(false);
+  const [armed, setArmed] = useState(false);              // waiting for the light to reach the start level
+  const [limits, setLimitsState] = useState<TkLimits>(getTkLimits());
+  const [drafts, setDrafts] = useState(() => limitDrafts(getTkLimits()));
 
   const smoother = useRef(new TkSmoother(5));
   const recorder = useRef(new TkRecorder());
@@ -56,11 +70,16 @@ export default function TkLampLive({ conn }: Props) {
   const lastDraw = useRef(0);
   const traceRef = useRef<{ t: number; lm: number }[]>([]);
   const t0 = useRef<number | null>(null);
+  const armedRef = useRef(false);
+  const guard = useRef(new TkRunGuard(getTkLimits()));
+  const startRef = useRef<() => void>(() => {});
+  const stopRef = useRef<(why?: string) => void>(() => {});
 
   useEffect(() => {
     loadTkScalePreference(TK_RAW_PER_LM_DEFAULT).then(setTkRawPerLm);
     loadTkWindowPreference(getTkWindowS()).then(setTkWindowS);
     loadTkTrimPreference().then(setTkTrim);
+    loadTkLimitsPreference(TK_LIMITS_DEFAULT).then((v) => { setTkLimits(v); setLimitsState(v); setDrafts(limitDrafts(v)); guard.current.setLimits(v); });
     const offW = onTkWindowS(setWindowS);
     const offS = onTkRawPerLm((v) => {
       scaleRef.current = v;
@@ -83,7 +102,16 @@ export default function TkLampLive({ conn }: Props) {
         tr.push({ t, lm: avg });
         if (tr.length > TRACE_MAX) traceRef.current = tr.filter((_, i) => i % 2 === 0);
       }
-      if (recordingRef.current) recorder.current.add(s, scaleRef.current);
+      if (armedRef.current && !recordingRef.current && guard.current.shouldStart(avg)) {
+        armedRef.current = false;
+        setArmed(false);
+        startRef.current();
+      }
+      if (recordingRef.current) {
+        recorder.current.add(s, scaleRef.current);
+        const why = guard.current.onReading(avg, s.ms);
+        if (why) stopRef.current(why);
+      }
       const now = Date.now();
       if (now - lastDraw.current > 250) {   // redraw about 4 times a second, however fast readings arrive
         lastDraw.current = now;
@@ -105,6 +133,16 @@ export default function TkLampLive({ conn }: Props) {
     };
   }, [conn]);
 
+  // Time limit and the no-readings timeout are checked once a second, even when no readings arrive.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!recordingRef.current) return;
+      const why = guard.current.onTimer(recorder.current.seconds, lastRx.current ? Date.now() - lastRx.current : 0);
+      if (why) stopRef.current(why);
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
   // The main button in the bottom bar starts and stops a run.
   const lmRef = useRef<number | null>(null);
   lmRef.current = lm;
@@ -112,12 +150,21 @@ export default function TkLampLive({ conn }: Props) {
   staleRef.current = stale;
   useEffect(() => onTkRunToggle(() => {
     if (recordingRef.current) stop();
-    else if (lmRef.current != null && !staleRef.current) start();
+    else if (armedRef.current) { armedRef.current = false; setArmed(false); setNote('Stopped waiting for the start level.'); }
+    else if (lmRef.current != null && !staleRef.current) {
+      const a = getTkLimits().startAtLm;
+      if (a != null && !(lmRef.current >= a)) {
+        armedRef.current = true;
+        setArmed(true);
+        setNote(null);
+        setFinished(false);
+      } else start();
+    }
   }));   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    setTkRunState({ recording, canRecord: lm != null && !stale, canUpload: finished && !recording, uploading: busy, uploaded: uploadedNow });
-  }, [recording, lm, stale, finished, busy, uploadedNow]);
-  useEffect(() => () => setTkRunState({ recording: false, canRecord: false, canUpload: false, uploading: false, uploaded: false }), []);
+    setTkRunState({ recording, armed, canRecord: lm != null && !stale, canUpload: finished && !recording, uploading: busy, uploaded: uploadedNow });
+  }, [recording, armed, lm, stale, finished, busy, uploadedNow]);
+  useEffect(() => () => setTkRunState({ recording: false, armed: false, canRecord: false, canUpload: false, uploading: false, uploaded: false }), []);
   // The bottom bar's Upload button.
   const uploadRef = useRef<() => void>(() => {});
   useEffect(() => onTkUploadRequest(() => uploadRef.current()), []);
@@ -149,6 +196,9 @@ export default function TkLampLive({ conn }: Props) {
 
   const start = () => {
     recorder.current.reset();
+    guard.current.reset();
+    armedRef.current = false;
+    setArmed(false);
     recordingRef.current = true;
     setRecording(true);
     setFinished(false);
@@ -158,13 +208,16 @@ export default function TkLampLive({ conn }: Props) {
     setNote(null);
     setLabel(defaultRunLabel());
   };
-  const stop = () => {
+  const stop = (why?: string) => {
     recordingRef.current = false;
+    armedRef.current = false;
+    setArmed(false);
     setRecording(false);
     setRecSeconds(recorder.current.seconds);
     setRecCount(recorder.current.count);
     setFinished(recorder.current.count > 1);
     if (recorder.current.count <= 1) setNote('Nothing recorded. Make sure readings are coming in, then try again.');
+    else if (why) setNote(`Run stopped automatically: ${why}`);
     // Keep every finished run on the phone (History > Runtime), whether or not it is uploaded.
     const r = resampleRun(getTkTrim() ? trimLeading(recorder.current.points()) : recorder.current.points());
     savedId.current = null;
@@ -212,6 +265,25 @@ export default function TkLampLive({ conn }: Props) {
   };
 
   uploadRef.current = upload;
+  startRef.current = start;
+  stopRef.current = stop;
+
+  // Commits one limit box (on leaving it): blank turns that limit off; a bad entry goes back to the saved value.
+  const commitLimit = (key: keyof TkLimits) => {
+    const parsed = parseTkLimit(drafts[key]);
+    const next: TkLimits = { ...limits };
+    if (parsed === undefined) {
+      setDrafts(limitDrafts(limits));
+      return;
+    }
+    if (key === 'idleMin') next.idleMin = parsed ?? 0;
+    else next[key] = parsed;
+    setLimitsState(next);
+    setDrafts(limitDrafts(next));
+    setTkLimits(next);
+    guard.current.setLimits(next);
+    saveTkLimitsPreference(next).catch(() => {});
+  };
 
   const styles = StyleSheet.create({
     wrap: { flex: 1 },
@@ -234,6 +306,11 @@ export default function TkLampLive({ conn }: Props) {
     modalBtn: { paddingVertical: 8, paddingHorizontal: 14 },
     modalBtnText: { color: colors.accent, fontWeight: '700', fontSize: 15 },
     small: { color: colors.muted, fontSize: 11, marginTop: 8, textAlign: 'center' },
+    limits: { backgroundColor: colors.card, borderColor: colors.cardBorder, borderWidth: 1, borderRadius: 12, padding: 10, marginTop: 12 },
+    limitsTitle: { color: colors.text, fontSize: 13, fontWeight: '700', marginBottom: 2 },
+    limitRow: { flexDirection: 'row', marginTop: 8 },
+    limitCell: { flex: 1, marginRight: 8 },
+    wait: { color: colors.accent, fontSize: 14, fontWeight: '600', textAlign: 'center', marginTop: 10 },
   });
 
   return (
@@ -254,6 +331,7 @@ export default function TkLampLive({ conn }: Props) {
 
       {!recording && !finished && lm != null && <Text style={styles.small}>Press Start run below to record.</Text>}
       {recording && <Text style={styles.rec}>● Recording {fmtDur(recSeconds)} ({recCount} readings)</Text>}
+      {armed && <Text style={styles.wait}>Waiting for the light to reach {limits.startAtLm} lm to start recording. Tap Cancel below to stop waiting.</Text>}
 
       {finished && !recording && (
         <View>
@@ -263,6 +341,28 @@ export default function TkLampLive({ conn }: Props) {
         </View>
       )}
       {note && <Text style={styles.note}>{note}</Text>}
+
+      <View style={styles.limits}>
+        <Text style={styles.limitsTitle}>Run limits</Text>
+        <Text style={styles.fieldLabel}>Blank means off. They are kept between runs and when the app restarts.</Text>
+        <View style={styles.limitRow}>
+          {LIMIT_FIELDS.slice(0, 2).map((f) => (
+            <View key={f.key} style={styles.limitCell}>
+              <Text style={styles.fieldLabel}>{f.label}</Text>
+              <TextInput style={styles.input} value={drafts[f.key]} onChangeText={(t) => setDrafts({ ...drafts, [f.key]: t })} onBlur={() => commitLimit(f.key)} onSubmitEditing={() => commitLimit(f.key)} keyboardType="decimal-pad" returnKeyType="done" placeholder="off" placeholderTextColor={colors.muted} accessibilityLabel={f.label} />
+            </View>
+          ))}
+        </View>
+        <View style={styles.limitRow}>
+          {LIMIT_FIELDS.slice(2).map((f) => (
+            <View key={f.key} style={styles.limitCell}>
+              <Text style={styles.fieldLabel}>{f.label}</Text>
+              <TextInput style={styles.input} value={drafts[f.key]} onChangeText={(t) => setDrafts({ ...drafts, [f.key]: t })} onBlur={() => commitLimit(f.key)} onSubmitEditing={() => commitLimit(f.key)} keyboardType="decimal-pad" returnKeyType="done" placeholder="off" placeholderTextColor={colors.muted} accessibilityLabel={f.label} />
+            </View>
+          ))}
+        </View>
+        <Text style={styles.small}>Start level: Start run waits until the light reaches it. Stop level: ends the run when the output stays below it for {TK_STOP_BELOW_HOLD_S} s (only after it has been above it). No readings: ends the run when the tester has been silent that long (default 5 minutes).</Text>
+      </View>
 
       <TouchableOpacity onPress={() => setCalOpen(true)} accessibilityRole="button" accessibilityLabel="Set the scale from a lamp of known output">
         <Text style={styles.link}>Scale: {rawPerLm} counts per lumen. Tap to set it from a lamp</Text>
