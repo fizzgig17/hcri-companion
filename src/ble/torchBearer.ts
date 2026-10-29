@@ -50,6 +50,8 @@ export const TB_CMD_RESEND_B64 = 'Ag==';
 /** 05: cancel the reading in progress. Newer bridge firmware stops a ColorMunki reading or calibration at its next
  * step and sends no result; older firmware ignores it (the app then drops the result itself). */
 export const TB_CMD_CANCEL_B64 = 'BQ==';
+/** Live: 06. The bridge keeps scanning and sends every locked result until it gets the cancel (05). Torch Bearer only. */
+export const TB_CMD_LIVE_B64 = 'Bg==';
 /** `name` of the error a cancelled bridge reading rejects with. */
 export const TB_CANCELLED_ERROR = 'TbCancelledError';
 
