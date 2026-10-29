@@ -147,7 +147,7 @@ export function startTorchBearerLive(
   };
   timer = setTimeout(() => {
     if (got || ended) return;
-    conn.stopTorchBearerLive().catch(() => {});
+    conn.stopTorchBearerLive(false).catch(() => {});
     end(new Error('The bridge did not send any live readings. Its firmware may be too old for Live: update it from the ESP32 bridge page, then try again.'));
   }, TB_LIVE_FIRST_RESULT_TIMEOUT_MS);
   const done = conn
