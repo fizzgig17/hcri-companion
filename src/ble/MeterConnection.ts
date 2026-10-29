@@ -854,13 +854,18 @@ export class MeterConnection {
     }
   }
 
-  /** Stops Torch Bearer Live. Results still in flight are dropped. Safe to call twice. */
-  async stopTorchBearerLive(): Promise<void> {
+  /**
+   * Stops Torch Bearer Live. Results still in flight are dropped (`dropInFlight`; pass false when Live never produced
+   * anything, e.g. the bridge firmware does not know it, so a scan taken straight afterwards is not swallowed). Safe to call twice.
+   */
+  async stopTorchBearerLive(dropInFlight = true): Promise<void> {
     if (!this.tbLive) return;
     this.tbLive = null;
-    this.tbLiveDrain = true;
-    // The bridge says "ready" when it has stopped; if that never arrives, stop dropping results after a while.
-    setTimeout(() => { this.tbLiveDrain = false; }, 8000);
+    if (dropInFlight) {
+      this.tbLiveDrain = true;
+      // The bridge says "ready" when it has stopped; if that never arrives, stop dropping results after a while.
+      setTimeout(() => { this.tbLiveDrain = false; }, 8000);
+    }
     if (!this.characteristic) return;
     this.log('Bridge: stopping Live (05)');
     try {
