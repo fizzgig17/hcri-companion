@@ -24,7 +24,7 @@ import {
 } from './protocol';
 import type { BatteryStatus } from './protocol';
 import {
-  TB_SERVICE_UUID, TB_CMD_UUID, TB_RESULT_UUID, TB_STATUS_UUID, TB_CMD_SCAN_B64, TB_CMD_RESEND_B64, TB_CMD_CANCEL_B64, TB_CANCELLED_ERROR, TB_CMD_FLIP_ON_B64, TB_CMD_FLIP_OFF_B64, TB_STATE_ERROR, TB_STATE_SCANNING, TB_STATE_FAILED,
+  TB_SERVICE_UUID, TB_CMD_UUID, TB_RESULT_UUID, TB_STATUS_UUID, TB_CMD_SCAN_B64, TB_CMD_RESEND_B64, TB_CMD_CANCEL_B64, TB_CMD_LIVE_B64, TB_CANCELLED_ERROR, TB_CMD_FLIP_ON_B64, TB_CMD_FLIP_OFF_B64, TB_STATE_ERROR, TB_STATE_SCANNING, TB_STATE_FAILED,
   parseTbStatus, colorMunkiFailMessage, TB_KIND_COLORMUNKI, type TbMeterStatus,
   isTorchBearerName, TbReassembler, tbToMeterResult, tbSummarySignature, parseTbSummary,
 } from './torchBearer';
@@ -275,6 +275,10 @@ export class MeterConnection {
   /** After a cancel: until this time (or until the bridge is ready again) a result that nobody asked for is dropped,
    * not taken as a reading started with the bridge's button. */
   private tbIgnoreUntil = 0;
+  // Torch Bearer Live: every result goes to this handler; `tbLiveEnd` is told when the bridge stops by itself (error / unplugged).
+  private tbLive: { onResult: (r: MeterResult) => void; onEnd: (err?: Error) => void } | null = null;
+  // After a Live stop, results still in flight are dropped until the bridge reports ready again.
+  private tbLiveDrain = false;
   private tbStatusChar: Characteristic | null = null;
   private tbButtonHandlers: { started?: () => void; result?: (r: MeterResult) => void; idle?: () => void } = {};
   // The bridge's status characteristic, decoded (kind of meter behind it, ColorMunki dial position and calibration).
@@ -667,7 +671,12 @@ export class MeterConnection {
         this.log(`<- Bridge result (${arr.length}B): ${toHex(arr.subarray(0, 12))}${arr.length > 12 ? ' ...' : ''}`, true);
         try {
           const scan = this.tbReassembler.push(arr);
-          if (scan && !this.tbWaiter && this.tbIgnoreUntil > Date.now()) {
+          if (scan && this.tbLive) {
+            this.tbLastSig = tbSummarySignature(scan.summary);
+            this.tbLive.onResult(tbToMeterResult(scan, connected.name ?? connected.localName ?? 'Torch Bearer', this.tbMeterStatus?.kind ?? 0, this.tbMeterStatus?.fwCorrected ?? false, this.tbMeterStatus?.highRes ?? false));
+          } else if (scan && this.tbLiveDrain) {
+            this.log('Bridge: dropped a Live result that was still on its way', true);
+          } else if (scan && !this.tbWaiter && this.tbIgnoreUntil > Date.now()) {
             this.tbIgnoreUntil = 0;
             this.tbLastSig = tbSummarySignature(scan.summary);
             this.log('Bridge: dropped the result of a cancelled reading');
@@ -701,9 +710,19 @@ export class MeterConnection {
         this.log(`<- Bridge status: state ${st.state} try ${st.reason}${st.kind === TB_KIND_COLORMUNKI ? ` (ColorMunki dial ${st.dialKnown ? st.dial : '?'}, ${st.calibrated ? `calibrated${st.highGainReady ? ', high gain ready' : ''}${st.highRes ? ', high resolution' : ''}` : 'not calibrated'})` : ''}`, true);
         this.setTbMeterStatus(st);
         const ignoring = this.tbIgnoreUntil > Date.now();
+        // Live: the bridge goes back to ready (stopped, or its button was pressed) or reports an error: Live is over.
+        // State 2 / 1 alternate while it is running and are not an ending.
+        if (arr[0] === 0 || arr[0] === TB_STATE_ERROR || arr[0] === TB_STATE_FAILED || arr[0] === 4) {
+          this.tbLiveDrain = false;
+          const live = this.tbLive;
+          if (live) {
+            this.tbLive = null;
+            live.onEnd(arr[0] === TB_STATE_ERROR || arr[0] === TB_STATE_FAILED ? new Error(arr[0] === TB_STATE_ERROR ? 'The Torch Bearer stopped responding -- check that the spectrometer is plugged into the bridge.' : colorMunkiFailMessage(st.reason)) : undefined);
+          }
+        }
         // Ready, failed or no instrument: a cancelled reading is over, so stop ignoring results.
         if (arr[0] === 0 || arr[0] === TB_STATE_FAILED || arr[0] === TB_STATE_ERROR) this.tbIgnoreUntil = 0;
-        if (arr[0] === TB_STATE_SCANNING && !this.tbWaiter && !this.tbCalWaiter && !ignoring) this.tbButtonHandlers.started?.();
+        if (arr[0] === TB_STATE_SCANNING && !this.tbWaiter && !this.tbCalWaiter && !ignoring && !this.tbLive && !this.tbLiveDrain) this.tbButtonHandlers.started?.();
         if (arr[0] === TB_STATE_ERROR && this.tbWaiter) {
           const w = this.tbWaiter;
           this.tbWaiter = null;
@@ -754,6 +773,12 @@ export class MeterConnection {
         this.tbCalWaiter = null;
         w.reject(new Error('Torch Bearer disconnected during the calibration.'));
       }
+      if (this.tbLive) {
+        const live = this.tbLive;
+        this.tbLive = null;
+        live.onEnd(new Error('The bridge disconnected.'));
+      }
+      this.tbLiveDrain = false;
       this.setTbMeterStatus(null);
       this.tbMode = false;
       this.onDisconnectedCallback();
@@ -805,6 +830,43 @@ export class MeterConnection {
       this.setTbMeterStatus(st);
     } catch (e: any) {
       this.log(`Could not refresh the bridge status: ${describeBleError(e)}`, true);
+    }
+  }
+
+  /**
+   * Torch Bearer only: starts Live. The bridge keeps scanning and sends every locked result, each handed to onResult, until
+   * stopTorchBearerLive(). onEnd fires once if the bridge ends it by itself (error, unplugged, its own button).
+   * Rejects at once if the command cannot be written; a bridge whose firmware does not know Live stays silent, so callers
+   * should time out on "no result".
+   */
+  async startTorchBearerLive(onResult: (r: MeterResult) => void, onEnd: (err?: Error) => void): Promise<void> {
+    if (!this.isTorchBearer() || !this.characteristic) throw new Error('Not connected to a Torch Bearer');
+    if (this.tbWaiter || this.tbLive) throw new Error('A Torch Bearer scan is already running');
+    this.tbReassembler.reset();
+    this.tbLiveDrain = false;
+    this.tbLive = { onResult, onEnd };
+    this.log('Bridge: starting Live (06)');
+    try {
+      await this.characteristic.writeWithResponse(TB_CMD_LIVE_B64);
+    } catch (e) {
+      this.tbLive = null;
+      throw e;
+    }
+  }
+
+  /** Stops Torch Bearer Live. Results still in flight are dropped. Safe to call twice. */
+  async stopTorchBearerLive(): Promise<void> {
+    if (!this.tbLive) return;
+    this.tbLive = null;
+    this.tbLiveDrain = true;
+    // The bridge says "ready" when it has stopped; if that never arrives, stop dropping results after a while.
+    setTimeout(() => { this.tbLiveDrain = false; }, 8000);
+    if (!this.characteristic) return;
+    this.log('Bridge: stopping Live (05)');
+    try {
+      await this.characteristic.writeWithResponse(TB_CMD_CANCEL_B64);
+    } catch (e: any) {
+      this.log(`Could not send the stop to the bridge: ${describeBleError(e)}`);
     }
   }
 

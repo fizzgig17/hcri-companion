@@ -15,7 +15,7 @@ import { MeterConnection } from '../ble/MeterConnection';
 import TkLampLive from '../components/TkLampLive';
 import type { BatteryStatus } from '../ble/protocol';
 import { deviceSupportsLive, deviceSupportsFlicker } from '../ble/protocol';
-import { startLiveSpectrum, startFlicker, captureFlickerOnce, readFlickerSettings, writeFlickerSetting, type LiveSession, type FlickerReading } from '../ble/liveSessions';
+import { startLiveSpectrum, startTorchBearerLive, startFlicker, captureFlickerOnce, readFlickerSettings, writeFlickerSetting, type LiveSession, type FlickerReading } from '../ble/liveSessions';
 import type { FlickerSettingsApi } from '../components/FlickerSettingsModal';
 import type { FlickerUploadApi } from '../components/FlickerChart';
 import { initializeMeter, takeMeasurement, EMPTY_READING_ERROR } from '../ble/takeMeasurement';
@@ -46,7 +46,7 @@ import { shareSingleReadingCsv } from '../utils/shareCsv';
 import { hapticSuccess, hapticFailure } from '../utils/haptics';
 import { hpcsModelName } from '../ble/meterLabel';
 import { getTkRunState, onTkRunState, requestTkUpload, toggleTkRun } from '../ble/tklamp';
-import { getMunkiCalHours, setMunkiCalHours, munkiButtonMode, TB_KIND_COLORMUNKI, TB_KIND_TKLAMP, MUNKI_DIAL_CALIBRATION, type TbMeterStatus } from '../ble/torchBearer';
+import { getMunkiCalHours, setMunkiCalHours, munkiButtonMode, TB_KIND_TORCH_BEARER, TB_KIND_COLORMUNKI, TB_KIND_TKLAMP, MUNKI_DIAL_CALIBRATION, type TbMeterStatus } from '../ble/torchBearer';
 import { enableKeepAwake, disableKeepAwake } from '../utils/keepAwake';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLayoutMode, isSquareWindow, sideColumnWidth, MIN_GRID_WIDTH } from '../layout';
@@ -1104,7 +1104,8 @@ export default function HomeScreen({ navigation }: any) {
     setPagerResetKey({});
     setLiveUnsaved(null);
     liveLastRef.current = null;
-    sessionRef.current = startLiveSpectrum(
+    const startLive = connRef.current.isTorchBearer() ? startTorchBearerLive : startLiveSpectrum;
+    sessionRef.current = startLive(
       connRef.current,
       appendLog,
       (r) => {
@@ -1958,7 +1959,7 @@ export default function HomeScreen({ navigation }: any) {
           onCopyLink={copyReportLink}
           onResetConnection={resetConnection}
           onCancelConnect={cancelConnect}
-          liveSupported={deviceSupportsLive(deviceName)}
+          liveSupported={deviceSupportsLive(deviceName) || (tbMeter?.kind === TB_KIND_TORCH_BEARER && (status === 'connected' || status === 'uploading' || status === 'measuring'))}
           // The landscape dashboard already shows the flicker chart, so it needs no Flicker button.
           flickerSupported={!gridCharts && deviceSupportsFlicker(deviceName) && mode !== 'live'}
           sampleHasFlicker={!gridCharts && !!(result?.sampleLabel && result.flicker)}

@@ -126,6 +126,49 @@ export function startLiveSpectrum(
   };
 }
 
+/** How long the bridge may stay silent after Live is started before the app gives up (older bridge firmware ignores the command). */
+const TB_LIVE_FIRST_RESULT_TIMEOUT_MS = 25000;
+
+/** Continuous spectrum on a Torch Bearer through the bridge (firmware command 06). Same contract as startLiveSpectrum. */
+export function startTorchBearerLive(
+  conn: MeterConnection,
+  log: LogFn,
+  onResult: (r: MeterResult) => void,
+  onEnd: (err?: Error) => void
+): LiveSession {
+  let ended = false;
+  let got = false;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const end = (err?: Error) => {
+    if (ended) return;
+    ended = true;
+    if (timer) clearTimeout(timer);
+    onEnd(err);
+  };
+  timer = setTimeout(() => {
+    if (got || ended) return;
+    conn.stopTorchBearerLive().catch(() => {});
+    end(new Error('The bridge did not send any live readings. Its firmware may be too old for Live: update it from the ESP32 bridge page, then try again.'));
+  }, TB_LIVE_FIRST_RESULT_TIMEOUT_MS);
+  const done = conn
+    .startTorchBearerLive(
+      (r) => {
+        got = true;
+        if (!ended) onResult(r);
+      },
+      (err) => end(err)
+    )
+    .catch((e: any) => end(e instanceof Error ? e : new Error(String(e))));
+  return {
+    done,
+    stop: async () => {
+      if (ended) return;
+      end();
+      await conn.stopTorchBearerLive().catch(() => {});
+    },
+  };
+}
+
 /** Sends 8C 25 now and once more shortly after (a single write can be lost or land mid-reply), and clears any half-reassembled reply. */
 async function sendStopReliably(conn: MeterConnection, log: LogFn): Promise<void> {
   try {
