@@ -29,6 +29,11 @@ import {
   isTorchBearerName, TbReassembler, tbToMeterResult, tbSummarySignature, parseTbSummary,
 } from './torchBearer';
 import { getTbFlip, onTbFlip } from './tbDisplay';
+import {
+  TB_OTA_UUID, TB_INFO_UUID, parseBridgeInfo, buildOtaBegin, buildOtaData, OTA_END, OTA_ABORT, parseOtaEvent, otaErrorText,
+  otaPayloadSize, releaseAssetNames, releaseTag, releaseDownloadUrl, parseSums, parseImageInfo, sameCommit, sha256, toHexString,
+  boardLabel, type OtaEvent, type BridgeInfo,
+} from './bridgeFirmware';
 import { parseTkSample, type TkSample } from './tklamp';
 import type { MeterResult } from './parseResult';
 import {
@@ -217,6 +222,18 @@ async function requestBlePermissions(): Promise<boolean> {
  * this flag is actually applied.
  */
 export type LogFn = (msg: string, verbose?: boolean) => void;
+
+// The connection that is open to a bridge right now, if any. A bridge takes one phone at a time and stops advertising while it
+// has one, so a firmware update (which makes its own connection) first asks this one to let go.
+let activeBridge: MeterConnection | null = null;
+/** Closes the app's own connection to a bridge, if there is one. True if one was closed. */
+export async function disconnectActiveBridge(): Promise<boolean> {
+  const c = activeBridge;
+  if (!c) return false;
+  activeBridge = null;
+  await c.disconnect();
+  return true;
+}
 
 /** A single reassembled notification, already stripped of the 4-byte echo+length header when it's a length-prefixed (8C 13) response. Short replies (8C 03 / 8C 05 / 8C 00) are passed through whole, unstripped -- there's no header to strip. */
 export interface MeterMessage {
@@ -647,6 +664,7 @@ export class MeterConnection {
     this.tbFlipUnsub = onTbFlip((f) => {
       this.sendTorchBearerFlip(f).catch(() => {});
     });
+    activeBridge = this;
     const wantFlip = getTbFlip();
     if (wantFlip !== null) this.sendTorchBearerFlip(wantFlip).catch(() => {});
 
@@ -763,6 +781,7 @@ export class MeterConnection {
       this.tbSubs = [];
       this.tbFlipUnsub?.();
       this.tbFlipUnsub = null;
+      if (activeBridge === this) activeBridge = null;
       if (this.tbWaiter) {
         const w = this.tbWaiter;
         this.tbWaiter = null;
@@ -1356,6 +1375,7 @@ export class MeterConnection {
     this.tbSubs = [];
     this.tbFlipUnsub?.();
     this.tbFlipUnsub = null;
+    if (activeBridge === this) activeBridge = null;
     this.tbMode = false;
     if (this.device) {
       await this.device.cancelConnection().catch(() => {});
@@ -1378,5 +1398,267 @@ export class MeterConnection {
    */
   destroy(): void {
     this.log('destroy() called -- no-op: the underlying BleManager is a shared singleton now, use disconnect() instead.');
+  }
+}
+
+// ------------------------------------------------------------------ bridge firmware update ----
+// Updates the ESP32 bridge's firmware over Bluetooth (the bridge side is "Firmware update" in hcri-esp32-bridge/src/main.cpp).
+// It makes its own connection, so it works even when no instrument is plugged into the bridge. Steps: find the bridge, connect,
+// read what it runs, download the matching release file and its checksum, send it in windowed chunks (the bridge acknowledges every
+// ~4 KB and asks for a resend from an offset if a chunk was lost), let it restart, then connect again and check the new commit.
+
+export type BridgeUpdateOutcome = 'updated' | 'uptodate' | 'cannot' | 'failed' | 'cancelled';
+export interface BridgeUpdateResult {
+  outcome: BridgeUpdateOutcome;
+  message: string;
+}
+export interface BridgeUpdateOptions {
+  /** Follow the development firmware (dev-latest) instead of the released one (prod-latest). */
+  dev: boolean;
+  log: LogFn;
+  onStatus: (text: string, pct?: number) => void;
+  /** Set `requested` to true to stop; the bridge keeps its old firmware. */
+  cancel: { requested: boolean };
+}
+
+const sleepMs = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+async function findBridge(manager: BleManager, windowMs: number, cancel: { requested: boolean }): Promise<Device | null> {
+  let found: Device | null = null;
+  await new Promise<void>((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearInterval(poll);
+      clearTimeout(timer);
+      manager.stopDeviceScan();
+      resolve();
+    };
+    manager.startDeviceScan(null, { allowDuplicates: false, scanMode: ScanMode.LowLatency }, (error, device) => {
+      if (error) { finish(); return; }
+      if (device && (advertisesTorchBearer(device) || isTorchBearerName(device.name) || isTorchBearerName(device.localName))) {
+        if (!found || (device.rssi ?? -999) > (found.rssi ?? -999)) found = device;
+        setTimeout(finish, 700);   // a moment more, in case a stronger one is nearby
+      }
+    });
+    const timer = setTimeout(finish, windowMs);
+    const poll = setInterval(() => { if (cancel.requested) finish(); }, 200);
+  });
+  return found;
+}
+
+async function connectBridge(manager: BleManager, d: Device, log: LogFn): Promise<Device> {
+  let c = await d.connect({ timeout: 15000 });
+  c = await c.discoverAllServicesAndCharacteristics();
+  if (Platform.OS === 'android') {
+    try { c = await c.requestMTU(247); } catch (e: any) { log(`Bridge update: requestMTU failed (continuing): ${describeBleError(e)}`); }
+  }
+  return c;
+}
+
+async function readBridgeInfo(c: Device): Promise<BridgeInfo | null> {
+  try {
+    const ch = await c.readCharacteristicForService(TB_SERVICE_UUID, TB_INFO_UUID);
+    return ch.value ? parseBridgeInfo(new Uint8Array(Buffer.from(ch.value, 'base64'))) : null;
+  } catch {
+    return null;   // firmware from before updates over Bluetooth has no info characteristic
+  }
+}
+
+async function downloadFile(url: string, name: string, onPct: (pct: number) => void): Promise<Uint8Array> {
+  // Loaded here, not at the top, so nothing that imports this file needs the native file module.
+  const RNFS = require('react-native-fs');
+  const path = `${RNFS.CachesDirectoryPath}/${name}`;
+  const res = await RNFS.downloadFile({
+    fromUrl: url,
+    toFile: path,
+    background: false,
+    progressDivider: 5,
+    progress: (p: { bytesWritten: number; contentLength: number }) => { if (p.contentLength > 0) onPct(Math.round((p.bytesWritten * 100) / p.contentLength)); },
+  }).promise;
+  if (res.statusCode !== 200) {
+    RNFS.unlink(path).catch(() => {});
+    throw new Error(`Could not download ${name} (HTTP ${res.statusCode}).`);
+  }
+  const b64 = await RNFS.readFile(path, 'base64');
+  RNFS.unlink(path).catch(() => {});
+  return new Uint8Array(Buffer.from(b64, 'base64'));
+}
+
+export async function updateBridgeFirmware(opts: BridgeUpdateOptions): Promise<BridgeUpdateResult> {
+  const { log, onStatus, cancel } = opts;
+  const manager = getSharedBleManager();
+  const cancelled = (): BridgeUpdateResult => ({ outcome: 'cancelled', message: 'Update cancelled. The bridge keeps its current firmware.' });
+  let dev: Device | null = null;
+  let subscription: Subscription | null = null;
+  let disconnectSub: Subscription | null = null;
+  try {
+    if (!(await requestBlePermissions())) {
+      return { outcome: 'failed', message: 'Bluetooth permission was denied. Enable "Nearby devices" for this app in the phone settings.' };
+    }
+    await waitForPoweredOn(manager);
+
+    onStatus('Looking for the bridge…');
+    if (await disconnectActiveBridge()) await sleepMs(1500);   // it needs a moment before it advertises again
+    const seen = await findBridge(manager, 9000, cancel);
+    if (cancel.requested) return cancelled();
+    if (!seen) {
+      return { outcome: 'failed', message: 'Could not find the bridge. Power it on, keep the phone close, and close any other app that is connected to it.' };
+    }
+
+    onStatus('Connecting to the bridge…');
+    dev = await connectBridge(manager, seen, log);
+    let lost = false;
+    disconnectSub = dev.onDisconnected(() => { lost = true; });
+    const info = await readBridgeInfo(dev);
+    if (!info || !info.canUpdate) {
+      return {
+        outcome: 'cannot',
+        message: "This bridge's firmware can't be updated from the app yet. Flash it once from a computer (see the ESP32 bridge page on hcri.io); after that it can be updated here.",
+      };
+    }
+    log(`Bridge update: ${boardLabel(info.board)} running ${info.commit} from slot ${info.slot}, MTU ${dev.mtu}`);
+
+    const tag = releaseTag(opts.dev);
+    const names = releaseAssetNames(info.board);
+    onStatus('Downloading the firmware…', 0);
+    const [image, sumsBytes] = await Promise.all([
+      downloadFile(releaseDownloadUrl(tag, names.bin), names.bin, (p) => onStatus('Downloading the firmware…', p)),
+      downloadFile(releaseDownloadUrl(tag, names.sums), names.sums, () => {}),
+    ]);
+    if (cancel.requested) return cancelled();
+    const want = parseSums(Buffer.from(sumsBytes).toString('utf8'), names.bin);
+    const sha = sha256(image);
+    if (!want || want !== toHexString(sha)) {
+      return { outcome: 'failed', message: 'The downloaded firmware did not match its checksum, so it was not sent. Try again in a moment.' };
+    }
+    const img = parseImageInfo(image);
+    if (!img) return { outcome: 'failed', message: 'The downloaded file is not a bridge firmware image.' };
+    log(`Bridge update: downloaded ${names.bin}, ${image.length} bytes, commit ${img.commit}, built ${img.date} ${img.time}`);
+    if (sameCommit(info.commit, img.commit)) {
+      return { outcome: 'uptodate', message: `The bridge already has the latest firmware (${info.commit}).` };
+    }
+
+    // Events from the bridge, in order.
+    const queue: OtaEvent[] = [];
+    let wake: (() => void) | null = null;
+    subscription = dev.monitorCharacteristicForService(TB_SERVICE_UUID, TB_OTA_UUID, (error, ch) => {
+      if (error || !ch?.value) return;
+      const ev = parseOtaEvent(new Uint8Array(Buffer.from(ch.value, 'base64')));
+      if (ev) { queue.push(ev); wake?.(); }
+    });
+    const waitEvent = (ms: number) => new Promise<void>((resolve) => {
+      if (queue.length) { resolve(); return; }
+      const t = setTimeout(() => { wake = null; resolve(); }, ms);
+      wake = () => { clearTimeout(t); wake = null; resolve(); };
+    });
+    const b64 = (b: Uint8Array) => Buffer.from(b).toString('base64');
+    const D = dev;
+
+    onStatus(`Updating ${info.commit} → ${img.commit}. Keep the phone close…`, 0);
+    await D.writeCharacteristicWithResponseForService(TB_SERVICE_UUID, TB_OTA_UUID, b64(buildOtaBegin(image.length, sha, info.board)));
+    for (let waited = 0; ; waited += 500) {
+      await waitEvent(500);
+      const ev = queue.shift();
+      if (ev?.type === 'begin') break;
+      if (ev?.type === 'error') return { outcome: 'failed', message: otaErrorText(ev.code) };
+      if (lost) return { outcome: 'failed', message: 'The bridge disconnected before the update started.' };
+      if (waited >= 15000) return { outcome: 'failed', message: 'The bridge did not answer the update request. If it was flashed before updates over Bluetooth existed, flash it once from a computer.' };
+    }
+
+    const payload = otaPayloadSize(D.mtu);
+    const WINDOW = 8192;
+    let sent = 0, acked = 0, stalls = 0;
+    const started = Date.now();
+    while (acked < image.length) {
+      if (cancel.requested) {
+        await D.writeCharacteristicWithResponseForService(TB_SERVICE_UUID, TB_OTA_UUID, b64(OTA_ABORT)).catch(() => {});
+        return cancelled();
+      }
+      if (lost) return { outcome: 'failed', message: 'The connection to the bridge was lost. Nothing was changed; try again.' };
+      while (queue.length) {
+        const ev = queue.shift()!;
+        if (ev.type === 'progress') { acked = Math.max(acked, ev.received); stalls = 0; onStatus('Sending the firmware… keep the phone close', Math.floor((acked * 100) / image.length)); }
+        else if (ev.type === 'resend') { log(`Bridge update: resending from ${ev.expected}`, true); acked = ev.expected; sent = ev.expected; }
+        else if (ev.type === 'error') return { outcome: 'failed', message: otaErrorText(ev.code) };
+      }
+      if (acked >= image.length) break;
+      if (sent < image.length && sent - acked < WINDOW) {
+        const chunk = image.subarray(sent, Math.min(image.length, sent + payload));
+        let ok = false;
+        for (let tries = 0; tries < 3 && !ok; tries++) {
+          try {
+            await D.writeCharacteristicWithoutResponseForService(TB_SERVICE_UUID, TB_OTA_UUID, b64(buildOtaData(sent, chunk)));
+            ok = true;
+          } catch (e: any) {
+            if (lost) break;
+            await sleepMs(30);
+          }
+        }
+        if (!ok) return { outcome: 'failed', message: 'Sending to the bridge failed. Nothing was changed; try again with the phone closer.' };
+        sent += chunk.length;
+        continue;
+      }
+      await waitEvent(2500);
+      if (!queue.length) {
+        // Nothing for a while: read the bridge's last message, then start over from what it has acknowledged.
+        stalls++;
+        if (stalls > 3) return { outcome: 'failed', message: 'The bridge stopped responding. Nothing was changed; try again with the phone closer.' };
+        try {
+          const last = await D.readCharacteristicForService(TB_SERVICE_UUID, TB_OTA_UUID);
+          const ev = last.value ? parseOtaEvent(new Uint8Array(Buffer.from(last.value, 'base64'))) : null;
+          if (ev) queue.push(ev);
+        } catch { /* try again below */ }
+        sent = acked;
+      }
+    }
+    log(`Bridge update: ${image.length} bytes sent in ${((Date.now() - started) / 1000).toFixed(1)} s`);
+
+    onStatus('Checking the update…', 100);
+    await D.writeCharacteristicWithResponseForService(TB_SERVICE_UUID, TB_OTA_UUID, b64(OTA_END));
+    let doneSeen = false;
+    for (let waited = 0; waited < 12000 && !doneSeen && !lost; waited += 500) {
+      await waitEvent(500);
+      while (queue.length) {
+        const ev = queue.shift()!;
+        if (ev.type === 'done') doneSeen = true;
+        else if (ev.type === 'error') return { outcome: 'failed', message: otaErrorText(ev.code) };
+      }
+    }
+    // The bridge restarts about 1.5 s after "done", so a dropped link right after the end command also means it went ahead.
+    if (!doneSeen && !lost) return { outcome: 'failed', message: 'The bridge did not confirm the update. Reconnect and check its firmware version.' };
+
+    subscription?.remove(); subscription = null;
+    disconnectSub?.remove(); disconnectSub = null;
+    await D.cancelConnection().catch(() => {});
+    dev = null;
+
+    onStatus('The bridge is restarting…');
+    await sleepMs(6000);
+    for (let attempt = 0; attempt < 2 && !cancel.requested; attempt++) {
+      const again = await findBridge(manager, 10000, cancel);
+      if (!again) continue;
+      try {
+        const c2 = await connectBridge(manager, again, log);
+        dev = c2;
+        const info2 = await readBridgeInfo(c2);
+        if (info2) {
+          log(`Bridge update: now running ${info2.commit}`);
+          if (sameCommit(info2.commit, img.commit)) return { outcome: 'updated', message: `Updated to ${info2.commit}. The bridge is running the new firmware.` };
+          return { outcome: 'failed', message: `The bridge restarted but still reports ${info2.commit}, not ${img.commit}. It may have gone back to the old firmware; try again.` };
+        }
+      } catch (e: any) {
+        log(`Bridge update: could not check after restart: ${describeBleError(e)}`);
+      }
+    }
+    return { outcome: 'updated', message: 'The update was sent and accepted. The bridge is restarting; connect to it again in a few seconds.' };
+  } catch (e: any) {
+    log(`Bridge update failed: ${describeBleError(e)}`);
+    return { outcome: 'failed', message: `The update did not finish: ${e?.message ?? e}. The bridge keeps working with its old firmware.` };
+  } finally {
+    try { subscription?.remove(); } catch { /* gone */ }
+    try { disconnectSub?.remove(); } catch { /* gone */ }
+    if (dev) await dev.cancelConnection().catch(() => {});
   }
 }

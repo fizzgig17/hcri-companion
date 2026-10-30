@@ -17,6 +17,7 @@ import PrimaryButton from '../components/PrimaryButton';
 import { loadBackupEnabled, saveBackupEnabled } from '../storage/backupState';
 import { restoreFromBackup, scheduleBackup } from '../hcri/backup';
 import HintPressable from '../components/HintPressable';
+import BridgeFirmwareSection from '../components/BridgeFirmwareSection';
 import Svg, { Circle, Path } from 'react-native-svg';
 import DraggableStatList from '../components/DraggableStatList';
 import {
@@ -960,6 +961,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
           The switch is kept in code in case it is needed again: set SHOW_TB_CORRECTION_SWITCH to true. */}
       {SHOW_TB_CORRECTION_SWITCH && switchRow('Spectrum correction', "Adjusts the Torch Bearer's spectrum so its CCT, Duv and color-rendering numbers line up with the HPCS meter (it reads a few percent high in CCT without it). Leave on for normal use; turn off to see the raw, uncorrected spectrum. Applies to new scans, and saved CSVs say which one was used.", tbCorrection, toggleTbCorrection)}
       {switchRow('Flip screen', "Turns the bridge's screen 180° so it reads upright the other way round (the arrow then points to the button at the bottom left). Takes effect on the bridge right away while it is connected, and it keeps the setting. Needs the latest bridge firmware.", tbFlipped, toggleTbFlip)}
+      <BridgeFirmwareSection />
 
       {sectionHeader('ColorMunki')}
       {settingRow(
