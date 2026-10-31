@@ -1172,7 +1172,7 @@ export default function HomeScreen({ navigation }: any) {
   };
 
   pullToReadRef.current = () => {
-    if (statusRef.current !== 'connected' || mode !== 'idle') return;
+    if (statusRef.current !== 'connected' || mode !== 'idle' || tbMeter?.state === TB_STATE_ERROR) return;   // a bridge with no instrument has nothing to read
     setPullReading(true);
     measure();
     setTimeout(() => setPullReading(false), 700);
@@ -1767,6 +1767,10 @@ export default function HomeScreen({ navigation }: any) {
   const [tkRun, setTkRun] = useState(getTkRunState());
   useEffect(() => onTkRunState(setTkRun), []);
   const munkiMain: { override?: { caption: string; tint?: string; disabled?: boolean; icon?: 'play' | 'stop'; onPress?: () => void }; note?: string } = (() => {
+    // Connected to a bridge that has no instrument behind it (and no simulation on): nothing to read.
+    if (tbMeter?.state === TB_STATE_ERROR && (status === 'connected' || status === 'uploading')) {
+      return { override: { caption: 'No instrument', disabled: true }, note: 'The bridge has no instrument plugged in. Plug one in, or pick one under Settings > Simulate bridge instrument.' };
+    }
     if (tbMeter?.kind === TB_KIND_TKLAMP && (status === 'connected' || status === 'uploading')) {
       if (tkRun.recording) return { override: { caption: 'Stop run', tint: '#D64545', icon: 'stop', onPress: toggleTkRun } };
       if (tkRun.armed) return { override: { caption: 'Cancel', tint: '#D64545', icon: 'stop', onPress: toggleTkRun } };
@@ -1788,6 +1792,7 @@ export default function HomeScreen({ navigation }: any) {
         ? { title: 'Calibrating…', body: 'Keep the dial on Calibration and the meter still.', busy: true }
         : { title: 'Measuring…', body: 'Dim light can take 10–15 s. Keep the meter still.', busy: true };
     }
+    if (tbMeter?.state === TB_STATE_ERROR) return { title: 'No instrument', body: 'The bridge is connected, but nothing is plugged into it. Plug one in, or pick one under Settings > Simulate bridge instrument.' };
     if (tbMeter && tbMeter.kind === TB_KIND_COLORMUNKI) {
       const mode = munkiButtonMode(tbMeter, getMunkiCalHours(), calClock);
       if (mode.kind === 'calibrate') {
@@ -2040,7 +2045,7 @@ export default function HomeScreen({ navigation }: any) {
           onCopyLink={copyReportLink}
           onResetConnection={resetConnection}
           onCancelConnect={cancelConnect}
-          liveSupported={deviceSupportsLive(deviceName) || (tbMeter?.kind === TB_KIND_TORCH_BEARER && (status === 'connected' || status === 'uploading' || status === 'measuring'))}
+          liveSupported={deviceSupportsLive(deviceName) || (tbMeter?.kind === TB_KIND_TORCH_BEARER && tbMeter.state !== TB_STATE_ERROR && (status === 'connected' || status === 'uploading' || status === 'measuring'))}
           // The landscape dashboard already shows the flicker chart, so it needs no Flicker button.
           flickerSupported={!gridCharts && deviceSupportsFlicker(deviceName) && mode !== 'live'}
           sampleHasFlicker={!gridCharts && !!(result?.sampleLabel && result.flicker)}
