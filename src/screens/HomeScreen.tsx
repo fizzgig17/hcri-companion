@@ -586,7 +586,8 @@ export default function HomeScreen({ navigation }: any) {
         const allFound = await conn.scanForKnownMeters(CONNECT_SCAN_WINDOW_MS, { preferDeviceId: lastIdForScan });
         if (stale()) return;
         // A bridge that says nothing is plugged in can't measure; leave it out (older firmware says nothing, so stays).
-        const candidates = allFound.filter((d) => (d as any).attached !== 'none');
+        // Developer builds keep it, so Settings > Simulate bridge instrument can make it act as an instrument.
+        const candidates = allFound.filter((d) => IS_DEV_BUILD || (d as any).attached !== 'none');
         if (candidates.length === 0 && allFound.length > 0) {
           setMultiMeterCandidates(null);
           throw new Error('Bridge found, but no meter is plugged in -- connect the ColorMunki or Torch Bearer to it');
@@ -1339,7 +1340,7 @@ export default function HomeScreen({ navigation }: any) {
         const currentId = conn.getDeviceId();
         const seen = seenMetersRef.current;
         for (const d of found) {
-          if (d.id !== currentId && (d as any).attached !== 'none') seen.set(d.id, { dev: { id: d.id, name: d.name, rssi: d.rssi, attached: (d as any).attached ?? null }, ts: now });
+          if (d.id !== currentId && (IS_DEV_BUILD || (d as any).attached !== 'none')) seen.set(d.id, { dev: { id: d.id, name: d.name, rssi: d.rssi, attached: (d as any).attached ?? null }, ts: now });
         }
         for (const [id, v] of Array.from(seen.entries())) {
           if (now - v.ts > DEVICE_POLL_FORGET_MS || id === currentId) seen.delete(id);

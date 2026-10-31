@@ -39,7 +39,9 @@ import { UpdateProvider } from './contexts/UpdateContext';
 import { DevBuildProvider } from './contexts/DevBuildContext';
 import UpdateBanner from './components/UpdateBanner';
 import { setTapHapticsEnabled, setResultHapticsEnabled } from './utils/haptics';
-import { loadHapticTapsPreference, loadHapticResultsPreference, loadTbFlipPreference } from './storage/preferences';
+import { loadHapticTapsPreference, loadHapticResultsPreference, loadTbFlipPreference, loadBridgeSimPreference } from './storage/preferences';
+import { setBridgeSim } from './ble/bridgeSim';
+import { IS_DEV_BUILD } from './hcri/buildTarget';
 import { setTbFlip } from './ble/tbDisplay';
 
 const Stack = createNativeStackNavigator();
@@ -176,6 +178,7 @@ function Navigation() {
     // The saved 'Spectrum correction' preference is no longer loaded: the switch is hidden, the app-side curve stays on
     // (it only applies for older bridge firmware). To bring the switch back: loadTbCorrectionPreference().then(setTbCorrectionEnabled)
     loadTbFlipPreference().then((v) => setTbFlip(v, false)).catch(() => {});
+    if (IS_DEV_BUILD) loadBridgeSimPreference().then((v) => setBridgeSim(v, false)).catch(() => {});
   }, []);
 
   return (

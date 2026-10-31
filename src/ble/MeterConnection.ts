@@ -29,6 +29,8 @@ import {
   isTorchBearerName, TbReassembler, tbToMeterResult, tbSummarySignature, parseTbSummary,
 } from './torchBearer';
 import { getTbFlip, onTbFlip } from './tbDisplay';
+import { getBridgeSim, onBridgeSim, bridgeSimCommandB64, parseBridgeButton, emitBridgeButton, bridgeButtonText, BridgeSimKind } from './bridgeSim';
+import { IS_DEV_BUILD } from '../hcri/buildTarget';
 import {
   TB_OTA_UUID, TB_INFO_UUID, parseBridgeInfo, buildOtaBegin, buildOtaData, OTA_END, OTA_ABORT, parseOtaEvent, otaErrorText,
   otaPayloadSize, releaseAssetNames, releaseTag, releaseDownloadUrl, parseSums, parseImageInfo, sameCommit, sha256, toHexString,
@@ -284,6 +286,7 @@ export class MeterConnection {
   private tbMode = false;
   private tbSubs: Subscription[] = [];
   private tbFlipUnsub: (() => void) | null = null;
+  private tbSimUnsub: (() => void) | null = null;
   private tbReassembler = new TbReassembler();
   private tbWaiter: { resolve: (r: MeterResult) => void; reject: (e: Error) => void } | null = null;
   // A scan started from the bridge's own button (not by this app): started() when it begins, result() with the finished reading.
@@ -631,8 +634,13 @@ export class MeterConnection {
         this.log(`Bridge status on connect: state ${st[0]}`, true);
         this.setTbMeterStatus(parseTbStatus(st));
         if (st[0] === TB_STATE_ERROR) {
-          await connected.cancelConnection().catch(() => {});
-          throw new Error('The bridge is on, but no instrument is plugged into it. Plug the Torch Bearer, ColorMunki or TKLamp tester in, then connect again.');
+          if (IS_DEV_BUILD) {
+            // Developer builds keep the connection: Settings -> Simulate bridge instrument can make the bridge act as one.
+            this.log('Bridge has no instrument plugged in -- staying connected (developer build; use Settings > Simulate bridge instrument)');
+          } else {
+            await connected.cancelConnection().catch(() => {});
+            throw new Error('The bridge is on, but no instrument is plugged into it. Plug the Torch Bearer, ColorMunki or TKLamp tester in, then connect again.');
+          }
         }
       }
     } catch (e: any) {
@@ -668,6 +676,17 @@ export class MeterConnection {
     const wantFlip = getTbFlip();
     if (wantFlip !== null) this.sendTorchBearerFlip(wantFlip).catch(() => {});
 
+    // Developer builds: simulated instrument (command 07). Sent now if one was chosen, and again whenever the choice changes.
+    this.tbSimUnsub?.();
+    this.tbSimUnsub = null;
+    if (IS_DEV_BUILD) {
+      this.tbSimUnsub = onBridgeSim((k) => {
+        this.sendBridgeSim(k).catch(() => {});
+      });
+      const wantSim = getBridgeSim();
+      if (wantSim !== null) this.sendBridgeSim(wantSim).catch(() => {});
+    }
+
     this.tbSubs.forEach((x) => x.remove());
     this.tbReassembler.reset();
     // ColorMunki raw data (bridge packet 05): one log line each, for the bridge's tools/munki_diag.py.
@@ -681,6 +700,14 @@ export class MeterConnection {
         }
         if (!char?.value) return;
         const arr = new Uint8Array(Buffer.from(char.value, 'base64'));
+        if (arr[0] === 0x07) {   // the bridge's own button was pressed or let go (simulation only): not part of a spectrum
+          const be = parseBridgeButton(arr);
+          if (be) {
+            this.log(`Bridge: ${bridgeButtonText(be)}`);
+            emitBridgeButton(be);
+          }
+          return;
+        }
         if (arr[0] === 0x06) {   // TKLamp live reading: not part of a spectrum, and too frequent to log
           const ts = parseTkSample(arr);
           if (ts) this.tkListeners.forEach((cb) => cb(ts));
@@ -781,6 +808,8 @@ export class MeterConnection {
       this.tbSubs = [];
       this.tbFlipUnsub?.();
       this.tbFlipUnsub = null;
+      this.tbSimUnsub?.();
+      this.tbSimUnsub = null;
       if (activeBridge === this) activeBridge = null;
       if (this.tbWaiter) {
         const w = this.tbWaiter;
@@ -961,6 +990,17 @@ export class MeterConnection {
       await this.characteristic.writeWithResponse(flipped ? TB_CMD_FLIP_ON_B64 : TB_CMD_FLIP_OFF_B64);
     } catch (e: any) {
       this.log(`Could not set the bridge display orientation: ${describeBleError(e)}`);
+    }
+  }
+
+  /** Developer builds: asks the bridge to act as an instrument that is not plugged in (0 = stop). Older firmware ignores the command. */
+  private async sendBridgeSim(kind: BridgeSimKind): Promise<void> {
+    if (!this.isTorchBearer() || !this.characteristic) return;
+    try {
+      this.log(`Bridge: simulate ${kind === 0 ? 'off' : kind === 1 ? 'Torch Bearer' : kind === 2 ? 'ColorMunki' : 'TKLamp tester'}`);
+      await this.characteristic.writeWithResponse(bridgeSimCommandB64(kind));
+    } catch (e: any) {
+      this.log(`Could not set the bridge simulation: ${describeBleError(e)}`);
     }
   }
 
@@ -1375,6 +1415,8 @@ export class MeterConnection {
     this.tbSubs = [];
     this.tbFlipUnsub?.();
     this.tbFlipUnsub = null;
+    this.tbSimUnsub?.();
+    this.tbSimUnsub = null;
     if (activeBridge === this) activeBridge = null;
     this.tbMode = false;
     if (this.device) {

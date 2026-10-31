@@ -20,7 +20,7 @@ export function hpcsModelName(name: string | null | undefined): string | null {
  * @param attached what is behind the bridge if known ('ColorMunki' | 'Torch Bearer'), else null.
  */
 export function meterListLabel(advertisedName: string | null | undefined, isBridge: boolean, attached: string | null): string {
-  if (isBridge || isTorchBearerName(advertisedName)) return attached ? `${BRIDGE_NAME} · ${attached}` : BRIDGE_NAME;
+  if (isBridge || isTorchBearerName(advertisedName)) return attached ? `${BRIDGE_NAME} · ${attached === 'none' ? 'nothing plugged in' : attached}` : BRIDGE_NAME;
   return hpcsModelName(advertisedName) || '(unnamed)';
 }
 
