@@ -129,13 +129,13 @@ describe('ColorMunki status', () => {
     b[8] = 90; b[9] = 0; // 90 minutes old when sent
     const s = parseTbStatus(b);
     expect(s.calAgeMin).toBe(90);
-    expect(munkiButtonMode(s, 4, 0).kind).toBe('measure');
-    expect(munkiButtonMode(s, 1, 0)).toMatchObject({ kind: 'blocked', caption: 'Recalibrate' });
+    expect(munkiButtonMode(s, 240, 0).kind).toBe('measure');
+    expect(munkiButtonMode(s, 60, 0)).toMatchObject({ kind: 'blocked', caption: 'Recalibrate' });
     expect(munkiButtonMode(s, 0, 0).kind).toBe('measure'); // 0 = never expires
     // carried forward from the moment it was received
     const aged = { ...s, receivedAt: 0 };
-    expect(munkiButtonMode(aged, 2, 20 * 60000).kind).toBe('measure'); // 110 min
-    expect(munkiButtonMode(aged, 2, 40 * 60000).kind).toBe('blocked'); // 130 min
+    expect(munkiButtonMode(aged, 120, 20 * 60000).kind).toBe('measure'); // 110 min
+    expect(munkiButtonMode(aged, 120, 40 * 60000).kind).toBe('blocked'); // 130 min
     expect(parseTbStatus(status(0, 0, 1, 0x84)).calAgeMin).toBeNull(); // old 8-byte status: unknown, never expires
   });
 

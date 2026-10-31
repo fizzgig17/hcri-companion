@@ -70,8 +70,8 @@ import {
   saveAutoConnectPreference,
   saveLedSuggestionsPreference,
   saveTbCorrectionPreference,
-  loadMunkiCalHoursPreference,
-  saveMunkiCalHoursPreference,
+  loadMunkiCalMinutesPreference,
+  saveMunkiCalMinutesPreference,
   loadTkScalePreference,
   saveTkScalePreference,
   saveTkWindowPreference,
@@ -83,7 +83,7 @@ import {
 import { setTbCorrectionEnabled } from '../ble/tbCorrection';
 import { setTbFlip } from '../ble/tbDisplay';
 import { BRIDGE_SIM_OPTIONS, BRIDGE_SIM_BUTTON_ROLES, BridgeSimKind, BridgeButtonEvent, setBridgeSim, getBridgeSim, isBridgeLinked, getBridgeConnectInfo, onBridgeSimState, requestBridgeConnect, requestBridgeDisconnect, requestBridgePress, getLastBridgeButton, onBridgeButton, bridgeButtonText } from '../ble/bridgeSim';
-import { setMunkiCalHours } from '../ble/torchBearer';
+import { setMunkiCalMinutes } from '../ble/torchBearer';
 import { TK_RAW_PER_LM_DEFAULT, getTkRawPerLm, getTkTrim, getTkTrimPeak, getTkWindowS, setTkRawPerLm, setTkTrim, setTkTrimPeak, setTkWindowS } from '../ble/tklamp';
 import {
   StatDisplayPrefs,
@@ -180,7 +180,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   const [bridgeUp, setBridgeUp] = useState(isBridgeLinked());
   const [connInfo, setConnInfo] = useState(getBridgeConnectInfo());
   const [btnDown, setBtnDown] = useState<{ top: boolean; bottom: boolean }>({ top: false, bottom: false });
-  const [munkiHours, setMunkiHours] = useState('1');
+  const [munkiHours, setMunkiHours] = useState('30');   // minutes
   const [tkScale, setTkScale] = useState(String(getTkRawPerLm()));
   const [tkTrim, setTkTrimState] = useState(getTkTrim());
   useEffect(() => { loadTkTrimPreference().then((v) => { setTkTrim(v); setTkTrimState(v); }); }, []);
@@ -253,7 +253,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
     loadVerboseLoggingPreference().then(setVerboseLogging);
     loadTestReportIdPreference().then(setTestReportId);
     loadTbCorrectionPreference().then(setTbCorrection);
-    loadMunkiCalHoursPreference().then((h) => setMunkiHours(String(h)));
+    loadMunkiCalMinutesPreference().then((h) => setMunkiHours(String(h)));
     loadTkScalePreference(TK_RAW_PER_LM_DEFAULT).then((v) => { setTkRawPerLm(v); setTkScale(String(v)); });
     loadTbFlipPreference().then((v) => setTbFlipped(v === true));
     loadFlickerWithReadingPreference().then(setFlickerWithReading);
@@ -385,10 +385,10 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
 
   const commitMunkiHours = async () => {
     const n = Number(munkiHours.replace(',', '.'));
-    const h = Number.isFinite(n) && n >= 0 ? Math.min(n, 999) : 4;
+    const h = Number.isFinite(n) && n >= 0 ? Math.min(Math.round(n), 9999) : 30;
     setMunkiHours(String(h));
-    setMunkiCalHours(h);
-    await saveMunkiCalHoursPreference(h);
+    setMunkiCalMinutes(h);
+    await saveMunkiCalMinutesPreference(h);
   };
 
   const toggleTbCorrection = async (value: boolean) => {
@@ -1177,16 +1177,16 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
       {section('munki', 'ColorMunki', 'Calibration limit', (
         <>
       {settingRow(
-        'Calibration limit (hours)',
+        'Calibration limit (minutes)',
         "The ColorMunki's dark reference drifts as it warms up. Once the last calibration is older than this, the Take reading button asks you to recalibrate first. 0 turns the check off. The bridge also forgets the calibration whenever it is powered off.",
         <TextInput
-          accessibilityLabel="ColorMunki calibration limit in hours"
+          accessibilityLabel="ColorMunki calibration limit in minutes"
           style={[styles.input, { width: 64, textAlign: 'center', marginTop: 0 }]}
           value={munkiHours}
           onChangeText={setMunkiHours}
           onEndEditing={commitMunkiHours}
           onBlur={commitMunkiHours}
-          keyboardType="decimal-pad"
+          keyboardType="number-pad"
           returnKeyType="done"
           maxLength={5}
         />

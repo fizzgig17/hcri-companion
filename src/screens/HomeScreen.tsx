@@ -31,7 +31,7 @@ import { uploadReadingToHcri, uploadFlickerToHcri } from '../hcri/uploadFlickerT
 import { getReportLink } from '../hcri/getReportLink';
 import { fetchSampleReading } from '../hcri/fetchSampleReading';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
-import { loadAutoConnectPreference, loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference, loadTestReportIdPreference, loadMunkiCalHoursPreference, loadMunkiBridgeIds, saveMunkiBridgeId, loadSideTabPreference, saveSideTabPreference, loadSideTabModePreference, saveFoldableSeen } from '../storage/preferences';
+import { loadAutoConnectPreference, loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference, loadTestReportIdPreference, loadMunkiCalMinutesPreference, loadMunkiBridgeIds, saveMunkiBridgeId, loadSideTabPreference, saveSideTabPreference, loadSideTabModePreference, saveFoldableSeen } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
 import { addReading, loadHistory, recordUpload, renameReading, setReadingFlicker, updateReadingLed } from '../storage/readingHistory';
 import { addFlicker, updateFlicker } from '../storage/flickerHistory';
@@ -47,7 +47,7 @@ import { shareSingleReadingCsv } from '../utils/shareCsv';
 import { hapticSuccess, hapticFailure } from '../utils/haptics';
 import { hpcsModelName } from '../ble/meterLabel';
 import { getTkRunState, onTkRunState, requestTkUpload, toggleTkRun } from '../ble/tklamp';
-import { getMunkiCalHours, setMunkiCalHours, munkiButtonMode, TB_KIND_TORCH_BEARER, TB_KIND_COLORMUNKI, TB_KIND_TKLAMP, MUNKI_DIAL_CALIBRATION, TB_STATE_ERROR, isTorchBearerName, type TbMeterStatus } from '../ble/torchBearer';
+import { getMunkiCalMinutes, setMunkiCalMinutes, munkiButtonMode, TB_KIND_TORCH_BEARER, TB_KIND_COLORMUNKI, TB_KIND_TKLAMP, MUNKI_DIAL_CALIBRATION, TB_STATE_ERROR, isTorchBearerName, type TbMeterStatus } from '../ble/torchBearer';
 import { enableKeepAwake, disableKeepAwake } from '../utils/keepAwake';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLayoutMode, isSquareWindow, sideColumnWidth, MIN_GRID_WIDTH } from '../layout';
@@ -950,7 +950,7 @@ export default function HomeScreen({ navigation }: any) {
     saveMunkiBridgeId(id, tbMeter.kind === TB_KIND_COLORMUNKI).then(setMunkiBridgeIds).catch(() => {});
   }, [tbMeter?.kind]);
   useEffect(() => {
-    loadMunkiCalHoursPreference().then((h) => { setMunkiCalHours(h); setCalClock(Date.now()); }).catch(() => {});
+    loadMunkiCalMinutesPreference().then((h) => { setMunkiCalMinutes(h); setCalClock(Date.now()); }).catch(() => {});
     const id = setInterval(() => setCalClock(Date.now()), 30000);
     return () => clearInterval(id);
   }, []);
@@ -1781,7 +1781,7 @@ export default function HomeScreen({ navigation }: any) {
       return { override: { caption: 'Start run', disabled: !tkRun.canRecord, onPress: toggleTkRun } };
     }
     if (!tbMeter || tbMeter.kind !== TB_KIND_COLORMUNKI || (status !== 'connected' && status !== 'uploading')) return {};
-    const mode = munkiButtonMode(tbMeter, getMunkiCalHours(), calClock);
+    const mode = munkiButtonMode(tbMeter, getMunkiCalMinutes(), calClock);
     if (mode.kind === 'calibrate') return { override: { caption: 'Calibrate', tint: '#E8922E' }, note: 'Dial is on calibration: press Calibrate, keep the instrument still.' };
     if (mode.kind === 'blocked') return { override: { caption: mode.caption, disabled: true }, note: mode.note };
     return {};
@@ -1798,7 +1798,7 @@ export default function HomeScreen({ navigation }: any) {
     }
     if (tbMeter?.state === TB_STATE_ERROR) return { title: 'No instrument', body: 'The bridge is connected, but nothing is plugged into it. Plug one in, or pick one under Settings > Simulate bridge instrument.' };
     if (tbMeter && tbMeter.kind === TB_KIND_COLORMUNKI) {
-      const mode = munkiButtonMode(tbMeter, getMunkiCalHours(), calClock);
+      const mode = munkiButtonMode(tbMeter, getMunkiCalMinutes(), calClock);
       if (mode.kind === 'calibrate') {
         return tbMeter.calibrated
           ? { title: 'Calibrated', body: 'Turn the dial to Ambient and tap Take reading.' }

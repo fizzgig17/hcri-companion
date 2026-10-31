@@ -131,10 +131,10 @@ export type MunkiButtonMode =
   | { kind: 'measure' }
   | { kind: 'blocked'; caption: string; note: string };
 
-let munkiCalHours = 1;
-/** Settings > ColorMunki calibration limit in hours (0 = never expires). */
-export function setMunkiCalHours(h: number): void { munkiCalHours = h; }
-export function getMunkiCalHours(): number { return munkiCalHours; }
+let munkiCalMinutes = 30;
+/** Settings > ColorMunki calibration limit in minutes (0 = never expires). */
+export function setMunkiCalMinutes(m: number): void { munkiCalMinutes = m; }
+export function getMunkiCalMinutes(): number { return munkiCalMinutes; }
 
 /** Minutes since the ColorMunki's dark calibration right now, carried forward from when the status arrived. */
 export function munkiCalAgeNowMin(s: TbMeterStatus, now: number = Date.now()): number | null {
@@ -142,8 +142,8 @@ export function munkiCalAgeNowMin(s: TbMeterStatus, now: number = Date.now()): n
   return s.calAgeMin + (s.receivedAt != null ? Math.max(0, now - s.receivedAt) / 60000 : 0);
 }
 
-/** maxAgeHours 0 (or omitted) = never expires. */
-export function munkiButtonMode(s: TbMeterStatus, maxAgeHours = 0, now: number = Date.now()): MunkiButtonMode {
+/** maxAgeMin 0 (or omitted) = never expires. */
+export function munkiButtonMode(s: TbMeterStatus, maxAgeMin = 0, now: number = Date.now()): MunkiButtonMode {
   if (!s.dialKnown) return { kind: 'blocked', caption: 'Please wait', note: 'Reading the ColorMunki dial…' };
   if (s.dial === MUNKI_DIAL_CALIBRATION) return { kind: 'calibrate' };
   if (s.dial === MUNKI_DIAL_AMBIENT) {
@@ -151,10 +151,10 @@ export function munkiButtonMode(s: TbMeterStatus, maxAgeHours = 0, now: number =
       return { kind: 'blocked', caption: 'Calibrate first', note: 'Not calibrated yet: turn the dial to the calibration position and press Calibrate.' };
     }
     const age = munkiCalAgeNowMin(s, now);
-    if (maxAgeHours > 0 && age != null && age > maxAgeHours * 60) {
+    if (maxAgeMin > 0 && age != null && age > maxAgeMin) {
       const h = age / 60;
       const ageText = h < 1 ? `${Math.round(age)} min` : `${h.toFixed(1)} h`;
-      return { kind: 'blocked', caption: 'Recalibrate', note: `Calibration is ${ageText} old (limit ${maxAgeHours} h): turn the dial to the calibration position and press Calibrate.` };
+      return { kind: 'blocked', caption: 'Recalibrate', note: `Calibration is ${ageText} old (limit ${maxAgeMin} min): turn the dial to the calibration position and press Calibrate.` };
     }
     return { kind: 'measure' };
   }

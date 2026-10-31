@@ -257,18 +257,29 @@ export async function saveThemeModePreference(mode: ThemeMode): Promise<void> {
   await AsyncStorage.setItem(THEME_MODE_KEY, mode);
 }
 
-// ColorMunki: hours after which the dark calibration counts as stale and the Take reading button asks for a new one.
-// 0 = never. Default 1.
+// ColorMunki: minutes after which the dark calibration counts as stale and the Take reading button asks for a new one.
+// 0 = never. Default 30. It used to be kept in hours (colorMunkiCalHours): a value saved that way carries over times 60,
+// so 1 hour reads 60.
+const MUNKI_CAL_MIN_KEY = 'hcri.io.pref.colorMunkiCalMinutes';
 const MUNKI_CAL_HOURS_KEY = 'hcri.io.pref.colorMunkiCalHours';
+export const MUNKI_CAL_MINUTES_DEFAULT = 30;
 
-export async function loadMunkiCalHoursPreference(): Promise<number> {
-  const raw = await AsyncStorage.getItem(MUNKI_CAL_HOURS_KEY);
-  const n = raw === null ? 1 : Number(raw);
-  return Number.isFinite(n) && n >= 0 ? n : 1;
+export async function loadMunkiCalMinutesPreference(): Promise<number> {
+  const raw = await AsyncStorage.getItem(MUNKI_CAL_MIN_KEY);
+  if (raw !== null) {
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 0 ? n : MUNKI_CAL_MINUTES_DEFAULT;
+  }
+  const old = await AsyncStorage.getItem(MUNKI_CAL_HOURS_KEY);
+  if (old !== null) {
+    const h = Number(old);
+    if (Number.isFinite(h) && h >= 0) return Math.round(h * 60);
+  }
+  return MUNKI_CAL_MINUTES_DEFAULT;
 }
 
-export async function saveMunkiCalHoursPreference(hours: number): Promise<void> {
-  await AsyncStorage.setItem(MUNKI_CAL_HOURS_KEY, String(hours));
+export async function saveMunkiCalMinutesPreference(minutes: number): Promise<void> {
+  await AsyncStorage.setItem(MUNKI_CAL_MIN_KEY, String(minutes));
 }
 
 // Which bridges (by BLE id) have been seen running as a ColorMunki, so the meter picker can label them before connecting.
