@@ -9,7 +9,7 @@
 
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BackHandler, useWindowDimensions, Platform, View, ScrollView, StyleSheet, Alert, AppState, Keyboard, Linking } from 'react-native';
+import { BackHandler, useWindowDimensions, Platform, View, ScrollView, StyleSheet, Alert, AppState, Keyboard, Linking, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MeterConnection } from '../ble/MeterConnection';
 import TkLampLive from '../components/TkLampLive';
@@ -437,6 +437,7 @@ export default function HomeScreen({ navigation }: any) {
   // again after a full app restart (a fresh process resets the throttle).
   // Readings started with the button on the Torch Bearer itself (see the effect after acceptReading).
   const tbButtonRef = useRef<{ started: () => void; result: (r: MeterResult) => void; idle: () => void }>({ started: () => {}, result: () => {}, idle: () => {} });
+  const liveFromBridgeRef = useRef<() => void>(() => {});
   const getConnection = useCallback((): MeterConnection => {
     if (!connRef.current) {
       connRef.current = new MeterConnection(appendLog, () => {
@@ -455,6 +456,7 @@ export default function HomeScreen({ navigation }: any) {
         started: () => tbButtonRef.current.started(),
         result: (r) => tbButtonRef.current.result(r),
         idle: () => tbButtonRef.current.idle(),
+        liveStarted: () => liveFromBridgeRef.current(),
       });
     }
     return connRef.current;
@@ -952,6 +954,11 @@ export default function HomeScreen({ navigation }: any) {
 
   // Each reading gets a number; cancelling bumps it, so a reading that finishes after it was cancelled is ignored.
   const measureGenRef = useRef(0);
+  // Pulling the Main screen down takes a reading (the same as Take reading); it does nothing when a reading cannot start.
+  const [pullReading, setPullReading] = useState(false);
+  const pullToReadRef = useRef<() => void>(() => {});
+  const pullToRead = useCallback(() => pullToReadRef.current(), []);
+
   const measure = useCallback(async () => {
     if (!connRef.current) return;
     const gen = ++measureGenRef.current;
@@ -1110,17 +1117,16 @@ export default function HomeScreen({ navigation }: any) {
     if (sess) await sess.stop();
   }, []);
 
-  const toggleLive = useCallback(async () => {
-    if (mode === 'live') {
-      await stopActiveMode();
-      return;
-    }
+  // attach = true: the bridge's own button started Live, so the app joins it (no command is sent).
+  const beginLive = useCallback(async (attach: boolean) => {
     if (mode !== 'idle' || !connRef.current) return;
     setMode('live');
     setPagerResetKey({});
     setLiveUnsaved(null);
     liveLastRef.current = null;
-    const startLive = connRef.current.isTorchBearer() ? startTorchBearerLive : startLiveSpectrum;
+    const startLive = connRef.current.isTorchBearer()
+      ? (c: MeterConnection, l: typeof appendLog, onR: (r: MeterResult) => void, onE: (e?: Error) => void) => startTorchBearerLive(c, l, onR, onE, attach)
+      : startLiveSpectrum;
     sessionRef.current = startLive(
       connRef.current,
       appendLog,
@@ -1141,7 +1147,25 @@ export default function HomeScreen({ navigation }: any) {
         }
       }
     );
-  }, [mode, stopActiveMode, appendLog]);
+  }, [mode, appendLog]);
+
+  const toggleLive = useCallback(async () => {
+    if (mode === 'live') {
+      await stopActiveMode();
+      return;
+    }
+    await beginLive(false);
+  }, [mode, stopActiveMode, beginLive]);
+  liveFromBridgeRef.current = () => {
+    if (statusRef.current === 'connected' && mode === 'idle') beginLive(true).catch(() => {});
+  };
+
+  pullToReadRef.current = () => {
+    if (statusRef.current !== 'connected' || mode !== 'idle') return;
+    setPullReading(true);
+    measure();
+    setTimeout(() => setPullReading(false), 700);
+  };
 
   // Flicker samples. 'reading' = the sample belongs to the current reading (kept with it and in History);
   // 'new' = an independent sample, which leaves the current reading behind. Both run the same stream and share Stop.
@@ -1893,6 +1917,14 @@ export default function HomeScreen({ navigation }: any) {
       ) : (
       activeTab === 'main' ? (
       <View style={styles.mainArea}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ flexGrow: 1 }}
+          alwaysBounceVertical
+          keyboardShouldPersistTaps="handled"
+          refreshControl={<RefreshControl refreshing={pullReading} onRefresh={pullToRead} tintColor={colors.accent} colors={[colors.accent]} />}
+        >
+        <View style={{ flex: 1 }}>
           <MainTab
           onShowCard={() => {
             if (!result || !analysis) return;
@@ -1954,6 +1986,8 @@ export default function HomeScreen({ navigation }: any) {
                   : undefined
             }
           />
+        </View>
+        </ScrollView>
       </View>
       ) : (
       <ScrollView automaticallyAdjustKeyboardInsets ref={scrollRef} style={styles.scrollArea} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
