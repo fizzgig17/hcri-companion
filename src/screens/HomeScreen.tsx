@@ -965,6 +965,8 @@ export default function HomeScreen({ navigation }: any) {
   const measureGenRef = useRef(0);
   // Pulling the Main screen down takes a reading (the same as Take reading); it does nothing when a reading cannot start.
   const [pullReading, setPullReading] = useState(false);
+  // Main's scroll view is only there for the pull gesture: its content is given exactly the visible height so nothing scrolls or hides.
+  const [mainScrollH, setMainScrollH] = useState(0);
   const pullToReadRef = useRef<() => void>(() => {});
   const pullToRead = useCallback(() => pullToReadRef.current(), []);
 
@@ -1949,7 +1951,8 @@ export default function HomeScreen({ navigation }: any) {
       <View style={styles.mainArea}>
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={{ flexGrow: 1 }}
+          onLayout={(e) => setMainScrollH(Math.floor(e.nativeEvent.layout.height))}
+          contentContainerStyle={mainScrollH > 0 ? { height: mainScrollH } : { flexGrow: 1 }}
           alwaysBounceVertical
           keyboardShouldPersistTaps="handled"
           refreshControl={<RefreshControl refreshing={pullReading} onRefresh={pullToRead} tintColor={colors.accent} colors={[colors.accent]} />}
