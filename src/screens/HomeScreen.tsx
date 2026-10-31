@@ -970,6 +970,8 @@ export default function HomeScreen({ navigation }: any) {
 
   const measure = useCallback(async () => {
     if (!connRef.current) return;
+    // A bridge with no instrument (and no simulation) has nothing to read, whichever button asked.
+    if (connRef.current.isTorchBearer() && connRef.current.getTbMeterStatus()?.state === TB_STATE_ERROR) return;
     const gen = ++measureGenRef.current;
     const stale = () => gen !== measureGenRef.current;
     setLiveUnsaved(null);
