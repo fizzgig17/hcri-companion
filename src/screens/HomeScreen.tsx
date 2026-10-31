@@ -47,7 +47,7 @@ import { shareSingleReadingCsv } from '../utils/shareCsv';
 import { hapticSuccess, hapticFailure } from '../utils/haptics';
 import { hpcsModelName } from '../ble/meterLabel';
 import { getTkRunState, onTkRunState, requestTkUpload, toggleTkRun } from '../ble/tklamp';
-import { getMunkiCalHours, setMunkiCalHours, munkiButtonMode, TB_KIND_TORCH_BEARER, TB_KIND_COLORMUNKI, TB_KIND_TKLAMP, MUNKI_DIAL_CALIBRATION, type TbMeterStatus } from '../ble/torchBearer';
+import { getMunkiCalHours, setMunkiCalHours, munkiButtonMode, TB_KIND_TORCH_BEARER, TB_KIND_COLORMUNKI, TB_KIND_TKLAMP, MUNKI_DIAL_CALIBRATION, TB_STATE_ERROR, isTorchBearerName, type TbMeterStatus } from '../ble/torchBearer';
 import { enableKeepAwake, disableKeepAwake } from '../utils/keepAwake';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLayoutMode, isSquareWindow, sideColumnWidth, MIN_GRID_WIDTH } from '../layout';
@@ -1978,7 +1978,7 @@ export default function HomeScreen({ navigation }: any) {
             copyingLink={copyingLink}
             onCopyLink={copyReportLink}
             statIds={statIds}
-            connectedDeviceName={tbMeter ? (tbMeter.kind === TB_KIND_COLORMUNKI ? 'ColorMunki' : tbMeter.kind === TB_KIND_TKLAMP ? 'TKLamp' : 'Torch Bearer') : hpcsModelName(deviceName)}
+            connectedDeviceName={tbMeter ? (tbMeter.state === TB_STATE_ERROR ? 'Bridge' : tbMeter.kind === TB_KIND_COLORMUNKI ? 'ColorMunki' : tbMeter.kind === TB_KIND_TKLAMP ? 'TKLamp' : 'Torch Bearer') : isTorchBearerName(deviceName) ? 'Bridge' : hpcsModelName(deviceName)}
             connectedDeviceId={status === 'connected' || status === 'measuring' ? connRef.current?.getDeviceId() ?? null : null}
             battery={battery}
             uploadTitle={uploadTitle}
