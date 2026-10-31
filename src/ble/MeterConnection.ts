@@ -29,7 +29,7 @@ import {
   isTorchBearerName, TbReassembler, tbToMeterResult, tbSummarySignature, parseTbSummary,
 } from './torchBearer';
 import { getTbFlip, onTbFlip } from './tbDisplay';
-import { getBridgeSim, onBridgeSim, bridgeSimCommandB64, parseBridgeButton, emitBridgeButton, bridgeButtonText, BridgeSimKind } from './bridgeSim';
+import { getBridgeSim, onBridgeSim, setBridgeLinked, setBridgeSim, BRIDGE_RESET_CMD_B64, bridgeSimCommandB64, parseBridgeButton, emitBridgeButton, bridgeButtonText, BridgeSimKind } from './bridgeSim';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
 import {
   TB_OTA_UUID, TB_INFO_UUID, parseBridgeInfo, buildOtaBegin, buildOtaData, OTA_END, OTA_ABORT, parseOtaEvent, otaErrorText,
@@ -233,7 +233,20 @@ export async function disconnectActiveBridge(): Promise<boolean> {
   const c = activeBridge;
   if (!c) return false;
   activeBridge = null;
+  setBridgeLinked(false);
   await c.disconnect();
+  return true;
+}
+
+/** Developer builds: restarts the bridge (command 08) and lets go of it. True if there was a bridge to restart. */
+export async function resetActiveBridge(): Promise<boolean> {
+  const c = activeBridge;
+  if (!c) return false;
+  await c.sendBridgeReset();
+  activeBridge = null;
+  setBridgeLinked(false);
+  setBridgeSim(null, false);
+  await c.disconnect().catch(() => {});
   return true;
 }
 
@@ -673,6 +686,7 @@ export class MeterConnection {
       this.sendTorchBearerFlip(f).catch(() => {});
     });
     activeBridge = this;
+    setBridgeLinked(true);
     const wantFlip = getTbFlip();
     if (wantFlip !== null) this.sendTorchBearerFlip(wantFlip).catch(() => {});
 
@@ -703,7 +717,7 @@ export class MeterConnection {
         if (arr[0] === 0x07) {   // the bridge's own button was pressed or let go (simulation only): not part of a spectrum
           const be = parseBridgeButton(arr);
           if (be) {
-            this.log(`Bridge: ${bridgeButtonText(be)}`);
+            this.log(`Bridge: ${bridgeButtonText(be, getBridgeSim())}`);
             emitBridgeButton(be);
           }
           return;
@@ -810,7 +824,7 @@ export class MeterConnection {
       this.tbFlipUnsub = null;
       this.tbSimUnsub?.();
       this.tbSimUnsub = null;
-      if (activeBridge === this) activeBridge = null;
+      if (activeBridge === this) { activeBridge = null; setBridgeLinked(false); }
       if (this.tbWaiter) {
         const w = this.tbWaiter;
         this.tbWaiter = null;
@@ -990,6 +1004,17 @@ export class MeterConnection {
       await this.characteristic.writeWithResponse(flipped ? TB_CMD_FLIP_ON_B64 : TB_CMD_FLIP_OFF_B64);
     } catch (e: any) {
       this.log(`Could not set the bridge display orientation: ${describeBleError(e)}`);
+    }
+  }
+
+  /** Developer builds: restarts the bridge. It drops the link as it goes, so a failed write is expected. */
+  async sendBridgeReset(): Promise<void> {
+    if (!this.characteristic) return;
+    this.log('Bridge: restart');
+    try {
+      await this.characteristic.writeWithResponse(BRIDGE_RESET_CMD_B64);
+    } catch {
+      // the bridge restarted before it could answer
     }
   }
 
@@ -1417,7 +1442,7 @@ export class MeterConnection {
     this.tbFlipUnsub = null;
     this.tbSimUnsub?.();
     this.tbSimUnsub = null;
-    if (activeBridge === this) activeBridge = null;
+    if (activeBridge === this) { activeBridge = null; setBridgeLinked(false); }
     this.tbMode = false;
     if (this.device) {
       await this.device.cancelConnection().catch(() => {});

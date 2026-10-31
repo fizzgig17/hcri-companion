@@ -57,8 +57,6 @@ import {
   saveStayConnectedInBackgroundPreference,
   loadTbCorrectionPreference,
   loadTbFlipPreference,
-  loadBridgeSimPreference,
-  saveBridgeSimPreference,
   saveTbFlipPreference,
   loadFlickerWithReadingPreference,
   loadSideTabModePreference,
@@ -82,7 +80,8 @@ import {
 } from '../storage/preferences';
 import { setTbCorrectionEnabled } from '../ble/tbCorrection';
 import { setTbFlip } from '../ble/tbDisplay';
-import { BRIDGE_SIM_OPTIONS, BridgeSimKind, BridgeButtonEvent, setBridgeSim, getLastBridgeButton, onBridgeButton, bridgeButtonText } from '../ble/bridgeSim';
+import { BRIDGE_SIM_OPTIONS, BRIDGE_SIM_BUTTON_ROLES, BridgeSimKind, BridgeButtonEvent, setBridgeSim, getBridgeSim, isBridgeLinked, onBridgeSimState, requestBridgeConnect, getLastBridgeButton, onBridgeButton, bridgeButtonText } from '../ble/bridgeSim';
+import { resetActiveBridge } from '../ble/MeterConnection';
 import { setMunkiCalHours } from '../ble/torchBearer';
 import { TK_RAW_PER_LM_DEFAULT, getTkRawPerLm, getTkTrim, getTkWindowS, setTkRawPerLm, setTkTrim, setTkWindowS } from '../ble/tklamp';
 import {
@@ -175,6 +174,8 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   const [tbFlipped, setTbFlipped] = useState(false);
   const [simKind, setSimKind] = useState<BridgeSimKind | null>(null);
   const [lastBtn, setLastBtn] = useState<BridgeButtonEvent | null>(getLastBridgeButton());
+  const [bridgeUp, setBridgeUp] = useState(isBridgeLinked());
+  const [btnDown, setBtnDown] = useState<{ top: boolean; bottom: boolean }>({ top: false, bottom: false });
   const [munkiHours, setMunkiHours] = useState('1');
   const [tkScale, setTkScale] = useState(String(getTkRawPerLm()));
   const [tkTrim, setTkTrimState] = useState(getTkTrim());
@@ -242,7 +243,6 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
     loadMunkiCalHoursPreference().then((h) => setMunkiHours(String(h)));
     loadTkScalePreference(TK_RAW_PER_LM_DEFAULT).then((v) => { setTkRawPerLm(v); setTkScale(String(v)); });
     loadTbFlipPreference().then((v) => setTbFlipped(v === true));
-    if (IS_DEV_BUILD) loadBridgeSimPreference().then(setSimKind).catch(() => {});
     loadFlickerWithReadingPreference().then(setFlickerWithReading);
     loadSideTabModePreference().then(setSideTabMode).catch(() => {});
     loadLedSuggestionsPreference().then(setLedSuggestions);
@@ -315,15 +315,35 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   };
 
   // Developer builds: the bridge pretends to be an instrument (see ble/bridgeSim.ts). Sent to a connected bridge right away.
-  const chooseSim = async (kind: BridgeSimKind) => {
+  const chooseSim = (kind: BridgeSimKind) => {
     setSimKind(kind);
     setBridgeSim(kind);
-    await saveBridgeSimPreference(kind);
   };
+  // The bridge link and the simulation choice live in ble/bridgeSim.ts; losing the link clears both, so the panel follows them.
   useEffect(() => {
     if (!IS_DEV_BUILD) return undefined;
-    return onBridgeButton(setLastBtn);
+    const sync = () => {
+      setSimKind(getBridgeSim());
+      setBridgeUp(isBridgeLinked());
+      setLastBtn(getLastBridgeButton());
+    };
+    sync();
+    const offState = onBridgeSimState(sync);
+    const offBtn = onBridgeButton((e) => {
+      setLastBtn(e);
+      setBtnDown((d) => ({ ...d, [e.button]: e.pressed }));
+    });
+    return () => {
+      offState();
+      offBtn();
+    };
   }, []);
+  useEffect(() => {
+    if (!bridgeUp) setBtnDown({ top: false, bottom: false });
+  }, [bridgeUp]);
+  const resetBridge = async () => {
+    await resetActiveBridge();
+  };
 
   const toggleTbFlip = async (value: boolean) => {
     setTbFlipped(value);
@@ -1068,21 +1088,60 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
         <View style={[styles.settingBlock, { marginBottom: 16 }]}>
           <View style={styles.settingBlockLabelRow}>
             <Text style={styles.settingLabel}>Simulate bridge instrument (developer)</Text>
-            {helpButton('Simulate bridge instrument', "With nothing plugged into the bridge, make it act as an instrument so you can work on that instrument's screens without it. Connect to the bridge first (developer builds connect to an empty one), then pick ColorMunki, Torch Bearer or TKLamp: the bridge advertises as that instrument, draws its screens with made-up readings and shows SIM after its firmware commit. A restart of the bridge ends it; pick Off to end it sooner. While it is on, a plugged-in instrument is ignored.\n\nBridge buttons: Torch Bearer top = Live, bottom = Scan. ColorMunki top = turn the dial (calibration, ambient, surface, projector), bottom = calibrate or measure. TKLamp bottom = next state (five light levels, waiting for data, no data), top = previous.\n\nEvery press of a bridge button is shown below and written to the debug log. Needs the latest developer bridge firmware.")}
+            {helpButton('Simulate bridge instrument', "With nothing plugged into the bridge, make it act as an instrument so you can work on that instrument's screens without it. Tap Connect first (developer builds connect to an empty bridge), then pick ColorMunki, Torch Bearer or TKLamp: the bridge advertises as that instrument, draws its screens with made-up readings and shows SIM after its firmware commit. It ends when the bridge disconnects; Reset device restarts the bridge, and Off ends it sooner. While it is on, a plugged-in instrument is ignored.\n\nBridge buttons: Torch Bearer top = Read (one reading), bottom = Live (only announced while simulating; press again to stop). ColorMunki top = turn the dial (calibration, ambient, surface, projector), bottom = calibrate or measure. TKLamp bottom = next state (five light levels, waiting for data, no data), top = previous.\n\nEach button is listed below with what it does, lighting up while it is held; every press and written to the debug log. Needs the latest developer bridge firmware.")}
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
+            <TouchableOpacity
+              style={[styles.modeOption, { flex: 1, borderWidth: 1, borderColor: colors.cardBorder }, bridgeUp && { opacity: 0.4 }]}
+              disabled={bridgeUp}
+              onPress={requestBridgeConnect}
+            >
+              <Text style={styles.modeOptionText}>{bridgeUp ? 'Connected' : 'Connect'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modeOption, { flex: 1, borderWidth: 1, borderColor: colors.cardBorder }, !bridgeUp && { opacity: 0.4 }]}
+              disabled={!bridgeUp}
+              onPress={resetBridge}
+            >
+              <Text style={styles.modeOptionText}>Reset device</Text>
+            </TouchableOpacity>
           </View>
           <View style={styles.modeSegment}>
             {BRIDGE_SIM_OPTIONS.map(([value, label]) => {
-              const active = simKind === value || (simKind === null && value === 0);
+              const active = bridgeUp && (simKind === value || (simKind === null && value === 0));
               return (
-                <TouchableOpacity key={value} style={[styles.modeOption, active && styles.modeOptionActive]} onPress={() => chooseSim(value)}>
+                <TouchableOpacity key={value} style={[styles.modeOption, active && styles.modeOptionActive, !bridgeUp && { opacity: 0.4 }]} disabled={!bridgeUp} onPress={() => chooseSim(value)}>
                   <Text style={[styles.modeOptionText, active && styles.modeOptionTextActive]}>{label}</Text>
                 </TouchableOpacity>
               );
             })}
           </View>
           <Text style={{ color: colors.muted, fontSize: 13, marginTop: 10 }}>
-            {lastBtn ? `${bridgeButtonText(lastBtn)} · ${new Date(lastBtn.at).toLocaleTimeString()}` : 'No bridge button pressed yet.'}
+            {!bridgeUp ? 'Not connected to a bridge. Tap Connect.' : simKind ? 'Simulating on the bridge.' : 'Connected. Pick an instrument to simulate.'}
           </Text>
+          {bridgeUp && simKind ? (
+            <View style={{ marginTop: 10, gap: 8 }}>
+              {(['top', 'bottom'] as const).map((which) => (
+                <View
+                  key={which}
+                  style={{
+                    padding: 10,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: btnDown[which] ? colors.accent : colors.cardBorder,
+                    backgroundColor: btnDown[which] ? colors.accent : 'transparent',
+                  }}
+                >
+                  <Text style={{ color: btnDown[which] ? '#fff' : colors.text, fontWeight: '600' }}>
+                    {which === 'top' ? 'Top button' : 'Bottom button'}: {BRIDGE_SIM_BUTTON_ROLES[simKind as 1 | 2 | 3][which]}
+                  </Text>
+                </View>
+              ))}
+              <Text style={{ color: colors.muted, fontSize: 13 }}>
+                {lastBtn ? `${bridgeButtonText(lastBtn, simKind)} · ${new Date(lastBtn.at).toLocaleTimeString()}` : 'No bridge button pressed yet.'}
+              </Text>
+            </View>
+          ) : null}
         </View>
       )}
 
