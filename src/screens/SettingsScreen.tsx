@@ -184,10 +184,16 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   const [tkScale, setTkScale] = useState(String(getTkRawPerLm()));
   const [tkTrim, setTkTrimState] = useState(getTkTrim());
   useEffect(() => { loadTkTrimPreference().then((v) => { setTkTrim(v); setTkTrimState(v); }); }, []);
-  const toggleTkTrim = async (v: boolean) => { setTkTrimState(v); setTkTrim(v); await saveTkTrimPreference(v); };
+  const toggleTkTrim = async (v: boolean) => {
+    setTkTrimState(v); setTkTrim(v); await saveTkTrimPreference(v);
+    if (v) { setTkTrimPeakState(false); setTkTrimPeak(false); await saveTkTrimPeakPreference(false); }   // one start option at a time
+  };
   const [tkTrimPeak, setTkTrimPeakState] = useState(getTkTrimPeak());
   useEffect(() => { loadTkTrimPeakPreference().then((v) => { setTkTrimPeak(v); setTkTrimPeakState(v); }); }, []);
-  const toggleTkTrimPeak = async (v: boolean) => { setTkTrimPeakState(v); setTkTrimPeak(v); await saveTkTrimPeakPreference(v); };
+  const toggleTkTrimPeak = async (v: boolean) => {
+    setTkTrimPeakState(v); setTkTrimPeak(v); await saveTkTrimPeakPreference(v);
+    if (v) { setTkTrimState(false); setTkTrim(false); await saveTkTrimPreference(false); }
+  };
   const [tkWindow, setTkWindow] = useState(String(getTkWindowS()));
   const [help, setHelp] = useState<{ title: string; text: string } | null>(null);
   const [flickerWithReading, setFlickerWithReading] = useState(false);
@@ -1223,8 +1229,8 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
         />
       )}
 
-      {switchRow('Trim the dark start of a run', 'On by default. When you stop a TKLamp run, the near-dark readings before the light came on are dropped (everything before the output first reaches 2 percent of the run\'s peak, keeping one second of lead-in), so the saved and uploaded curve starts when the light does. Turn off to keep every reading from the moment you tapped Start run.', tkTrim, toggleTkTrim)}
-      {switchRow('Start a run at its peak', 'On by default. When you stop a TKLamp run, everything before the highest reading is dropped, so the saved and uploaded curve starts at the peak of the output. It is applied after the dark-start trim above. Turn off to keep the readings from before the peak.', tkTrimPeak, toggleTkTrimPeak)}
+      {switchRow('Start at the first reading', 'On by default. When you stop a TKLamp run, the dark readings before the light came on are dropped and the saved and uploaded curve starts at the first lit reading (the first one that reaches 2 percent of the run\'s peak), so a light that starts at 500 lm and ramps up is captured in full and you never see a jump from 0. Turning this on turns off Start at the peak. Turn both off to keep every reading from the moment you tapped Start run.', tkTrim, toggleTkTrim)}
+      {switchRow('Start at the peak', 'Off by default. When you stop a TKLamp run, everything before the highest reading is dropped, so the saved and uploaded curve starts at the peak of the output. Use it for lights that overshoot at switch-on. Turning this on turns off Start at the first reading.', tkTrimPeak, toggleTkTrimPeak)}
 
         </>
       ))}

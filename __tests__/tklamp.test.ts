@@ -1,4 +1,4 @@
-import { trimLeading, trimToPeak, parseTkSample, TkSmoother, TkRecorder, resampleRun, tkLumens, TK_RAW_PER_LM_DEFAULT, defaultRunLabel } from '../src/ble/tklamp';
+import { trimLeading, trimToPeak, trimmedRunPoints, setTkTrim, setTkTrimPeak, parseTkSample, TkSmoother, TkRecorder, resampleRun, tkLumens, TK_RAW_PER_LM_DEFAULT, defaultRunLabel } from '../src/ble/tklamp';
 
 const pkt = (ms: number, raw: number) => {
   const b = new Uint8Array(9);
@@ -109,5 +109,22 @@ describe('trimToPeak', () => {
     const b = pts([1, 2, 3]);
     expect(trimToPeak(a)).toBe(a);
     expect(trimToPeak(b)).toBe(b);
+  });
+});
+
+describe('trimmedRunPoints', () => {
+  const pts = (v: number[]) => v.map((lm, i) => ({ t: i, lm }));
+  it('starts at the first lit reading, with no lead-in from zero, and keeps a ramp', () => {
+    setTkTrim(true);
+    setTkTrimPeak(false);
+    const out = trimmedRunPoints(pts([0, 0, 0, 500, 700, 1000, 950]));
+    expect(out.map((p) => p.lm)).toEqual([500, 700, 1000, 950]);
+    expect(out[0].t).toBe(0);
+  });
+  it('starts at the peak when that option is on', () => {
+    setTkTrim(false);
+    setTkTrimPeak(true);
+    expect(trimmedRunPoints(pts([0, 500, 1000, 950])).map((p) => p.lm)).toEqual([1000, 950]);
+    setTkTrimPeak(false);
   });
 });

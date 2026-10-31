@@ -344,9 +344,9 @@ const TK_TRIM_PEAK_KEY = 'hcri.io.pref.tklampTrimToPeak';
 
 export async function loadTkTrimPeakPreference(): Promise<boolean> {
   try {
-    return (await AsyncStorage.getItem(TK_TRIM_PEAK_KEY)) !== 'false';
+    return (await AsyncStorage.getItem(TK_TRIM_PEAK_KEY)) === 'true';
   } catch {
-    return true;
+    return false;
   }
 }
 
