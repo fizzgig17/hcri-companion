@@ -10,6 +10,7 @@
 
 import { Buffer } from 'buffer';
 import { calcTm30, interpolateSpd5nm, tm30ReferenceSpd } from './rfRg';
+import { asciiFileName } from './fileName';
 import type { Tm30Input } from './tm30Report';
 
 export const SHARE_CARD_W = 540;
@@ -67,7 +68,7 @@ function ledText(input: Tm30Input): string {
 
 /** File name for the saved/shared PNG: "<title>_hcri.png", safe characters only. */
 export function shareCardFileName(title: string): string {
-  const base = (title || 'reading').replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'reading';
+  const base = asciiFileName(title || 'reading', '_-').replace(/^_+|_+$/g, '').slice(0, 60) || 'reading';
   return `${base}_hcri.png`;
 }
 
