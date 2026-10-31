@@ -18,6 +18,7 @@ import { deviceSupportsLive, deviceSupportsFlicker } from '../ble/protocol';
 import { startLiveSpectrum, startTorchBearerLive, startFlicker, captureFlickerOnce, readFlickerSettings, writeFlickerSetting, type LiveSession, type FlickerReading } from '../ble/liveSessions';
 import type { FlickerSettingsApi } from '../components/FlickerSettingsModal';
 import type { FlickerUploadApi } from '../components/FlickerChart';
+import { onBridgeConnectRequest, onBridgeDisconnectRequest, setBridgeConnectInfo } from '../ble/bridgeSim';
 import { initializeMeter, takeMeasurement, EMPTY_READING_ERROR } from '../ble/takeMeasurement';
 import { CMD_STOP_SAMPLING } from '../ble/protocol';
 import { MeterResult } from '../ble/parseResult';
@@ -586,7 +587,8 @@ export default function HomeScreen({ navigation }: any) {
         const allFound = await conn.scanForKnownMeters(CONNECT_SCAN_WINDOW_MS, { preferDeviceId: lastIdForScan });
         if (stale()) return;
         // A bridge that says nothing is plugged in can't measure; leave it out (older firmware says nothing, so stays).
-        const candidates = allFound.filter((d) => (d as any).attached !== 'none');
+        // Developer builds keep it, so Settings > Simulate bridge instrument can make it act as an instrument.
+        const candidates = allFound.filter((d) => IS_DEV_BUILD || (d as any).attached !== 'none');
         if (candidates.length === 0 && allFound.length > 0) {
           setMultiMeterCandidates(null);
           throw new Error('Bridge found, but no meter is plugged in -- connect the ColorMunki or Torch Bearer to it');
@@ -644,6 +646,20 @@ export default function HomeScreen({ navigation }: any) {
     },
     [appendLog, getConnection, showBluetoothOffAlert, showBluetoothDeniedAlert]
   );
+
+  // Developer builds: Settings shows the same connect progress as this screen.
+  useEffect(() => {
+    if (!IS_DEV_BUILD) return;
+    setBridgeConnectInfo({ status, stage: status === 'connecting' ? connectStage : status === 'disconnected' ? btBlocked : null, device: deviceName });
+  }, [status, connectStage, btBlocked, deviceName]);
+
+  // Developer builds: Settings' "Connect" for the bridge simulator runs the normal connect flow from here.
+  useEffect(() => {
+    if (!IS_DEV_BUILD) return undefined;
+    return onBridgeConnectRequest(() => {
+      connect({ promptIfBluetoothOff: true }).catch(() => {});
+    });
+  }, [connect]);
 
   /** The Cancel tap while "Connecting…": stop the scan/connect and go back to Not Connected right away. */
   const cancelConnect = useCallback(() => {
@@ -1296,6 +1312,14 @@ export default function HomeScreen({ navigation }: any) {
     setDeviceName(null);
   }, [appendLog, stopActiveMode]);
 
+  // Developer builds: Settings' Disconnect for the bridge simulator.
+  useEffect(() => {
+    if (!IS_DEV_BUILD) return undefined;
+    return onBridgeDisconnectRequest(() => {
+      disconnect().catch(() => {});
+    });
+  }, [disconnect]);
+
   // Disconnects the meter the moment the app leaves the foreground
   // (minimized, switched away from, screen locked) -- matches the stock
   // Hopoocolor app, which drops the BLE link on close/minimize; this app
@@ -1339,7 +1363,7 @@ export default function HomeScreen({ navigation }: any) {
         const currentId = conn.getDeviceId();
         const seen = seenMetersRef.current;
         for (const d of found) {
-          if (d.id !== currentId && (d as any).attached !== 'none') seen.set(d.id, { dev: { id: d.id, name: d.name, rssi: d.rssi, attached: (d as any).attached ?? null }, ts: now });
+          if (d.id !== currentId && (IS_DEV_BUILD || (d as any).attached !== 'none')) seen.set(d.id, { dev: { id: d.id, name: d.name, rssi: d.rssi, attached: (d as any).attached ?? null }, ts: now });
         }
         for (const [id, v] of Array.from(seen.entries())) {
           if (now - v.ts > DEVICE_POLL_FORGET_MS || id === currentId) seen.delete(id);

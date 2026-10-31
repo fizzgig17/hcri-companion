@@ -10,10 +10,10 @@ import { View, Text, TextInput, Alert, Modal, ScrollView, TouchableOpacity, Styl
 import RuntimeChart from './RuntimeChart';
 import { useTheme } from '../contexts/ThemeContext';
 import type { MeterConnection } from '../ble/MeterConnection';
-import { TK_LIMITS_DEFAULT, TK_RAW_PER_LM_DEFAULT, TK_STOP_BELOW_HOLD_S, TkRecorder, TkRunGuard, TkSmoother, defaultRunLabel, getTkLimits, getTkRawPerLm, getTkTrim, getTkWindowS, onTkRawPerLm, onTkRunToggle, onTkUploadRequest, onTkWindowS, parseTkLimit, setTkLimits, setTkRunState, setTkTrim, setTkWindowS, trimLeading, resampleRun, scaleFromLamp, setTkRawPerLm, tkLumens, type TkLimits, type TkSample } from '../ble/tklamp';
+import { TK_LIMITS_DEFAULT, TK_RAW_PER_LM_DEFAULT, TK_STOP_BELOW_HOLD_S, TkRecorder, TkRunGuard, TkSmoother, defaultRunLabel, getTkLimits, getTkRawPerLm, getTkWindowS, onTkRawPerLm, onTkRunToggle, onTkUploadRequest, onTkWindowS, parseTkLimit, setTkLimits, setTkRunState, setTkTrim, setTkTrimPeak, setTkWindowS, trimmedRunPoints, resampleRun, scaleFromLamp, setTkRawPerLm, tkLumens, type TkLimits, type TkSample } from '../ble/tklamp';
 import { addRuntime, updateRuntime } from '../storage/runtimeHistory';
 import { loadHcriCredentials } from '../storage/secureStorage';
-import { loadTkLimitsPreference, loadTkScalePreference, loadTkTrimPreference, loadTkWindowPreference, saveTkLimitsPreference, saveTkScalePreference } from '../storage/preferences';
+import { loadTkLimitsPreference, loadTkScalePreference, loadTkTrimPreference, loadTkTrimPeakPreference, loadTkWindowPreference, saveTkLimitsPreference, saveTkScalePreference } from '../storage/preferences';
 import { uploadRuntimeToHcri } from '../hcri/uploadRuntimeToHcri';
 
 const LIMIT_FIELDS: { key: keyof TkLimits; label: string }[] = [
@@ -79,6 +79,7 @@ export default function TkLampLive({ conn }: Props) {
     loadTkScalePreference(TK_RAW_PER_LM_DEFAULT).then(setTkRawPerLm);
     loadTkWindowPreference(getTkWindowS()).then(setTkWindowS);
     loadTkTrimPreference().then(setTkTrim);
+    loadTkTrimPeakPreference().then(setTkTrimPeak);
     loadTkLimitsPreference(TK_LIMITS_DEFAULT).then((v) => { setTkLimits(v); setLimitsState(v); setDrafts(limitDrafts(v)); guard.current.setLimits(v); });
     const offW = onTkWindowS(setWindowS);
     const offS = onTkRawPerLm((v) => {
@@ -219,7 +220,7 @@ export default function TkLampLive({ conn }: Props) {
     if (recorder.current.count <= 1) setNote('Nothing recorded. Make sure readings are coming in, then try again.');
     else if (why) setNote(`Run stopped automatically: ${why}`);
     // Keep every finished run on the phone (History > Runtime), whether or not it is uploaded.
-    const r = resampleRun(getTkTrim() ? trimLeading(recorder.current.points()) : recorder.current.points());
+    const r = resampleRun(trimmedRunPoints(recorder.current.points()));
     savedId.current = null;
     if (r) {
       const l = label.trim() || defaultRunLabel();
@@ -229,7 +230,7 @@ export default function TkLampLive({ conn }: Props) {
     }
   };
   const upload = async () => {
-    const r = resampleRun(getTkTrim() ? trimLeading(recorder.current.points()) : recorder.current.points());
+    const r = resampleRun(trimmedRunPoints(recorder.current.points()));
     if (!r) {
       setNote('The recording is too short to upload.');
       return;

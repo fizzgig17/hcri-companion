@@ -77,6 +77,19 @@ export async function saveTestReportIdPreference(value: string): Promise<void> {
   else await AsyncStorage.removeItem(TEST_REPORT_ID_KEY);
 }
 
+// Developer builds only (Settings -> Simulate bridge instrument): which instrument the bridge pretends to be when nothing is
+// plugged into it. null = never chosen (the bridge is left alone); otherwise 0 off, 1 Torch Bearer, 2 ColorMunki, 3 TKLamp.
+const BRIDGE_SIM_KEY = 'hcri.io.pref.bridgeSim';
+
+export async function loadBridgeSimPreference(): Promise<0 | 1 | 2 | 3 | null> {
+  const raw = await AsyncStorage.getItem(BRIDGE_SIM_KEY);
+  return raw === '0' || raw === '1' || raw === '2' || raw === '3' ? (Number(raw) as 0 | 1 | 2 | 3) : null;
+}
+
+export async function saveBridgeSimPreference(kind: 0 | 1 | 2 | 3): Promise<void> {
+  await AsyncStorage.setItem(BRIDGE_SIM_KEY, String(kind));
+}
+
 // Default ON ("stay connected") -- a backgrounded app (switching briefly
 // to check something else, a screen lock, an incoming call) used to always
 // drop the BLE link, which meant a full re-scan/re-handshake on every
@@ -325,6 +338,20 @@ export async function loadTkTrimPreference(): Promise<boolean> {
 
 export async function saveTkTrimPreference(v: boolean): Promise<void> {
   await AsyncStorage.setItem(TK_TRIM_KEY, v ? 'true' : 'false');
+}
+
+const TK_TRIM_PEAK_KEY = 'hcri.io.pref.tklampTrimToPeak';
+
+export async function loadTkTrimPeakPreference(): Promise<boolean> {
+  try {
+    return (await AsyncStorage.getItem(TK_TRIM_PEAK_KEY)) !== 'false';
+  } catch {
+    return true;
+  }
+}
+
+export async function saveTkTrimPeakPreference(v: boolean): Promise<void> {
+  await AsyncStorage.setItem(TK_TRIM_PEAK_KEY, v ? 'true' : 'false');
 }
 
 // TKLamp run limits: start level, stop level, time limit and the no-readings timeout (see ble/tklamp.ts TkLimits).

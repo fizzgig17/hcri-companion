@@ -184,6 +184,31 @@ export function trimLeading(points: TkPoint[], fraction = 0.02, keepS = 1): TkPo
   return kept.map((p) => ({ t: p.t - t0, lm: p.lm }));
 }
 
+/**
+ * Starts the run at its peak: drops everything before the highest reading (the first one, if several are equal). Times are
+ * shifted so the run starts at 0. Returns the points unchanged if the peak is already first or fewer than 2 would be left.
+ */
+export function trimToPeak(points: TkPoint[]): TkPoint[] {
+  if (points.length < 3) return points;
+  let best = 0;
+  for (let i = 1; i < points.length; i++) if (points[i].lm > points[best].lm) best = i;
+  if (best <= 0 || points.length - best < 2) return points;
+  const t0 = points[best].t;
+  return points.slice(best).map((p) => ({ t: p.t - t0, lm: p.lm }));
+}
+
+// Settings > TKLamp tester > "Start a run at its peak" (on by default).
+let trimPeakOn = true;
+export function getTkTrimPeak(): boolean { return trimPeakOn; }
+export function setTkTrimPeak(v: boolean): void { trimPeakOn = v; }
+
+/** The recorded points with the Settings trims applied: dark start first, then (if on) everything before the peak. */
+export function trimmedRunPoints(points: TkPoint[]): TkPoint[] {
+  let p = trimOn ? trimLeading(points) : points;
+  if (trimPeakOn) p = trimToPeak(p);
+  return p;
+}
+
 // Settings > TKLamp tester > "Trim the dark start of a run" (on by default).
 let trimOn = true;
 export function getTkTrim(): boolean { return trimOn; }

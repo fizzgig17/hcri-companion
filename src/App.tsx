@@ -40,6 +40,7 @@ import { DevBuildProvider } from './contexts/DevBuildContext';
 import UpdateBanner from './components/UpdateBanner';
 import { setTapHapticsEnabled, setResultHapticsEnabled } from './utils/haptics';
 import { loadHapticTapsPreference, loadHapticResultsPreference, loadTbFlipPreference } from './storage/preferences';
+import { IS_DEV_BUILD } from './hcri/buildTarget';
 import { setTbFlip } from './ble/tbDisplay';
 
 const Stack = createNativeStackNavigator();

@@ -6,7 +6,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { ScrollView, View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Modal, Linking, Platform, useWindowDimensions } from 'react-native';
+import { ScrollView, View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet, Alert, Modal, Linking, Platform, useWindowDimensions } from 'react-native';
 import AppSwitch from '../components/AppSwitch';
 import { Icon, ICON_SIZE } from '../components/icons';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
@@ -77,11 +77,14 @@ import {
   saveTkWindowPreference,
   loadTkTrimPreference,
   saveTkTrimPreference,
+  loadTkTrimPeakPreference,
+  saveTkTrimPeakPreference,
 } from '../storage/preferences';
 import { setTbCorrectionEnabled } from '../ble/tbCorrection';
 import { setTbFlip } from '../ble/tbDisplay';
+import { BRIDGE_SIM_OPTIONS, BRIDGE_SIM_BUTTON_ROLES, BridgeSimKind, BridgeButtonEvent, setBridgeSim, getBridgeSim, isBridgeLinked, getBridgeConnectInfo, onBridgeSimState, requestBridgeConnect, requestBridgeDisconnect, getLastBridgeButton, onBridgeButton, bridgeButtonText } from '../ble/bridgeSim';
 import { setMunkiCalHours } from '../ble/torchBearer';
-import { TK_RAW_PER_LM_DEFAULT, getTkRawPerLm, getTkTrim, getTkWindowS, setTkRawPerLm, setTkTrim, setTkWindowS } from '../ble/tklamp';
+import { TK_RAW_PER_LM_DEFAULT, getTkRawPerLm, getTkTrim, getTkTrimPeak, getTkWindowS, setTkRawPerLm, setTkTrim, setTkTrimPeak, setTkWindowS } from '../ble/tklamp';
 import {
   StatDisplayPrefs,
   loadStatDisplayPrefs,
@@ -170,11 +173,19 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   const [testReportId, setTestReportId] = useState('');
   const [tbCorrection, setTbCorrection] = useState(false);
   const [tbFlipped, setTbFlipped] = useState(false);
+  const [simKind, setSimKind] = useState<BridgeSimKind | null>(null);
+  const [lastBtn, setLastBtn] = useState<BridgeButtonEvent | null>(getLastBridgeButton());
+  const [bridgeUp, setBridgeUp] = useState(isBridgeLinked());
+  const [connInfo, setConnInfo] = useState(getBridgeConnectInfo());
+  const [btnDown, setBtnDown] = useState<{ top: boolean; bottom: boolean }>({ top: false, bottom: false });
   const [munkiHours, setMunkiHours] = useState('1');
   const [tkScale, setTkScale] = useState(String(getTkRawPerLm()));
   const [tkTrim, setTkTrimState] = useState(getTkTrim());
   useEffect(() => { loadTkTrimPreference().then((v) => { setTkTrim(v); setTkTrimState(v); }); }, []);
   const toggleTkTrim = async (v: boolean) => { setTkTrimState(v); setTkTrim(v); await saveTkTrimPreference(v); };
+  const [tkTrimPeak, setTkTrimPeakState] = useState(getTkTrimPeak());
+  useEffect(() => { loadTkTrimPeakPreference().then((v) => { setTkTrimPeak(v); setTkTrimPeakState(v); }); }, []);
+  const toggleTkTrimPeak = async (v: boolean) => { setTkTrimPeakState(v); setTkTrimPeak(v); await saveTkTrimPeakPreference(v); };
   const [tkWindow, setTkWindow] = useState(String(getTkWindowS()));
   const [help, setHelp] = useState<{ title: string; text: string } | null>(null);
   const [flickerWithReading, setFlickerWithReading] = useState(false);
@@ -306,6 +317,40 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   const toggleFlickerWithReading = async (value: boolean) => {
     setFlickerWithReading(value);
     await saveFlickerWithReadingPreference(value);
+  };
+
+  // Developer builds: the bridge pretends to be an instrument (see ble/bridgeSim.ts). Sent to a connected bridge right away.
+  const chooseSim = (kind: BridgeSimKind) => {
+    setSimKind(kind);
+    setBridgeSim(kind);
+  };
+  // The bridge link and the simulation choice live in ble/bridgeSim.ts; losing the link clears both, so the panel follows them.
+  useEffect(() => {
+    if (!IS_DEV_BUILD) return undefined;
+    const sync = () => {
+      setSimKind(getBridgeSim());
+      setBridgeUp(isBridgeLinked());
+      setConnInfo(getBridgeConnectInfo());
+      setLastBtn(getLastBridgeButton());
+    };
+    sync();
+    const offState = onBridgeSimState(sync);
+    const offBtn = onBridgeButton((e) => {
+      setLastBtn(e);
+      setBtnDown((d) => ({ ...d, [e.button]: e.pressed }));
+    });
+    return () => {
+      offState();
+      offBtn();
+    };
+  }, []);
+  useEffect(() => {
+    if (!bridgeUp) setBtnDown({ top: false, bottom: false });
+  }, [bridgeUp]);
+  // Reset: back to "no device" on the bridge (it stays connected).
+  const resetBridge = () => {
+    setSimKind(0);
+    setBridgeSim(0);
   };
 
   const toggleTbFlip = async (value: boolean) => {
@@ -600,6 +645,43 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
       alignItems: 'center',
     },
     modeOptionActive: { backgroundColor: colors.accent },
+    simChoices: { flexDirection: 'row', gap: 8 },
+    simChoice: {
+      flex: 1,
+      height: 44,
+      paddingHorizontal: 6,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.card,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    simChoiceText: { color: colors.text, fontSize: 14, fontWeight: '600', textAlign: 'center' },
+    simButton: {
+      flex: 1,
+      height: 44,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.card,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    simButtonText: { color: colors.text, fontSize: 14, fontWeight: '600' },
+    simBtnBox: {
+      flex: 1,
+      minHeight: 76,
+      padding: 10,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.card,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    simBtnCaption: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 4 },
+    simBtnRole: { color: colors.text, fontSize: 13, fontWeight: '600', textAlign: 'center' },
     modeOptionText: { color: colors.muted, fontSize: 13, fontWeight: '600' },
     // Matches PrimaryButton's own accent-background text color (colors.text,
     // not colors.background) so this reads as the same "selected/accent"
@@ -1014,6 +1096,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
       )}
 
       {switchRow('Trim the dark start of a run', 'On by default. When you stop a TKLamp run, the near-dark readings before the light came on are dropped (everything before the output first reaches 2 percent of the run\'s peak, keeping one second of lead-in), so the saved and uploaded curve starts when the light does. Turn off to keep every reading from the moment you tapped Start run.', tkTrim, toggleTkTrim)}
+      {switchRow('Start a run at its peak', 'On by default. When you stop a TKLamp run, everything before the highest reading is dropped, so the saved and uploaded curve starts at the peak of the output. It is applied after the dark-start trim above. Turn off to keep the readings from before the peak.', tkTrimPeak, toggleTkTrimPeak)}
 
       {sectionHeader('Readings')}
       {switchRow('LED suggestions', "On by default. After a reading, hCRI.io suggests the LED (brand, model and CCT) from the shape of the spectrum and the reading's title, and you confirm it with one tap. Turn off to stop those requests and hide the suggestion cards. You can still add LED details yourself with the LED button.", ledSuggestions, toggleLedSuggestions)}
@@ -1044,6 +1127,58 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
             placeholderTextColor={colors.mutedFaint}
             accessibilityLabel="Test report number"
           />
+        </View>
+      )}
+
+      {IS_DEV_BUILD && (
+        <View style={[styles.settingBlock, { marginBottom: 16 }]}>
+          <View style={styles.settingBlockLabelRow}>
+            <Text style={styles.settingLabel}>Simulate bridge instrument (developer)</Text>
+            {helpButton('Simulate bridge instrument', "With nothing plugged into the bridge, make it act as an instrument so you can work on that instrument's screens without it. Tap Connect first (developer builds connect to an empty bridge), then pick ColorMunki, Torch Bearer or TKLamp: the bridge advertises as that instrument, draws its screens with made-up readings and shows SIM after its firmware commit. It ends when the bridge disconnects; Reset sets the bridge back to no device and stays connected. While it is on, a plugged-in instrument is ignored.\n\nBridge buttons: Torch Bearer top = Read (one reading), bottom = Live (only announced while simulating; press again to stop). ColorMunki top = turn the dial (calibration, ambient, surface, projector), bottom = calibrate or measure. TKLamp bottom = next state (five light levels, waiting for data, no data), top = previous.\n\nEach button is listed below with what it does, lighting up while it is held; every press and written to the debug log. Needs the latest developer bridge firmware.")}
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
+            <TouchableOpacity
+              style={styles.simButton}
+              disabled={!bridgeUp && connInfo.status === 'connecting'}
+              onPress={bridgeUp ? requestBridgeDisconnect : requestBridgeConnect}
+            >
+              <Text style={styles.simButtonText}>{bridgeUp ? 'Disconnect' : connInfo.status === 'connecting' ? 'Connecting…' : 'Connect'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.simButton, !(bridgeUp && simKind) && { opacity: 0.4 }]} disabled={!(bridgeUp && simKind)} onPress={resetBridge}>
+              <Text style={styles.simButtonText}>Reset</Text>
+            </TouchableOpacity>
+          </View>
+          {connInfo.stage || (bridgeUp && connInfo.device) ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              {connInfo.status === 'connecting' ? <ActivityIndicator size="small" color={colors.accent} /> : null}
+              <Text style={{ color: colors.muted, fontSize: 13, flex: 1 }}>{bridgeUp ? `Connected to ${connInfo.device}` : connInfo.stage}</Text>
+            </View>
+          ) : null}
+          <View style={styles.simChoices}>
+            {BRIDGE_SIM_OPTIONS.map(([value, label]) => {
+              const active = bridgeUp && simKind === value;
+              return (
+                <TouchableOpacity key={value} style={[styles.simChoice, active && styles.modeOptionActive, !bridgeUp && { opacity: 0.4 }]} disabled={!bridgeUp} onPress={() => chooseSim(value)}>
+                  <Text style={[styles.simChoiceText, active && styles.modeOptionTextActive]} numberOfLines={1} adjustsFontSizeToFit>{label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          {bridgeUp && simKind ? (
+            <View style={{ marginTop: 12 }}>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {(['top', 'bottom'] as const).map((which) => (
+                  <View key={which} style={[styles.simBtnBox, btnDown[which] && { backgroundColor: colors.accent, borderColor: colors.accent }]}>
+                    <Text style={[styles.simBtnCaption, btnDown[which] && { color: colors.text }]}>{which === 'top' ? 'TOP BUTTON' : 'BOTTOM BUTTON'}</Text>
+                    <Text style={styles.simBtnRole}>{BRIDGE_SIM_BUTTON_ROLES[simKind as 1 | 2 | 3][which]}</Text>
+                  </View>
+                ))}
+              </View>
+              <Text style={{ color: colors.muted, fontSize: 13, marginTop: 10 }}>
+                {lastBtn ? `${bridgeButtonText(lastBtn, simKind)} · ${new Date(lastBtn.at).toLocaleTimeString()}` : 'No bridge button pressed yet.'}
+              </Text>
+            </View>
+          ) : null}
         </View>
       )}
 
