@@ -18,7 +18,7 @@ import { deviceSupportsLive, deviceSupportsFlicker } from '../ble/protocol';
 import { startLiveSpectrum, startTorchBearerLive, startFlicker, captureFlickerOnce, readFlickerSettings, writeFlickerSetting, type LiveSession, type FlickerReading } from '../ble/liveSessions';
 import type { FlickerSettingsApi } from '../components/FlickerSettingsModal';
 import type { FlickerUploadApi } from '../components/FlickerChart';
-import { onBridgeConnectRequest, setBridgeConnectInfo } from '../ble/bridgeSim';
+import { onBridgeConnectRequest, onBridgeDisconnectRequest, setBridgeConnectInfo } from '../ble/bridgeSim';
 import { initializeMeter, takeMeasurement, EMPTY_READING_ERROR } from '../ble/takeMeasurement';
 import { CMD_STOP_SAMPLING } from '../ble/protocol';
 import { MeterResult } from '../ble/parseResult';
@@ -1311,6 +1311,14 @@ export default function HomeScreen({ navigation }: any) {
     setStatus('disconnected');
     setDeviceName(null);
   }, [appendLog, stopActiveMode]);
+
+  // Developer builds: Settings' Disconnect for the bridge simulator.
+  useEffect(() => {
+    if (!IS_DEV_BUILD) return undefined;
+    return onBridgeDisconnectRequest(() => {
+      disconnect().catch(() => {});
+    });
+  }, [disconnect]);
 
   // Disconnects the meter the moment the app leaves the foreground
   // (minimized, switched away from, screen locked) -- matches the stock

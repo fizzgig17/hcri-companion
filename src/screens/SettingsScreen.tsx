@@ -80,8 +80,7 @@ import {
 } from '../storage/preferences';
 import { setTbCorrectionEnabled } from '../ble/tbCorrection';
 import { setTbFlip } from '../ble/tbDisplay';
-import { BRIDGE_SIM_OPTIONS, BRIDGE_SIM_BUTTON_ROLES, BridgeSimKind, BridgeButtonEvent, setBridgeSim, getBridgeSim, isBridgeLinked, getBridgeConnectInfo, onBridgeSimState, requestBridgeConnect, getLastBridgeButton, onBridgeButton, bridgeButtonText } from '../ble/bridgeSim';
-import { resetActiveBridge } from '../ble/MeterConnection';
+import { BRIDGE_SIM_OPTIONS, BRIDGE_SIM_BUTTON_ROLES, BridgeSimKind, BridgeButtonEvent, setBridgeSim, getBridgeSim, isBridgeLinked, getBridgeConnectInfo, onBridgeSimState, requestBridgeConnect, requestBridgeDisconnect, getLastBridgeButton, onBridgeButton, bridgeButtonText } from '../ble/bridgeSim';
 import { setMunkiCalHours } from '../ble/torchBearer';
 import { TK_RAW_PER_LM_DEFAULT, getTkRawPerLm, getTkTrim, getTkWindowS, setTkRawPerLm, setTkTrim, setTkWindowS } from '../ble/tklamp';
 import {
@@ -343,8 +342,10 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   useEffect(() => {
     if (!bridgeUp) setBtnDown({ top: false, bottom: false });
   }, [bridgeUp]);
-  const resetBridge = async () => {
-    await resetActiveBridge();
+  // Reset: back to "no device" on the bridge (it stays connected).
+  const resetBridge = () => {
+    setSimKind(0);
+    setBridgeSim(0);
   };
 
   const toggleTbFlip = async (value: boolean) => {
@@ -639,6 +640,19 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
       alignItems: 'center',
     },
     modeOptionActive: { backgroundColor: colors.accent },
+    simChoices: { flexDirection: 'row', gap: 8 },
+    simChoice: {
+      flex: 1,
+      height: 44,
+      paddingHorizontal: 6,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.card,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    simChoiceText: { color: colors.text, fontSize: 14, fontWeight: '600', textAlign: 'center' },
     simButton: {
       flex: 1,
       height: 44,
@@ -1114,39 +1128,32 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
         <View style={[styles.settingBlock, { marginBottom: 16 }]}>
           <View style={styles.settingBlockLabelRow}>
             <Text style={styles.settingLabel}>Simulate bridge instrument (developer)</Text>
-            {helpButton('Simulate bridge instrument', "With nothing plugged into the bridge, make it act as an instrument so you can work on that instrument's screens without it. Tap Connect first (developer builds connect to an empty bridge), then pick ColorMunki, Torch Bearer or TKLamp: the bridge advertises as that instrument, draws its screens with made-up readings and shows SIM after its firmware commit. It ends when the bridge disconnects; Reset device restarts the bridge, and Off ends it sooner. While it is on, a plugged-in instrument is ignored.\n\nBridge buttons: Torch Bearer top = Read (one reading), bottom = Live (only announced while simulating; press again to stop). ColorMunki top = turn the dial (calibration, ambient, surface, projector), bottom = calibrate or measure. TKLamp bottom = next state (five light levels, waiting for data, no data), top = previous.\n\nEach button is listed below with what it does, lighting up while it is held; every press and written to the debug log. Needs the latest developer bridge firmware.")}
+            {helpButton('Simulate bridge instrument', "With nothing plugged into the bridge, make it act as an instrument so you can work on that instrument's screens without it. Tap Connect first (developer builds connect to an empty bridge), then pick ColorMunki, Torch Bearer or TKLamp: the bridge advertises as that instrument, draws its screens with made-up readings and shows SIM after its firmware commit. It ends when the bridge disconnects; Reset sets the bridge back to no device and stays connected. While it is on, a plugged-in instrument is ignored.\n\nBridge buttons: Torch Bearer top = Read (one reading), bottom = Live (only announced while simulating; press again to stop). ColorMunki top = turn the dial (calibration, ambient, surface, projector), bottom = calibrate or measure. TKLamp bottom = next state (five light levels, waiting for data, no data), top = previous.\n\nEach button is listed below with what it does, lighting up while it is held; every press and written to the debug log. Needs the latest developer bridge firmware.")}
           </View>
           <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
             <TouchableOpacity
-              style={[styles.simButton, bridgeUp && { opacity: 0.4 }]}
-              disabled={bridgeUp || connInfo.status === 'connecting'}
-              onPress={requestBridgeConnect}
+              style={styles.simButton}
+              disabled={!bridgeUp && connInfo.status === 'connecting'}
+              onPress={bridgeUp ? requestBridgeDisconnect : requestBridgeConnect}
             >
-              <Text style={styles.simButtonText}>{bridgeUp ? 'Connected' : connInfo.status === 'connecting' ? 'Connecting…' : 'Connect'}</Text>
+              <Text style={styles.simButtonText}>{bridgeUp ? 'Disconnect' : connInfo.status === 'connecting' ? 'Connecting…' : 'Connect'}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.simButton, !bridgeUp && { opacity: 0.4 }]} disabled={!bridgeUp} onPress={resetBridge}>
-              <Text style={styles.simButtonText}>Reset device</Text>
+            <TouchableOpacity style={[styles.simButton, !(bridgeUp && simKind) && { opacity: 0.4 }]} disabled={!(bridgeUp && simKind)} onPress={resetBridge}>
+              <Text style={styles.simButtonText}>Reset</Text>
             </TouchableOpacity>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12, minHeight: 36 }}>
-            {connInfo.status === 'connecting' ? <ActivityIndicator size="small" color={colors.accent} /> : null}
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: colors.text, fontSize: 14, fontWeight: '600' }}>
-                {connInfo.status === 'connecting'
-                  ? 'Connecting…'
-                  : bridgeUp
-                    ? `Connected${connInfo.device ? `: ${connInfo.device}` : ''}`
-                    : 'Not connected'}
-              </Text>
-              {connInfo.stage ? <Text style={{ color: colors.muted, fontSize: 13 }}>{connInfo.stage}</Text> : null}
+          {connInfo.stage || (bridgeUp && connInfo.device) ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              {connInfo.status === 'connecting' ? <ActivityIndicator size="small" color={colors.accent} /> : null}
+              <Text style={{ color: colors.muted, fontSize: 13, flex: 1 }}>{bridgeUp ? `Connected to ${connInfo.device}` : connInfo.stage}</Text>
             </View>
-          </View>
-          <View style={styles.modeSegment}>
+          ) : null}
+          <View style={styles.simChoices}>
             {BRIDGE_SIM_OPTIONS.map(([value, label]) => {
-              const active = bridgeUp && (simKind === value || (simKind === null && value === 0));
+              const active = bridgeUp && simKind === value;
               return (
-                <TouchableOpacity key={value} style={[styles.modeOption, active && styles.modeOptionActive, !bridgeUp && { opacity: 0.4 }]} disabled={!bridgeUp} onPress={() => chooseSim(value)}>
-                  <Text style={[styles.modeOptionText, active && styles.modeOptionTextActive]}>{label}</Text>
+                <TouchableOpacity key={value} style={[styles.simChoice, active && styles.modeOptionActive, !bridgeUp && { opacity: 0.4 }]} disabled={!bridgeUp} onPress={() => chooseSim(value)}>
+                  <Text style={[styles.simChoiceText, active && styles.modeOptionTextActive]} numberOfLines={1} adjustsFontSizeToFit>{label}</Text>
                 </TouchableOpacity>
               );
             })}

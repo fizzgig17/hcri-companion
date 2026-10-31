@@ -15,7 +15,6 @@ import { Buffer } from 'buffer';
 export type BridgeSimKind = 0 | 1 | 2 | 3;
 
 export const BRIDGE_SIM_OPTIONS: [BridgeSimKind, string][] = [
-  [0, 'Off'],
   [2, 'ColorMunki'],
   [1, 'Torch Bearer'],
   [3, 'TKLamp'],
@@ -92,6 +91,18 @@ export function setBridgeConnectInfo(i: BridgeConnectInfo): void {
   if (i.status === connectInfo.status && i.stage === connectInfo.stage && i.device === connectInfo.device) return;
   connectInfo = i;
   stateListeners.forEach((cb) => cb());
+}
+
+const disconnectListeners = new Set<() => void>();
+/** Settings' Disconnect button: the Home screen listens and runs its normal disconnect. */
+export function requestBridgeDisconnect(): void {
+  disconnectListeners.forEach((cb) => cb());
+}
+export function onBridgeDisconnectRequest(cb: () => void): () => void {
+  disconnectListeners.add(cb);
+  return () => {
+    disconnectListeners.delete(cb);
+  };
 }
 
 const connectListeners = new Set<() => void>();
