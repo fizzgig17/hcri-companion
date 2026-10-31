@@ -134,7 +134,8 @@ export function startTorchBearerLive(
   conn: MeterConnection,
   log: LogFn,
   onResult: (r: MeterResult) => void,
-  onEnd: (err?: Error) => void
+  onEnd: (err?: Error) => void,
+  attach = false
 ): LiveSession {
   let ended = false;
   let got = false;
@@ -150,15 +151,15 @@ export function startTorchBearerLive(
     conn.stopTorchBearerLive(false).catch(() => {});
     end(new Error('The bridge did not send any live readings. Its firmware may be too old for Live: update it from the ESP32 bridge page, then try again.'));
   }, TB_LIVE_FIRST_RESULT_TIMEOUT_MS);
-  const done = conn
-    .startTorchBearerLive(
-      (r) => {
-        got = true;
-        if (!ended) onResult(r);
-      },
-      (err) => end(err)
-    )
-    .catch((e: any) => end(e instanceof Error ? e : new Error(String(e))));
+  const onR = (r: MeterResult) => {
+    got = true;
+    if (!ended) onResult(r);
+  };
+  const done = attach
+    ? Promise.resolve(conn.attachTorchBearerLive(onR, (err) => end(err)))
+    : conn
+        .startTorchBearerLive(onR, (err) => end(err))
+        .catch((e: any) => end(e instanceof Error ? e : new Error(String(e))));
   return {
     done,
     stop: async () => {

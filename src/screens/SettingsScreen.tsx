@@ -6,7 +6,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { ScrollView, View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet, Alert, Modal, Linking, Platform, useWindowDimensions } from 'react-native';
+import { ScrollView, View, Text, TextInput, TouchableOpacity, ActivityIndicator, RefreshControl, StyleSheet, Alert, Modal, Linking, Platform, useWindowDimensions } from 'react-native';
 import AppSwitch from '../components/AppSwitch';
 import { Icon, ICON_SIZE } from '../components/icons';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
@@ -175,6 +175,8 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   const [tbFlipped, setTbFlipped] = useState(false);
   const [simKind, setSimKind] = useState<BridgeSimKind | null>(null);
   const [lastBtn, setLastBtn] = useState<BridgeButtonEvent | null>(getLastBridgeButton());
+  const [openSec, setOpenSec] = useState<Record<string, boolean>>({});
+  const [pulling, setPulling] = useState(false);
   const [bridgeUp, setBridgeUp] = useState(isBridgeLinked());
   const [connInfo, setConnInfo] = useState(getBridgeConnectInfo());
   const [btnDown, setBtnDown] = useState<{ top: boolean; bottom: boolean }>({ top: false, bottom: false });
@@ -182,10 +184,16 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   const [tkScale, setTkScale] = useState(String(getTkRawPerLm()));
   const [tkTrim, setTkTrimState] = useState(getTkTrim());
   useEffect(() => { loadTkTrimPreference().then((v) => { setTkTrim(v); setTkTrimState(v); }); }, []);
-  const toggleTkTrim = async (v: boolean) => { setTkTrimState(v); setTkTrim(v); await saveTkTrimPreference(v); };
+  const toggleTkTrim = async (v: boolean) => {
+    setTkTrimState(v); setTkTrim(v); await saveTkTrimPreference(v);
+    if (v) { setTkTrimPeakState(false); setTkTrimPeak(false); await saveTkTrimPeakPreference(false); }   // one start option at a time
+  };
   const [tkTrimPeak, setTkTrimPeakState] = useState(getTkTrimPeak());
   useEffect(() => { loadTkTrimPeakPreference().then((v) => { setTkTrimPeak(v); setTkTrimPeakState(v); }); }, []);
-  const toggleTkTrimPeak = async (v: boolean) => { setTkTrimPeakState(v); setTkTrimPeak(v); await saveTkTrimPeakPreference(v); };
+  const toggleTkTrimPeak = async (v: boolean) => {
+    setTkTrimPeakState(v); setTkTrimPeak(v); await saveTkTrimPeakPreference(v);
+    if (v) { setTkTrimState(false); setTkTrim(false); await saveTkTrimPreference(false); }
+  };
   const [tkWindow, setTkWindow] = useState(String(getTkWindowS()));
   const [help, setHelp] = useState<{ title: string; text: string } | null>(null);
   const [flickerWithReading, setFlickerWithReading] = useState(false);
@@ -709,6 +717,20 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
       letterSpacing: 0.8,
       textTransform: 'uppercase',
     },
+    secCard: {
+      marginTop: 12,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.card,
+      overflow: 'hidden',
+    },
+    secHeader: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16 },
+    secAccent: { width: 4, alignSelf: 'stretch', borderRadius: 2, backgroundColor: colors.accent, marginRight: 12, opacity: 0.35 },
+    secAccentOpen: { opacity: 1 },
+    secTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
+    secSub: { color: colors.muted, fontSize: 12.5, marginTop: 2 },
+    secBody: { paddingHorizontal: 16, paddingBottom: 12, borderTopWidth: 1, borderTopColor: colors.cardBorder },
     sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', marginTop: 28, marginBottom: 6 },
     sectionHeaderInline: {
       color: colors.muted,
@@ -782,6 +804,45 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
     settingRow(label, helpText, <AppSwitch accessibilityLabel={label} value={value} onValueChange={onChange} />);
   const sectionHeader = (title: string) => <Text style={styles.sectionHeader}>{title}</Text>;
 
+  // Collapsible sections: tap the header to open or close it (the chevron turns); pulling the page down closes them all.
+  const section = (key: string, title: string, subtitle: string, children: React.ReactNode) => {
+    const isOpen = !!openSec[key];
+    return (
+      <View style={styles.secCard}>
+        <TouchableOpacity
+          style={styles.secHeader}
+          activeOpacity={0.7}
+          onPress={() => setOpenSec((o) => ({ ...o, [key]: !o[key] }))}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: isOpen }}
+          accessibilityLabel={`${title}, ${isOpen ? 'expanded' : 'collapsed'}`}
+        >
+          <View style={[styles.secAccent, isOpen && styles.secAccentOpen]} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.secTitle}>{title}</Text>
+            {!isOpen ? <Text style={styles.secSub}>{subtitle}</Text> : null}
+          </View>
+          <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={isOpen ? colors.accent : colors.muted} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" style={{ transform: [{ rotate: isOpen ? '180deg' : '0deg' }] }}>
+            <Path d="M6 9l6 6 6-6" />
+          </Svg>
+        </TouchableOpacity>
+        {isOpen ? <View style={styles.secBody}>{children}</View> : null}
+      </View>
+    );
+  };
+  const settingsRefresh = (
+    <RefreshControl
+      refreshing={pulling}
+      onRefresh={() => {
+        setPulling(true);
+        setOpenSec({});
+        setTimeout(() => setPulling(false), 450);
+      }}
+      tintColor={colors.accent}
+      colors={[colors.accent]}
+    />
+  );
+
   // The Settings page in two parts so tablets can lay them out as columns (see `columns`).
   const settingsLeft = (
     <>
@@ -791,8 +852,10 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
           in sync with the native versionName/versionCode. */}
       <VersionStamp />
 
-      <View style={[styles.sectionHeaderRow, { marginTop: 8 }]}>
-        <Text style={styles.sectionHeaderInline}>hCRI.io account</Text>
+      {section('account', 'hCRI.io account & backup', 'Sign-in and reading backup', (
+        <>
+      <View style={[styles.sectionHeaderRow, { marginTop: 0 }]}>
+        <Text style={styles.sectionHeaderInline}>Credentials</Text>
         {helpButton(
           'hCRI.io account',
           hasSaved
@@ -984,7 +1047,18 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
         </TouchableOpacity>
       </Modal>
 
-      {sectionHeader('Display')}
+      {switchRow('Back up readings to hCRI.io', "Saves your reading history and saved flickers to your own hCRI.io account after each change, so reinstalling the app or changing phones doesn't lose it. Needs your API token (see hCRI.io account above); readings taken before you sign in are sent once you do. Backed-up readings are private to you: they are not reports and nobody else can see them. Deleting a reading here removes it from the backup too.", cloudBackup, toggleCloudBackup)}
+      {hasSaved && (
+        <View style={styles.saveButtonWrap}>
+          <PrimaryButton title={restoring ? 'Restoring…' : 'Restore readings from backup'} onPress={restoreBackup} variant="outline" style={styles.noTopMargin} />
+        </View>
+      )}
+
+        </>
+      ))}
+
+      {section('display', 'Display', 'Appearance and layout', (
+        <>
       <View style={styles.settingBlock}>
         <View style={styles.settingBlockLabelRow}>
           <Text style={styles.settingLabel}>Appearance</Text>
@@ -1025,110 +1099,25 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
       </View>
       )}
 
-      {sectionHeader('Connection')}
+        </>
+      ))}
+
+      {section('connection', 'Connection', 'Auto-connect, background, screen', (
+        <>
       {switchRow('Auto-connect to meter', 'On by default. The app looks for your meter when it opens and when you switch back to it, and skips the attempt while Bluetooth is off. Turn off to connect only when you tap Connect to Meter.', autoConnect, toggleAutoConnect)}
       {switchRow('Stay connected in background', "Keeps the meter connected when you switch away from the app or lock the screen, so coming back doesn't need a fresh reconnect. Turn off to disconnect the meter whenever the app isn't in the foreground instead (saves the meter's battery, at the cost of reconnecting every time).", stayConnectedInBackground, toggleStayConnectedInBackground)}
       {switchRow('Keep screen awake', 'Prevents the screen from locking during a session with the meter connected. Uses more battery.', keepAwake, toggleKeepAwake)}
 
-      {sectionHeader('Backup')}
-      {switchRow('Back up readings to hCRI.io', "Saves your reading history and saved flickers to your own hCRI.io account after each change, so reinstalling the app or changing phones doesn't lose it. Needs your API token (see hCRI.io account above); readings taken before you sign in are sent once you do. Backed-up readings are private to you: they are not reports and nobody else can see them. Deleting a reading here removes it from the backup too.", cloudBackup, toggleCloudBackup)}
-      {hasSaved && (
-        <View style={styles.saveButtonWrap}>
-          <PrimaryButton title={restoring ? 'Restoring…' : 'Restore readings from backup'} onPress={restoreBackup} variant="outline" style={styles.noTopMargin} />
-        </View>
-      )}
+        </>
+      ))}
 
-      {sectionHeader('Bridge')}
+      {section('bridge', 'ESP32 bridge', 'Screen flip, firmware, simulator', (
+        <>
       {/* The spectral correction now lives in the bridge firmware (the app only applies it for older firmware, always on).
           The switch is kept in code in case it is needed again: set SHOW_TB_CORRECTION_SWITCH to true. */}
       {SHOW_TB_CORRECTION_SWITCH && switchRow('Spectrum correction', "Adjusts the Torch Bearer's spectrum so its CCT, Duv and color-rendering numbers line up with the HPCS meter (it reads a few percent high in CCT without it). Leave on for normal use; turn off to see the raw, uncorrected spectrum. Applies to new scans, and saved CSVs say which one was used.", tbCorrection, toggleTbCorrection)}
       {switchRow('Flip screen', "Turns the bridge's screen 180° so it reads upright the other way round (the arrow then points to the button at the bottom left). Takes effect on the bridge right away while it is connected, and it keeps the setting. Needs the latest bridge firmware.", tbFlipped, toggleTbFlip)}
-      <BridgeFirmwareSection />
-
-      {sectionHeader('ColorMunki')}
-      {settingRow(
-        'Calibration limit (hours)',
-        "The ColorMunki's dark reference drifts as it warms up. Once the last calibration is older than this, the Take reading button asks you to recalibrate first. 0 turns the check off. The bridge also forgets the calibration whenever it is powered off.",
-        <TextInput
-          accessibilityLabel="ColorMunki calibration limit in hours"
-          style={[styles.input, { width: 64, textAlign: 'center', marginTop: 0 }]}
-          value={munkiHours}
-          onChangeText={setMunkiHours}
-          onEndEditing={commitMunkiHours}
-          onBlur={commitMunkiHours}
-          keyboardType="decimal-pad"
-          returnKeyType="done"
-          maxLength={5}
-        />
-      )}
-
-      {sectionHeader('TKLamp tester')}
-      {settingRow(
-        'Counts per lumen',
-        "The TKLamp tester sends a raw sensor count, and the app divides it by this number to show lumens. The default, 313.2, was measured on one calibrated tester using its 2150 lm calibration lamp. Each tester (and each recalibration) can come out a little different, so if the app disagrees with the lamp, set it from the live screen with a lamp of known output, or type a number here. A bigger number shows fewer lumens.",
-        <TextInput
-          accessibilityLabel="TKLamp counts per lumen"
-          style={[styles.input, { width: 84, textAlign: 'center', marginTop: 0 }]}
-          value={tkScale}
-          onChangeText={setTkScale}
-          onEndEditing={commitTkScale}
-          onBlur={commitTkScale}
-          keyboardType="decimal-pad"
-          returnKeyType="done"
-          maxLength={8}
-        />
-      )}
-
-      {settingRow(
-        'Chart width (seconds)',
-        'How many seconds the live and saved runtime charts show across the screen. The lumen scale starts at 0 and only grows, so it never changes when you swipe. A longer run scrolls sideways: swipe the chart to look back, or tap Latest to jump to now.',
-        <TextInput
-          accessibilityLabel="TKLamp chart width in seconds"
-          style={[styles.input, { width: 84, textAlign: 'center', marginTop: 0 }]}
-          value={tkWindow}
-          onChangeText={setTkWindow}
-          onEndEditing={commitTkWindow}
-          onBlur={commitTkWindow}
-          keyboardType="number-pad"
-          returnKeyType="done"
-          maxLength={5}
-        />
-      )}
-
-      {switchRow('Trim the dark start of a run', 'On by default. When you stop a TKLamp run, the near-dark readings before the light came on are dropped (everything before the output first reaches 2 percent of the run\'s peak, keeping one second of lead-in), so the saved and uploaded curve starts when the light does. Turn off to keep every reading from the moment you tapped Start run.', tkTrim, toggleTkTrim)}
-      {switchRow('Start a run at its peak', 'On by default. When you stop a TKLamp run, everything before the highest reading is dropped, so the saved and uploaded curve starts at the peak of the output. It is applied after the dark-start trim above. Turn off to keep the readings from before the peak.', tkTrimPeak, toggleTkTrimPeak)}
-
-      {sectionHeader('Readings')}
-      {switchRow('LED suggestions', "On by default. After a reading, hCRI.io suggests the LED (brand, model and CCT) from the shape of the spectrum and the reading's title, and you confirm it with one tap. Turn off to stop those requests and hide the suggestion cards. You can still add LED details yourself with the LED button.", ledSuggestions, toggleLedSuggestions)}
-      {switchRow('Capture flicker with each reading', 'After each reading, also take a one-shot flicker capture (frequency, percent flicker, flicker index and waveform). Adds a few seconds per reading and only works on meters that support flicker. Saved with the reading, shown on its Flicker page, included in shared CSVs, and uploaded with the reading to hCRI.io (attached to its report). Even when off, you can add a flicker sample to a reading from the Flicker tab before uploading it.', flickerWithReading, toggleFlickerWithReading)}
-
-      {sectionHeader('Feedback')}
-      {switchRow('Button taps', 'A short tick when you press a button in the bar at the bottom of the Main screen.', hapticTaps, toggleHapticTaps)}
-      {switchRow('Reading and upload results', 'A buzz when a reading or upload finishes, and a double buzz when one fails.', hapticResults, toggleHapticResults)}
-
-      {sectionHeader('Troubleshooting')}
-      {switchRow('Verbose logging', 'Adds full wavelength-by-wavelength data and Bluetooth connection/transmission details to the debug log, for troubleshooting a specific problem with Share Debug Log. Off by default -- the standard log already covers connection and measurement status.', verboseLogging, toggleVerboseLogging)}
-      {IS_DEV_BUILD && (
-        <View style={[styles.settingBlock, { marginBottom: 16 }]}>
-          <View style={styles.settingBlockLabelRow}>
-            <Text style={styles.settingLabel}>Test report number (developer)</Text>
-            {helpButton('Test report number', `“Show a test reading” loads this public report from ${HCRI_API_HOST} instead of a random one, including its first flicker reading if it has one. Leave blank for a random report.`)}
-          </View>
-          <TextInput
-            style={styles.input}
-            value={testReportId}
-            onChangeText={(v) => {
-              const digits = v.replace(/\D/g, '');
-              setTestReportId(digits);
-              saveTestReportIdPreference(digits).catch(() => {});
-            }}
-            keyboardType="number-pad"
-            placeholder="e.g. 1234 (blank = random)"
-            placeholderTextColor={colors.mutedFaint}
-            accessibilityLabel="Test report number"
-          />
-        </View>
-      )}
+      <BridgeFirmwareSection renderHelp={helpButton} />
 
       {IS_DEV_BUILD && (
         <View style={[styles.settingBlock, { marginBottom: 16 }]}>
@@ -1181,6 +1170,109 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
           ) : null}
         </View>
       )}
+
+        </>
+      ))}
+
+      {section('munki', 'ColorMunki', 'Calibration limit', (
+        <>
+      {settingRow(
+        'Calibration limit (hours)',
+        "The ColorMunki's dark reference drifts as it warms up. Once the last calibration is older than this, the Take reading button asks you to recalibrate first. 0 turns the check off. The bridge also forgets the calibration whenever it is powered off.",
+        <TextInput
+          accessibilityLabel="ColorMunki calibration limit in hours"
+          style={[styles.input, { width: 64, textAlign: 'center', marginTop: 0 }]}
+          value={munkiHours}
+          onChangeText={setMunkiHours}
+          onEndEditing={commitMunkiHours}
+          onBlur={commitMunkiHours}
+          keyboardType="decimal-pad"
+          returnKeyType="done"
+          maxLength={5}
+        />
+      )}
+
+        </>
+      ))}
+
+      {section('tklamp', 'TKLamp tester', 'Scale, chart width, run trimming', (
+        <>
+      {settingRow(
+        'Counts per lumen',
+        "The TKLamp tester sends a raw sensor count, and the app divides it by this number to show lumens. The default, 313.2, was measured on one calibrated tester using its 2150 lm calibration lamp. Each tester (and each recalibration) can come out a little different, so if the app disagrees with the lamp, set it from the live screen with a lamp of known output, or type a number here. A bigger number shows fewer lumens.",
+        <TextInput
+          accessibilityLabel="TKLamp counts per lumen"
+          style={[styles.input, { width: 84, textAlign: 'center', marginTop: 0 }]}
+          value={tkScale}
+          onChangeText={setTkScale}
+          onEndEditing={commitTkScale}
+          onBlur={commitTkScale}
+          keyboardType="decimal-pad"
+          returnKeyType="done"
+          maxLength={8}
+        />
+      )}
+
+      {settingRow(
+        'Chart width (seconds)',
+        'How many seconds the live and saved runtime charts show across the screen. The lumen scale starts at 0 and only grows, so it never changes when you swipe. A longer run scrolls sideways: swipe the chart to look back, or tap Latest to jump to now.',
+        <TextInput
+          accessibilityLabel="TKLamp chart width in seconds"
+          style={[styles.input, { width: 84, textAlign: 'center', marginTop: 0 }]}
+          value={tkWindow}
+          onChangeText={setTkWindow}
+          onEndEditing={commitTkWindow}
+          onBlur={commitTkWindow}
+          keyboardType="number-pad"
+          returnKeyType="done"
+          maxLength={5}
+        />
+      )}
+
+      {switchRow('Start at the first reading', 'On by default. When you stop a TKLamp run, the dark readings before the light came on are dropped and the saved and uploaded curve starts at the first lit reading (the first one that reaches 2 percent of the run\'s peak), so a light that starts at 500 lm and ramps up is captured in full and you never see a jump from 0. Turning this on turns off Start at the peak. Turn both off to keep every reading from the moment you tapped Start run.', tkTrim, toggleTkTrim)}
+      {switchRow('Start at the peak', 'Off by default. When you stop a TKLamp run, everything before the highest reading is dropped, so the saved and uploaded curve starts at the peak of the output. Use it for lights that overshoot at switch-on. Turning this on turns off Start at the first reading.', tkTrimPeak, toggleTkTrimPeak)}
+
+        </>
+      ))}
+
+      {section('readings', 'Readings & feedback', 'LED suggestions, flicker, haptics', (
+        <>
+      {switchRow('LED suggestions', "On by default. After a reading, hCRI.io suggests the LED (brand, model and CCT) from the shape of the spectrum and the reading's title, and you confirm it with one tap. Turn off to stop those requests and hide the suggestion cards. You can still add LED details yourself with the LED button.", ledSuggestions, toggleLedSuggestions)}
+      {switchRow('Capture flicker with each reading', 'After each reading, also take a one-shot flicker capture (frequency, percent flicker, flicker index and waveform). Adds a few seconds per reading and only works on meters that support flicker. Saved with the reading, shown on its Flicker page, included in shared CSVs, and uploaded with the reading to hCRI.io (attached to its report). Even when off, you can add a flicker sample to a reading from the Flicker tab before uploading it.', flickerWithReading, toggleFlickerWithReading)}
+
+      {switchRow('Button taps', 'A short tick when you press a button in the bar at the bottom of the Main screen.', hapticTaps, toggleHapticTaps)}
+      {switchRow('Reading and upload results', 'A buzz when a reading or upload finishes, and a double buzz when one fails.', hapticResults, toggleHapticResults)}
+
+        </>
+      ))}
+
+      {section('trouble', 'Troubleshooting', 'Logging and developer tools', (
+        <>
+      {switchRow('Verbose logging', 'Adds full wavelength-by-wavelength data and Bluetooth connection/transmission details to the debug log, for troubleshooting a specific problem with Share Debug Log. Off by default -- the standard log already covers connection and measurement status.', verboseLogging, toggleVerboseLogging)}
+      {IS_DEV_BUILD && (
+        <View style={[styles.settingBlock, { marginBottom: 16 }]}>
+          <View style={styles.settingBlockLabelRow}>
+            <Text style={styles.settingLabel}>Test report number (developer)</Text>
+            {helpButton('Test report number', `“Show a test reading” loads this public report from ${HCRI_API_HOST} instead of a random one, including its first flicker reading if it has one. Leave blank for a random report.`)}
+          </View>
+          <TextInput
+            style={styles.input}
+            value={testReportId}
+            onChangeText={(v) => {
+              const digits = v.replace(/\D/g, '');
+              setTestReportId(digits);
+              saveTestReportIdPreference(digits).catch(() => {});
+            }}
+            keyboardType="number-pad"
+            placeholder="e.g. 1234 (blank = random)"
+            placeholderTextColor={colors.mutedFaint}
+            accessibilityLabel="Test report number"
+          />
+        </View>
+      )}
+
+        </>
+      ))}
 
       <Modal visible={help !== null} transparent animationType="fade" onRequestClose={() => setHelp(null)}>
         <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setHelp(null)}>
@@ -1246,7 +1338,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
         </ScrollView>
       ) : columns ? (
         <View style={styles.columnsRow}>
-          <ScrollView automaticallyAdjustKeyboardInsets style={styles.column} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat} keyboardShouldPersistTaps="handled">
+          <ScrollView automaticallyAdjustKeyboardInsets refreshControl={settingsRefresh} style={styles.column} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat} keyboardShouldPersistTaps="handled">
             {settingsLeft}
           </ScrollView>
           <ScrollView automaticallyAdjustKeyboardInsets style={[styles.column, styles.columnDivider]} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat} keyboardShouldPersistTaps="handled">
@@ -1259,7 +1351,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
           )}
         </View>
       ) : (
-    <ScrollView automaticallyAdjustKeyboardInsets style={styles.scrollArea} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat} keyboardShouldPersistTaps="handled">
+    <ScrollView automaticallyAdjustKeyboardInsets refreshControl={settingsRefresh} style={styles.scrollArea} contentContainerStyle={styles.contentContainer} scrollEnabled={!draggingStat} keyboardShouldPersistTaps="handled">
       {settingsLeft}
       {settingsRight}
     </ScrollView>

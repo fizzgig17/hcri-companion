@@ -12,7 +12,7 @@ import { useLog } from '../contexts/LogContext';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
 import { updateBridgeFirmware, type BridgeUpdateResult } from '../ble/MeterConnection';
 
-export default function BridgeFirmwareSection() {
+export default function BridgeFirmwareSection({ renderHelp }: { renderHelp?: (title: string, text: string) => React.ReactNode }) {
   const { colors } = useTheme();
   const { appendLog } = useLog();
   const [busy, setBusy] = useState(false);
@@ -52,6 +52,7 @@ export default function BridgeFirmwareSection() {
 
   const styles = StyleSheet.create({
     wrap: { marginTop: 14 },
+    labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     label: { color: colors.text, fontSize: 15, fontWeight: '600' },
     help: { color: colors.muted, fontSize: 13, marginTop: 4, lineHeight: 18 },
     status: { color: colors.text, fontSize: 14, marginTop: 10 },
@@ -61,15 +62,14 @@ export default function BridgeFirmwareSection() {
     bad: { color: colors.danger, fontSize: 14, marginTop: 10 },
   });
 
+  const helpText = `Updates the ESP32 bridge over Bluetooth, with no cable. Power the bridge on, keep the phone close, and tap Update. The app installs the newest ${IS_DEV_BUILD ? 'development' : 'released'} firmware and checks it afterwards. A bridge flashed before this existed needs one flash from a computer first (see the ESP32 bridge page on hcri.io).`;
   const good = result && (result.outcome === 'updated' || result.outcome === 'uptodate');
   return (
     <View style={styles.wrap}>
-      <Text style={styles.label}>Bridge firmware</Text>
-      <Text style={styles.help}>
-        Updates the ESP32 bridge over Bluetooth, with no cable. Power the bridge on, keep the phone close, and tap Update. The app
-        installs the newest {IS_DEV_BUILD ? 'development' : 'released'} firmware and checks it afterwards. A bridge flashed before
-        this existed needs one flash from a computer first (see the ESP32 bridge page on hcri.io).
-      </Text>
+      <View style={styles.labelRow}>
+        <Text style={styles.label}>Bridge firmware</Text>
+        {renderHelp ? renderHelp('Bridge firmware', helpText) : null}
+      </View>
       {busy ? (
         <>
           <Text style={styles.status}>{status}</Text>

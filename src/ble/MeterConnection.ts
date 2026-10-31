@@ -313,7 +313,9 @@ export class MeterConnection {
   // After a Live stop, results still in flight are dropped until the bridge reports ready again.
   private tbLiveDrain = false;
   private tbStatusChar: Characteristic | null = null;
-  private tbButtonHandlers: { started?: () => void; result?: (r: MeterResult) => void; idle?: () => void } = {};
+  private tbButtonHandlers: { started?: () => void; result?: (r: MeterResult) => void; idle?: () => void; liveStarted?: () => void } = {};
+  // Set when the bridge says its own button started Live (result packet 08): the app joins in, and no "scan started" is shown for it.
+  private tbLiveFromBridgeUntil = 0;
   // The bridge's status characteristic, decoded (kind of meter behind it, ColorMunki dial position and calibration).
   private tbMeterStatus: TbMeterStatus | null = null;
   private tbStatusListeners = new Set<(s: TbMeterStatus | null) => void>();
@@ -321,7 +323,7 @@ export class MeterConnection {
   private tbCalWaiter: { resolve: () => void; reject: (e: Error) => void } | null = null;
 
   /** Lets the app accept a reading that was started by pressing the button on the Torch Bearer itself. */
-  public setTorchBearerButtonHandlers(h: { started?: () => void; result?: (r: MeterResult) => void; idle?: () => void }): void {
+  public setTorchBearerButtonHandlers(h: { started?: () => void; result?: (r: MeterResult) => void; idle?: () => void; liveStarted?: () => void }): void {
     this.tbButtonHandlers = h;
   }
 
@@ -722,6 +724,14 @@ export class MeterConnection {
           }
           return;
         }
+        if (arr[0] === 0x08) {   // 08 01: Live was started with the bridge's own button; the app goes into Live as well
+          if (arr[1] === 1) {
+            this.log('Bridge: Live started with the bridge button');
+            this.tbLiveFromBridgeUntil = Date.now() + 4000;
+            this.tbButtonHandlers.liveStarted?.();
+          }
+          return;
+        }
         if (arr[0] === 0x06) {   // TKLamp live reading: not part of a spectrum, and too frequent to log
           const ts = parseTkSample(arr);
           if (ts) this.tkListeners.forEach((cb) => cb(ts));
@@ -781,7 +791,7 @@ export class MeterConnection {
         }
         // Ready, failed or no instrument: a cancelled reading is over, so stop ignoring results.
         if (arr[0] === 0 || arr[0] === TB_STATE_FAILED || arr[0] === TB_STATE_ERROR) this.tbIgnoreUntil = 0;
-        if (arr[0] === TB_STATE_SCANNING && !this.tbWaiter && !this.tbCalWaiter && !ignoring && !this.tbLive && !this.tbLiveDrain) this.tbButtonHandlers.started?.();
+        if (arr[0] === TB_STATE_SCANNING && !this.tbWaiter && !this.tbCalWaiter && !ignoring && !this.tbLive && !this.tbLiveDrain && this.tbLiveFromBridgeUntil < Date.now()) this.tbButtonHandlers.started?.();
         if (arr[0] === TB_STATE_ERROR && this.tbWaiter) {
           const w = this.tbWaiter;
           this.tbWaiter = null;
@@ -901,6 +911,15 @@ export class MeterConnection {
    * Rejects at once if the command cannot be written; a bridge whose firmware does not know Live stays silent, so callers
    * should time out on "no result".
    */
+  /** Joins a Live the bridge started itself (its own button): no command is sent; results and the end come as usual. */
+  attachTorchBearerLive(onResult: (r: MeterResult) => void, onEnd: (err?: Error) => void): void {
+    if (!this.isTorchBearer() || this.tbWaiter || this.tbLive) return;
+    this.tbReassembler.reset();
+    this.tbLiveDrain = false;
+    this.tbLive = { onResult, onEnd };
+    this.log('Bridge: joined Live');
+  }
+
   async startTorchBearerLive(onResult: (r: MeterResult) => void, onEnd: (err?: Error) => void): Promise<void> {
     if (!this.isTorchBearer() || !this.characteristic) throw new Error('Not connected to a Torch Bearer');
     if (this.tbWaiter || this.tbLive) throw new Error('A Torch Bearer scan is already running');
