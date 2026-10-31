@@ -1053,7 +1053,7 @@ export class MeterConnection {
     }
   }
 
-  /** Developer builds, simulated TKLamp: tells the bridge whether a run is going, so its screen offers only STOP during one. */
+  /** Developer builds, simulated TKLamp: tells the bridge whether a run is going, so its screen reads RECORDING RUN during one. */
   sendBridgeRunState(running: boolean): Promise<void> {
     return this.writeBridgeCommand(bridgeRunStateCommandB64(running), 'send the run state');
   }
