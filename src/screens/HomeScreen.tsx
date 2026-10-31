@@ -18,7 +18,7 @@ import { deviceSupportsLive, deviceSupportsFlicker } from '../ble/protocol';
 import { startLiveSpectrum, startTorchBearerLive, startFlicker, captureFlickerOnce, readFlickerSettings, writeFlickerSetting, type LiveSession, type FlickerReading } from '../ble/liveSessions';
 import type { FlickerSettingsApi } from '../components/FlickerSettingsModal';
 import type { FlickerUploadApi } from '../components/FlickerChart';
-import { onBridgeConnectRequest } from '../ble/bridgeSim';
+import { onBridgeConnectRequest, setBridgeConnectInfo } from '../ble/bridgeSim';
 import { initializeMeter, takeMeasurement, EMPTY_READING_ERROR } from '../ble/takeMeasurement';
 import { CMD_STOP_SAMPLING } from '../ble/protocol';
 import { MeterResult } from '../ble/parseResult';
@@ -646,6 +646,12 @@ export default function HomeScreen({ navigation }: any) {
     },
     [appendLog, getConnection, showBluetoothOffAlert, showBluetoothDeniedAlert]
   );
+
+  // Developer builds: Settings shows the same connect progress as this screen.
+  useEffect(() => {
+    if (!IS_DEV_BUILD) return;
+    setBridgeConnectInfo({ status, stage: status === 'connecting' ? connectStage : status === 'disconnected' ? btBlocked : null, device: deviceName });
+  }, [status, connectStage, btBlocked, deviceName]);
 
   // Developer builds: Settings' "Connect" for the bridge simulator runs the normal connect flow from here.
   useEffect(() => {

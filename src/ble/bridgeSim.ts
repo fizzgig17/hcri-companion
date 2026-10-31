@@ -26,7 +26,7 @@ export const BRIDGE_RESET_CMD_B64 = Buffer.from([0x08]).toString('base64');
 
 /** What the bridge's two buttons do for each simulated instrument (top first). */
 export const BRIDGE_SIM_BUTTON_ROLES: Record<Exclude<BridgeSimKind, 0>, { top: string; bottom: string }> = {
-  1: { top: 'Read (one reading)', bottom: 'Live (simulated, press again to stop)' },
+  1: { top: 'Read (one reading)', bottom: 'Live (simulated)' },
   2: { top: 'Turn the dial', bottom: 'Calibrate / measure' },
   3: { top: 'Previous light level', bottom: 'Next light level' },
 };
@@ -76,6 +76,22 @@ export function onBridgeSimState(cb: () => void): () => void {
   return () => {
     stateListeners.delete(cb);
   };
+}
+
+/** What the Home screen's connect flow is doing, so Settings can show the same progress. */
+export interface BridgeConnectInfo {
+  status: string; // Home's own status: disconnected / connecting / connected / ...
+  stage: string | null; // "Scanning for meter…" and so on while connecting, or why Bluetooth is blocked
+  device: string | null;
+}
+let connectInfo: BridgeConnectInfo = { status: 'disconnected', stage: null, device: null };
+export function getBridgeConnectInfo(): BridgeConnectInfo {
+  return connectInfo;
+}
+export function setBridgeConnectInfo(i: BridgeConnectInfo): void {
+  if (i.status === connectInfo.status && i.stage === connectInfo.stage && i.device === connectInfo.device) return;
+  connectInfo = i;
+  stateListeners.forEach((cb) => cb());
 }
 
 const connectListeners = new Set<() => void>();

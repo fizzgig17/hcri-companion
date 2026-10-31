@@ -6,7 +6,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { ScrollView, View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Modal, Linking, Platform, useWindowDimensions } from 'react-native';
+import { ScrollView, View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet, Alert, Modal, Linking, Platform, useWindowDimensions } from 'react-native';
 import AppSwitch from '../components/AppSwitch';
 import { Icon, ICON_SIZE } from '../components/icons';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
@@ -80,7 +80,7 @@ import {
 } from '../storage/preferences';
 import { setTbCorrectionEnabled } from '../ble/tbCorrection';
 import { setTbFlip } from '../ble/tbDisplay';
-import { BRIDGE_SIM_OPTIONS, BRIDGE_SIM_BUTTON_ROLES, BridgeSimKind, BridgeButtonEvent, setBridgeSim, getBridgeSim, isBridgeLinked, onBridgeSimState, requestBridgeConnect, getLastBridgeButton, onBridgeButton, bridgeButtonText } from '../ble/bridgeSim';
+import { BRIDGE_SIM_OPTIONS, BRIDGE_SIM_BUTTON_ROLES, BridgeSimKind, BridgeButtonEvent, setBridgeSim, getBridgeSim, isBridgeLinked, getBridgeConnectInfo, onBridgeSimState, requestBridgeConnect, getLastBridgeButton, onBridgeButton, bridgeButtonText } from '../ble/bridgeSim';
 import { resetActiveBridge } from '../ble/MeterConnection';
 import { setMunkiCalHours } from '../ble/torchBearer';
 import { TK_RAW_PER_LM_DEFAULT, getTkRawPerLm, getTkTrim, getTkWindowS, setTkRawPerLm, setTkTrim, setTkWindowS } from '../ble/tklamp';
@@ -175,6 +175,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   const [simKind, setSimKind] = useState<BridgeSimKind | null>(null);
   const [lastBtn, setLastBtn] = useState<BridgeButtonEvent | null>(getLastBridgeButton());
   const [bridgeUp, setBridgeUp] = useState(isBridgeLinked());
+  const [connInfo, setConnInfo] = useState(getBridgeConnectInfo());
   const [btnDown, setBtnDown] = useState<{ top: boolean; bottom: boolean }>({ top: false, bottom: false });
   const [munkiHours, setMunkiHours] = useState('1');
   const [tkScale, setTkScale] = useState(String(getTkRawPerLm()));
@@ -325,6 +326,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
     const sync = () => {
       setSimKind(getBridgeSim());
       setBridgeUp(isBridgeLinked());
+      setConnInfo(getBridgeConnectInfo());
       setLastBtn(getLastBridgeButton());
     };
     sync();
@@ -637,6 +639,30 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
       alignItems: 'center',
     },
     modeOptionActive: { backgroundColor: colors.accent },
+    simButton: {
+      flex: 1,
+      height: 44,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.card,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    simButtonText: { color: colors.text, fontSize: 14, fontWeight: '600' },
+    simBtnBox: {
+      flex: 1,
+      minHeight: 76,
+      padding: 10,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.card,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    simBtnCaption: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 4 },
+    simBtnRole: { color: colors.text, fontSize: 13, fontWeight: '600', textAlign: 'center' },
     modeOptionText: { color: colors.muted, fontSize: 13, fontWeight: '600' },
     // Matches PrimaryButton's own accent-background text color (colors.text,
     // not colors.background) so this reads as the same "selected/accent"
@@ -1092,19 +1118,28 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
           </View>
           <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
             <TouchableOpacity
-              style={[styles.modeOption, { flex: 1, borderWidth: 1, borderColor: colors.cardBorder }, bridgeUp && { opacity: 0.4 }]}
-              disabled={bridgeUp}
+              style={[styles.simButton, bridgeUp && { opacity: 0.4 }]}
+              disabled={bridgeUp || connInfo.status === 'connecting'}
               onPress={requestBridgeConnect}
             >
-              <Text style={styles.modeOptionText}>{bridgeUp ? 'Connected' : 'Connect'}</Text>
+              <Text style={styles.simButtonText}>{bridgeUp ? 'Connected' : connInfo.status === 'connecting' ? 'Connecting…' : 'Connect'}</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modeOption, { flex: 1, borderWidth: 1, borderColor: colors.cardBorder }, !bridgeUp && { opacity: 0.4 }]}
-              disabled={!bridgeUp}
-              onPress={resetBridge}
-            >
-              <Text style={styles.modeOptionText}>Reset device</Text>
+            <TouchableOpacity style={[styles.simButton, !bridgeUp && { opacity: 0.4 }]} disabled={!bridgeUp} onPress={resetBridge}>
+              <Text style={styles.simButtonText}>Reset device</Text>
             </TouchableOpacity>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12, minHeight: 36 }}>
+            {connInfo.status === 'connecting' ? <ActivityIndicator size="small" color={colors.accent} /> : null}
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.text, fontSize: 14, fontWeight: '600' }}>
+                {connInfo.status === 'connecting'
+                  ? 'Connecting…'
+                  : bridgeUp
+                    ? `Connected${connInfo.device ? `: ${connInfo.device}` : ''}`
+                    : 'Not connected'}
+              </Text>
+              {connInfo.stage ? <Text style={{ color: colors.muted, fontSize: 13 }}>{connInfo.stage}</Text> : null}
+            </View>
           </View>
           <View style={styles.modeSegment}>
             {BRIDGE_SIM_OPTIONS.map(([value, label]) => {
@@ -1116,28 +1151,17 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
               );
             })}
           </View>
-          <Text style={{ color: colors.muted, fontSize: 13, marginTop: 10 }}>
-            {!bridgeUp ? 'Not connected to a bridge. Tap Connect.' : simKind ? 'Simulating on the bridge.' : 'Connected. Pick an instrument to simulate.'}
-          </Text>
           {bridgeUp && simKind ? (
-            <View style={{ marginTop: 10, gap: 8 }}>
-              {(['top', 'bottom'] as const).map((which) => (
-                <View
-                  key={which}
-                  style={{
-                    padding: 10,
-                    borderRadius: 8,
-                    borderWidth: 1,
-                    borderColor: btnDown[which] ? colors.accent : colors.cardBorder,
-                    backgroundColor: btnDown[which] ? colors.accent : 'transparent',
-                  }}
-                >
-                  <Text style={{ color: btnDown[which] ? '#fff' : colors.text, fontWeight: '600' }}>
-                    {which === 'top' ? 'Top button' : 'Bottom button'}: {BRIDGE_SIM_BUTTON_ROLES[simKind as 1 | 2 | 3][which]}
-                  </Text>
-                </View>
-              ))}
-              <Text style={{ color: colors.muted, fontSize: 13 }}>
+            <View style={{ marginTop: 12 }}>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {(['top', 'bottom'] as const).map((which) => (
+                  <View key={which} style={[styles.simBtnBox, btnDown[which] && { backgroundColor: colors.accent, borderColor: colors.accent }]}>
+                    <Text style={[styles.simBtnCaption, btnDown[which] && { color: colors.text }]}>{which === 'top' ? 'TOP BUTTON' : 'BOTTOM BUTTON'}</Text>
+                    <Text style={styles.simBtnRole}>{BRIDGE_SIM_BUTTON_ROLES[simKind as 1 | 2 | 3][which]}</Text>
+                  </View>
+                ))}
+              </View>
+              <Text style={{ color: colors.muted, fontSize: 13, marginTop: 10 }}>
                 {lastBtn ? `${bridgeButtonText(lastBtn, simKind)} · ${new Date(lastBtn.at).toLocaleTimeString()}` : 'No bridge button pressed yet.'}
               </Text>
             </View>
