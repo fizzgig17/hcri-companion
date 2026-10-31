@@ -29,7 +29,7 @@ import {
   isTorchBearerName, TbReassembler, tbToMeterResult, tbSummarySignature, parseTbSummary,
 } from './torchBearer';
 import { getTbFlip, onTbFlip } from './tbDisplay';
-import { getBridgeSim, onBridgeSim, setBridgeLinked, setBridgeSim, BRIDGE_RESET_CMD_B64, bridgeSimCommandB64, parseBridgeButton, emitBridgeButton, bridgeButtonText, BridgeSimKind } from './bridgeSim';
+import { getBridgeSim, onBridgeSim, setBridgeLinked, setBridgeSim, BRIDGE_RESET_CMD_B64, bridgeSimCommandB64, bridgeButtonCommandB64, bridgeRunStateCommandB64, onBridgePressRequest, parseBridgeButton, emitBridgeButton, bridgeButtonText, BridgeSimKind } from './bridgeSim';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
 import {
   TB_OTA_UUID, TB_INFO_UUID, parseBridgeInfo, buildOtaBegin, buildOtaData, OTA_END, OTA_ABORT, parseOtaEvent, otaErrorText,
@@ -696,9 +696,13 @@ export class MeterConnection {
     this.tbSimUnsub?.();
     this.tbSimUnsub = null;
     if (IS_DEV_BUILD) {
-      this.tbSimUnsub = onBridgeSim((k) => {
+      const unSim = onBridgeSim((k) => {
         this.sendBridgeSim(k).catch(() => {});
       });
+      const unPress = onBridgePressRequest((w) => {
+        this.writeBridgeCommand(bridgeButtonCommandB64(w), `press the ${w} button`).catch(() => {});
+      });
+      this.tbSimUnsub = () => { unSim(); unPress(); };
       const wantSim = getBridgeSim();
       if (wantSim !== null) this.sendBridgeSim(wantSim).catch(() => {});
     }
@@ -1037,6 +1041,21 @@ export class MeterConnection {
     } catch {
       // the bridge restarted before it could answer
     }
+  }
+
+  /** Developer builds: a simulation command (button press from the phone, TKLamp run state). Older firmware ignores it. */
+  private async writeBridgeCommand(b64: string, what: string): Promise<void> {
+    if (!this.isTorchBearer() || !this.characteristic) return;
+    try {
+      await this.characteristic.writeWithResponse(b64);
+    } catch (e: any) {
+      this.log(`Could not ${what} on the bridge: ${describeBleError(e)}`);
+    }
+  }
+
+  /** Developer builds, simulated TKLamp: tells the bridge whether a run is going, so its screen offers only STOP during one. */
+  sendBridgeRunState(running: boolean): Promise<void> {
+    return this.writeBridgeCommand(bridgeRunStateCommandB64(running), 'send the run state');
   }
 
   /** Developer builds: asks the bridge to act as an instrument that is not plugged in (0 = stop). Older firmware ignores the command. */

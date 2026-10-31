@@ -164,6 +164,9 @@ export default function TkLampLive({ conn }: Props) {
     }
   }));   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
+    if (conn && simulatingName()) conn.sendBridgeRunState(recording || armed).catch(() => {});
+  }, [recording, armed, conn]);
+  useEffect(() => {
     setTkRunState({ recording, armed, canRecord: lm != null && !stale, canUpload: finished && !recording, uploading: busy, uploaded: uploadedNow });
   }, [recording, armed, lm, stale, finished, busy, uploadedNow]);
   useEffect(() => () => setTkRunState({ recording: false, armed: false, canRecord: false, canUpload: false, uploading: false, uploaded: false }), []);

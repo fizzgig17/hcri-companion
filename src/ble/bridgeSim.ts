@@ -123,6 +123,27 @@ export function onBridgeConnectRequest(cb: () => void): () => void {
   };
 }
 
+/** Command 09 <1 top | 2 bottom>, base64: a button press from the phone (simulation only). */
+export function bridgeButtonCommandB64(which: 'top' | 'bottom'): string {
+  return Buffer.from([0x09, which === 'top' ? 1 : 2]).toString('base64');
+}
+/** Command 0A <0|1>, base64: tells a simulated TKLamp whether the app has a run going. */
+export function bridgeRunStateCommandB64(running: boolean): string {
+  return Buffer.from([0x0a, running ? 1 : 0]).toString('base64');
+}
+
+const pressListeners = new Set<(which: 'top' | 'bottom') => void>();
+/** Settings' on-screen button boxes: ask the bridge to act as if its own button were pressed. */
+export function requestBridgePress(which: 'top' | 'bottom'): void {
+  pressListeners.forEach((cb) => cb(which));
+}
+export function onBridgePressRequest(cb: (which: 'top' | 'bottom') => void): () => void {
+  pressListeners.add(cb);
+  return () => {
+    pressListeners.delete(cb);
+  };
+}
+
 export function onBridgeSim(cb: (kind: BridgeSimKind) => void): () => void {
   simListeners.add(cb);
   return () => {

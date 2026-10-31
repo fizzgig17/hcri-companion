@@ -82,7 +82,7 @@ import {
 } from '../storage/preferences';
 import { setTbCorrectionEnabled } from '../ble/tbCorrection';
 import { setTbFlip } from '../ble/tbDisplay';
-import { BRIDGE_SIM_OPTIONS, BRIDGE_SIM_BUTTON_ROLES, BridgeSimKind, BridgeButtonEvent, setBridgeSim, getBridgeSim, isBridgeLinked, getBridgeConnectInfo, onBridgeSimState, requestBridgeConnect, requestBridgeDisconnect, getLastBridgeButton, onBridgeButton, bridgeButtonText } from '../ble/bridgeSim';
+import { BRIDGE_SIM_OPTIONS, BRIDGE_SIM_BUTTON_ROLES, BridgeSimKind, BridgeButtonEvent, setBridgeSim, getBridgeSim, isBridgeLinked, getBridgeConnectInfo, onBridgeSimState, requestBridgeConnect, requestBridgeDisconnect, requestBridgePress, getLastBridgeButton, onBridgeButton, bridgeButtonText } from '../ble/bridgeSim';
 import { setMunkiCalHours } from '../ble/torchBearer';
 import { TK_RAW_PER_LM_DEFAULT, getTkRawPerLm, getTkTrim, getTkTrimPeak, getTkWindowS, setTkRawPerLm, setTkTrim, setTkTrimPeak, setTkWindowS } from '../ble/tklamp';
 import {
@@ -1123,7 +1123,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
         <View style={[styles.settingBlock, { marginBottom: 16 }]}>
           <View style={styles.settingBlockLabelRow}>
             <Text style={styles.settingLabel}>Simulate bridge instrument (developer)</Text>
-            {helpButton('Simulate bridge instrument', "With nothing plugged into the bridge, make it act as an instrument so you can work on that instrument's screens without it. Tap Connect first (developer builds connect to an empty bridge), then pick ColorMunki, Torch Bearer or TKLamp: the bridge advertises as that instrument, draws its screens with made-up readings and shows SIM after its firmware commit. It ends when the bridge disconnects; Reset sets the bridge back to no device and stays connected. While it is on, a plugged-in instrument is ignored.\n\nBridge buttons: Torch Bearer top = Read (one reading), bottom = Live (only announced while simulating; press again to stop). ColorMunki top = turn the dial (calibration, ambient, surface, projector), bottom = calibrate or measure. TKLamp bottom = next state (five light levels, waiting for data, no data), top = start / stop the run (same as the Start run button).\n\nEach button is listed below with what it does, lighting up while it is held; every press and written to the debug log. Needs the latest developer bridge firmware.")}
+            {helpButton('Simulate bridge instrument', "With nothing plugged into the bridge, make it act as an instrument so you can work on that instrument's screens without it. Tap Connect first (developer builds connect to an empty bridge), then pick ColorMunki, Torch Bearer or TKLamp: the bridge advertises as that instrument, draws its screens with made-up readings and shows SIM after its firmware commit. It ends when the bridge disconnects; Reset sets the bridge back to no device and stays connected. While it is on, a plugged-in instrument is ignored.\n\nBridge buttons: Torch Bearer top = Read (one reading), bottom = Live (only announced while simulating; press again to stop). ColorMunki top = turn the dial (calibration, ambient, surface, projector), bottom = calibrate or measure. TKLamp bottom = next state (five light levels, waiting for data, no data), top = start / stop the run (same as the Start run button).\n\nEach button is listed below with what it does, lighting up while it is held; tap one to press it from the phone; every press and written to the debug log. Needs the latest developer bridge firmware.")}
           </View>
           <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
             <TouchableOpacity
@@ -1157,10 +1157,10 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
             <View style={{ marginTop: 12 }}>
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 {(['top', 'bottom'] as const).map((which) => (
-                  <View key={which} style={[styles.simBtnBox, btnDown[which] && { backgroundColor: colors.accent, borderColor: colors.accent }]}>
+                  <TouchableOpacity key={which} activeOpacity={0.6} onPress={() => requestBridgePress(which)} style={[styles.simBtnBox, btnDown[which] && { backgroundColor: colors.accent, borderColor: colors.accent }]}>
                     <Text style={[styles.simBtnCaption, btnDown[which] && { color: colors.text }]}>{which === 'top' ? 'TOP BUTTON' : 'BOTTOM BUTTON'}</Text>
                     <Text style={styles.simBtnRole}>{BRIDGE_SIM_BUTTON_ROLES[simKind as 1 | 2 | 3][which]}</Text>
-                  </View>
+                  </TouchableOpacity>
                 ))}
               </View>
               <Text style={{ color: colors.muted, fontSize: 13, marginTop: 10 }}>
