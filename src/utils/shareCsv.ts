@@ -26,10 +26,11 @@ import { Alert } from 'react-native';
 import RNFS from 'react-native-fs';
 import RNShare from 'react-native-share';
 import { MeterResult } from '../ble/parseResult';
+import { asciiFileName } from './fileName';
 import { buildShareCsv, buildCombinedCsv } from '../hcri/buildCsv';
 
 function sanitizeFilename(label: string): string {
-  return label.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 80) || 'reading';
+  return asciiFileName(label).slice(0, 80) || 'reading';
 }
 
 // Paths written by a previous call, cleaned up at the START of the next

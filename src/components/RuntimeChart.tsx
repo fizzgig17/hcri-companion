@@ -9,7 +9,7 @@
 // until you swipe away; "Latest" jumps back.
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, type LayoutChangeEvent } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Animated, PanResponder, type LayoutChangeEvent } from 'react-native';
 import Svg, { Polyline, Line, Text as SvgText } from 'react-native-svg';
 import { useTheme } from '../contexts/ThemeContext';
 import { gridLabelEvery, gridLevel, gridStep } from '../utils/runtimeGrid';
@@ -40,8 +40,15 @@ export function fmtClock(s: number): string {
 
 const TICKS = [5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200];
 
+const CURSOR_GRAB = 24;   // half-width of the touch strip around the start line
+
 interface Props {
   points: RuntimePoint[];
+  /** A draggable start line at this many seconds (the person picks where the run starts). While `glow` is on it pulses, to say it can be grabbed. */
+  cursor?: { t: number; glow: boolean } | null;
+  onCursorChange?: (t: number) => void;
+  /** Reads the output at a time for the readout shown while dragging. */
+  readoutAt?: (t: number) => string;
   /** Seconds visible across the screen; 0 = fit the whole run. */
   windowS: number;
   /** Stick to the newest data (live view). */
@@ -49,7 +56,7 @@ interface Props {
   height?: number;
 }
 
-export default function RuntimeChart({ points, windowS, follow = false, height = 170 }: Props) {
+export default function RuntimeChart({ points, windowS, follow = false, height = 170, cursor = null, onCursorChange, readoutAt }: Props) {
   const { colors } = useTheme();
   const [boxW, setBoxW] = useState(0);
   const scroller = useRef<React.ComponentRef<typeof ScrollView>>(null);
@@ -99,6 +106,41 @@ export default function RuntimeChart({ points, windowS, follow = false, height =
 
   const onLayout = (e: LayoutChangeEvent) => setBoxW(e.nativeEvent.layout.width);
 
+  // The start line: a strip around it is the touch target; the line follows the finger and a readout shows seconds and lumens.
+  const [dragging, setDragging] = useState(false);
+  const live = useRef({ g, cursor, total, onCursorChange });
+  live.current = { g, cursor, total, onCursorChange };
+  const dragFrom = useRef(0);
+  const pulse = useRef(new Animated.Value(0.15)).current;
+  const glowing = !!cursor?.glow && !dragging;
+  useEffect(() => {
+    if (!glowing) return;
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: 0.7, duration: 700, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 0.15, duration: 700, useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [glowing, pulse]);
+  const pan = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderTerminationRequest: () => false,
+    onPanResponderGrant: () => {
+      const l = live.current;
+      dragFrom.current = l.g && l.cursor ? l.g.X(l.cursor.t) : 0;
+      setDragging(true);
+    },
+    onPanResponderMove: (_e, gs) => {
+      const l = live.current;
+      if (!l.g || !l.onCursorChange) return;
+      const t = (dragFrom.current + gs.dx - 4) / l.g.pxPerS;
+      l.onCursorChange(Math.max(0, Math.min(l.total, t)));
+    },
+    onPanResponderRelease: () => setDragging(false),
+    onPanResponderTerminate: () => setDragging(false),
+  })).current;
+
   return (
     <View onLayout={onLayout} style={styles.wrap}>
       {g && (
@@ -117,7 +159,7 @@ export default function RuntimeChart({ points, windowS, follow = false, height =
               ref={scroller}
               horizontal
               showsHorizontalScrollIndicator={false}
-              scrollEnabled={g.contentW > viewW + 1}
+              scrollEnabled={g.contentW > viewW + 1 && !dragging}
               onScrollBeginDrag={() => { pinned.current = false; }}
               onScroll={(e) => {
                 const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
@@ -127,6 +169,7 @@ export default function RuntimeChart({ points, windowS, follow = false, height =
               }}
               scrollEventThrottle={100}
             >
+              <View style={{ width: g.contentW, height }}>
               <Svg width={g.contentW} height={height}>
                 {g.gridV.map((v) => {
                   const lv = gridLevel(v, g.gStep);
@@ -139,7 +182,21 @@ export default function RuntimeChart({ points, windowS, follow = false, height =
                   </React.Fragment>
                 ))}
                 {g.line.length > 0 && <Polyline points={g.line} fill="none" stroke={colors.accent} strokeWidth={2} />}
+                {cursor && <Line x1={g.X(cursor.t)} x2={g.X(cursor.t)} y1={0} y2={plotH} stroke="#d92b2b" strokeWidth={1.5} />}
               </Svg>
+              {cursor && (
+                <>
+                  {glowing && <Animated.View pointerEvents="none" style={{ position: 'absolute', left: g.X(cursor.t) - 7, width: 14, top: 0, height: plotH, backgroundColor: '#d92b2b', borderRadius: 7, opacity: pulse }} />}
+                  <View pointerEvents="none" style={{ position: 'absolute', left: g.X(cursor.t) - 8, top: 0, width: 16, height: 16, borderRadius: 8, backgroundColor: '#d92b2b', borderWidth: 2, borderColor: '#fff' }} />
+                  <View {...pan.panHandlers} accessibilityLabel="Start line. Drag to choose where the run starts" style={{ position: 'absolute', left: g.X(cursor.t) - CURSOR_GRAB, width: CURSOR_GRAB * 2, top: 0, height: plotH }} />
+                  {dragging && readoutAt && (
+                    <View pointerEvents="none" style={{ position: 'absolute', left: Math.max(2, Math.min(g.contentW - 112, g.X(cursor.t) - 56)), top: 20, width: 112, alignItems: 'center', backgroundColor: '#000d', borderRadius: 8, paddingVertical: 4 }}>
+                      <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>{readoutAt(cursor.t)}</Text>
+                    </View>
+                  )}
+                </>
+              )}
+              </View>
             </ScrollView>
             {follow && !atEnd && (
               <TouchableOpacity style={styles.latest} onPress={() => { pinned.current = true; scroller.current?.scrollToEnd({ animated: true }); }} accessibilityRole="button" accessibilityLabel="Jump to the latest reading">

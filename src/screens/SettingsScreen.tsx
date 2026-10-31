@@ -70,8 +70,8 @@ import {
   saveAutoConnectPreference,
   saveLedSuggestionsPreference,
   saveTbCorrectionPreference,
-  loadMunkiCalHoursPreference,
-  saveMunkiCalHoursPreference,
+  loadMunkiCalMinutesPreference,
+  saveMunkiCalMinutesPreference,
   loadTkScalePreference,
   saveTkScalePreference,
   saveTkWindowPreference,
@@ -82,8 +82,8 @@ import {
 } from '../storage/preferences';
 import { setTbCorrectionEnabled } from '../ble/tbCorrection';
 import { setTbFlip } from '../ble/tbDisplay';
-import { BRIDGE_SIM_OPTIONS, BRIDGE_SIM_BUTTON_ROLES, BridgeSimKind, BridgeButtonEvent, setBridgeSim, getBridgeSim, isBridgeLinked, getBridgeConnectInfo, onBridgeSimState, requestBridgeConnect, requestBridgeDisconnect, getLastBridgeButton, onBridgeButton, bridgeButtonText } from '../ble/bridgeSim';
-import { setMunkiCalHours } from '../ble/torchBearer';
+import { BRIDGE_SIM_OPTIONS, BRIDGE_SIM_BUTTON_ROLES, BridgeSimKind, BridgeButtonEvent, setBridgeSim, getBridgeSim, isBridgeLinked, getBridgeConnectInfo, onBridgeSimState, requestBridgeConnect, requestBridgeDisconnect, requestBridgePress, getLastBridgeButton, onBridgeButton, bridgeButtonText } from '../ble/bridgeSim';
+import { setMunkiCalMinutes } from '../ble/torchBearer';
 import { TK_RAW_PER_LM_DEFAULT, getTkRawPerLm, getTkTrim, getTkTrimPeak, getTkWindowS, setTkRawPerLm, setTkTrim, setTkTrimPeak, setTkWindowS } from '../ble/tklamp';
 import {
   StatDisplayPrefs,
@@ -180,7 +180,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   const [bridgeUp, setBridgeUp] = useState(isBridgeLinked());
   const [connInfo, setConnInfo] = useState(getBridgeConnectInfo());
   const [btnDown, setBtnDown] = useState<{ top: boolean; bottom: boolean }>({ top: false, bottom: false });
-  const [munkiHours, setMunkiHours] = useState('1');
+  const [munkiHours, setMunkiHours] = useState('30');   // minutes
   const [tkScale, setTkScale] = useState(String(getTkRawPerLm()));
   const [tkTrim, setTkTrimState] = useState(getTkTrim());
   useEffect(() => { loadTkTrimPreference().then((v) => { setTkTrim(v); setTkTrimState(v); }); }, []);
@@ -253,7 +253,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
     loadVerboseLoggingPreference().then(setVerboseLogging);
     loadTestReportIdPreference().then(setTestReportId);
     loadTbCorrectionPreference().then(setTbCorrection);
-    loadMunkiCalHoursPreference().then((h) => setMunkiHours(String(h)));
+    loadMunkiCalMinutesPreference().then((h) => setMunkiHours(String(h)));
     loadTkScalePreference(TK_RAW_PER_LM_DEFAULT).then((v) => { setTkRawPerLm(v); setTkScale(String(v)); });
     loadTbFlipPreference().then((v) => setTbFlipped(v === true));
     loadFlickerWithReadingPreference().then(setFlickerWithReading);
@@ -385,10 +385,10 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
 
   const commitMunkiHours = async () => {
     const n = Number(munkiHours.replace(',', '.'));
-    const h = Number.isFinite(n) && n >= 0 ? Math.min(n, 999) : 4;
+    const h = Number.isFinite(n) && n >= 0 ? Math.min(Math.round(n), 9999) : 30;
     setMunkiHours(String(h));
-    setMunkiCalHours(h);
-    await saveMunkiCalHoursPreference(h);
+    setMunkiCalMinutes(h);
+    await saveMunkiCalMinutesPreference(h);
   };
 
   const toggleTbCorrection = async (value: boolean) => {
@@ -1123,7 +1123,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
         <View style={[styles.settingBlock, { marginBottom: 16 }]}>
           <View style={styles.settingBlockLabelRow}>
             <Text style={styles.settingLabel}>Simulate bridge instrument (developer)</Text>
-            {helpButton('Simulate bridge instrument', "With nothing plugged into the bridge, make it act as an instrument so you can work on that instrument's screens without it. Tap Connect first (developer builds connect to an empty bridge), then pick ColorMunki, Torch Bearer or TKLamp: the bridge advertises as that instrument, draws its screens with made-up readings and shows SIM after its firmware commit. It ends when the bridge disconnects; Reset sets the bridge back to no device and stays connected. While it is on, a plugged-in instrument is ignored.\n\nBridge buttons: Torch Bearer top = Read (one reading), bottom = Live (only announced while simulating; press again to stop). ColorMunki top = turn the dial (calibration, ambient, surface, projector), bottom = calibrate or measure. TKLamp bottom = next state (five light levels, waiting for data, no data), top = previous.\n\nEach button is listed below with what it does, lighting up while it is held; every press and written to the debug log. Needs the latest developer bridge firmware.")}
+            {helpButton('Simulate bridge instrument', "With nothing plugged into the bridge, make it act as an instrument so you can work on that instrument's screens without it. Tap Connect first (developer builds connect to an empty bridge), then pick ColorMunki, Torch Bearer or TKLamp: the bridge advertises as that instrument, draws its screens with made-up readings and shows SIM after its firmware commit. It ends when the bridge disconnects; Reset sets the bridge back to no device and stays connected. While it is on, a plugged-in instrument is ignored.\n\nBridge buttons: Torch Bearer top = Read (one reading), bottom = Live (only announced while simulating; press again to stop). ColorMunki top = turn the dial (calibration, ambient, surface, projector), bottom = calibrate or measure. TKLamp bottom = next state (five light levels, waiting for data, no data), top = start / stop the run (same as the Start run button).\n\nEach button is listed below with what it does, lighting up while it is held; tap one to press it from the phone; every press and written to the debug log. Needs the latest developer bridge firmware.")}
           </View>
           <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
             <TouchableOpacity
@@ -1157,10 +1157,10 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
             <View style={{ marginTop: 12 }}>
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 {(['top', 'bottom'] as const).map((which) => (
-                  <View key={which} style={[styles.simBtnBox, btnDown[which] && { backgroundColor: colors.accent, borderColor: colors.accent }]}>
+                  <TouchableOpacity key={which} activeOpacity={0.6} onPress={() => requestBridgePress(which)} style={[styles.simBtnBox, btnDown[which] && { backgroundColor: colors.accent, borderColor: colors.accent }]}>
                     <Text style={[styles.simBtnCaption, btnDown[which] && { color: colors.text }]}>{which === 'top' ? 'TOP BUTTON' : 'BOTTOM BUTTON'}</Text>
                     <Text style={styles.simBtnRole}>{BRIDGE_SIM_BUTTON_ROLES[simKind as 1 | 2 | 3][which]}</Text>
-                  </View>
+                  </TouchableOpacity>
                 ))}
               </View>
               <Text style={{ color: colors.muted, fontSize: 13, marginTop: 10 }}>
@@ -1177,16 +1177,16 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
       {section('munki', 'ColorMunki', 'Calibration limit', (
         <>
       {settingRow(
-        'Calibration limit (hours)',
+        'Calibration limit (minutes)',
         "The ColorMunki's dark reference drifts as it warms up. Once the last calibration is older than this, the Take reading button asks you to recalibrate first. 0 turns the check off. The bridge also forgets the calibration whenever it is powered off.",
         <TextInput
-          accessibilityLabel="ColorMunki calibration limit in hours"
+          accessibilityLabel="ColorMunki calibration limit in minutes"
           style={[styles.input, { width: 64, textAlign: 'center', marginTop: 0 }]}
           value={munkiHours}
           onChangeText={setMunkiHours}
           onEndEditing={commitMunkiHours}
           onBlur={commitMunkiHours}
-          keyboardType="decimal-pad"
+          keyboardType="number-pad"
           returnKeyType="done"
           maxLength={5}
         />
@@ -1287,28 +1287,28 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
       </Modal>
     </>
   );
-  const settingsRight = (
-      <View style={styles.statsSection}>
-        <View style={styles.statsHeaderRow}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-            <Text style={styles.statsTitle}>Main Screen Measurements</Text>
-            {helpButton('Main Screen Measurements', 'Check which measurements show on the Main tab after a reading. Hold the dotted handle and drag a row to reorder it.')}
-          </View>
-          <TouchableOpacity onPress={resetStatsToDefault}>
-            <Text style={styles.statsResetLink}>Reset to Default</Text>
-          </TouchableOpacity>
+  const settingsRight = section('measurements', 'Main screen measurements', 'Which numbers show, and their order', (
+    <View style={styles.statsSection}>
+      <View style={styles.statsHeaderRow}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+          <Text style={styles.statsTitle}>Check to show, drag to reorder</Text>
+          {helpButton('Main Screen Measurements', 'Check which measurements show on the Main tab after a reading. Hold the dotted handle and drag a row to reorder it.')}
         </View>
-        <View style={{ height: 14 }} />
-        <DraggableStatList
-          order={statPrefs.order}
-          enabled={statPrefs.enabled}
-          labelFor={(id) => STAT_METRIC_BY_ID[id]?.label ?? id}
-          onReorder={handleReorder}
-          onToggle={handleToggleStat}
-          onDragActiveChange={setDraggingStat}
-        />
+        <TouchableOpacity onPress={resetStatsToDefault}>
+          <Text style={styles.statsResetLink}>Reset to Default</Text>
+        </TouchableOpacity>
       </View>
-  );
+      <View style={{ height: 14 }} />
+      <DraggableStatList
+        order={statPrefs.order}
+        enabled={statPrefs.enabled}
+        labelFor={(id) => STAT_METRIC_BY_ID[id]?.label ?? id}
+        onReorder={handleReorder}
+        onToggle={handleToggleStat}
+        onDragActiveChange={setDraggingStat}
+      />
+    </View>
+  ));
 
   return (
     <SafeAreaView style={styles.container} edges={panel ? [] : IS_DEV_BUILD ? ['left', 'right'] : ['top', 'left', 'right']}>

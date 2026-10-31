@@ -8,6 +8,7 @@
 import { Buffer } from 'buffer';
 import { HCRI_API_BASE } from './apiConfig';
 import { maskSecret } from '../utils/maskSecret';
+import { asciiFileName } from '../utils/fileName';
 import fetchWithTimeout, { NetworkError, UPLOAD_TIMEOUT_MS } from './fetchWithTimeout';
 
 const HCRI_UPLOAD_URL = `${HCRI_API_BASE}/index.php/api/v1/upload`;
@@ -49,7 +50,7 @@ export async function uploadToHcri(
   // React Native's FormData accepts this Blob-like shape for file fields.
   form.append('file', {
     uri: 'data:text/csv;base64,' + Buffer.from(csv).toString('base64'),
-    name: `${label}.csv`,
+    name: `${asciiFileName(label) || 'reading'}.csv`,   // the label itself goes in its own field, accents intact
     type: 'text/csv',
   } as any);
   form.append('label', label);

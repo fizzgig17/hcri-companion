@@ -27,7 +27,7 @@ export const BRIDGE_RESET_CMD_B64 = Buffer.from([0x08]).toString('base64');
 export const BRIDGE_SIM_BUTTON_ROLES: Record<Exclude<BridgeSimKind, 0>, { top: string; bottom: string }> = {
   1: { top: 'Read (one reading)', bottom: 'Live (simulated)' },
   2: { top: 'Turn the dial', bottom: 'Calibrate / measure' },
-  3: { top: 'Previous light level', bottom: 'Next light level' },
+  3: { top: 'Start / stop run', bottom: 'Next light level' },
 };
 
 /** Command 07 <kind>, base64, ready for the bridge's command characteristic. */
@@ -40,6 +40,12 @@ const simListeners = new Set<(kind: BridgeSimKind) => void>();
 
 export function getBridgeSim(): BridgeSimKind | null {
   return sim;
+}
+
+/** Name of the instrument being simulated right now ("Torch Bearer"...), or null when nothing is. */
+export function simulatingName(): string | null {
+  if (sim === null || sim === 0) return null;
+  return BRIDGE_SIM_OPTIONS.find(([k]) => k === sim)?.[1] ?? null;
 }
 
 /** Sets the choice. `notify` is false when only the app's own record changes (the bridge is not told). */
@@ -114,6 +120,27 @@ export function onBridgeConnectRequest(cb: () => void): () => void {
   connectListeners.add(cb);
   return () => {
     connectListeners.delete(cb);
+  };
+}
+
+/** Command 09 <1 top | 2 bottom>, base64: a button press from the phone (simulation only). */
+export function bridgeButtonCommandB64(which: 'top' | 'bottom'): string {
+  return Buffer.from([0x09, which === 'top' ? 1 : 2]).toString('base64');
+}
+/** Command 0A <0|1>, base64: tells a simulated TKLamp whether the app has a run going. */
+export function bridgeRunStateCommandB64(running: boolean): string {
+  return Buffer.from([0x0a, running ? 1 : 0]).toString('base64');
+}
+
+const pressListeners = new Set<(which: 'top' | 'bottom') => void>();
+/** Settings' on-screen button boxes: ask the bridge to act as if its own button were pressed. */
+export function requestBridgePress(which: 'top' | 'bottom'): void {
+  pressListeners.forEach((cb) => cb(which));
+}
+export function onBridgePressRequest(cb: (which: 'top' | 'bottom') => void): () => void {
+  pressListeners.add(cb);
+  return () => {
+    pressListeners.delete(cb);
   };
 }
 

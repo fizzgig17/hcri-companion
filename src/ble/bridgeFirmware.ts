@@ -90,8 +90,10 @@ export function parseImageInfo(img: Uint8Array): ImageInfo | null {
 
 /** True when both name the same commit (first 7 characters); a build with no git ("dev") is never taken for a match. */
 export function sameCommit(a: string, b: string): boolean {
-  const x = a.trim().toLowerCase().slice(0, 7);
-  const y = b.trim().toLowerCase().slice(0, 7);
+  // Older firmware printed an id that starts with 0 without it (0465550 as 465550), so short ids are padded back.
+  const fix = (v: string) => { const t = v.trim().toLowerCase().slice(0, 7); return /^[0-9a-f]{6}$/.test(t) ? '0' + t : t; };
+  const x = fix(a);
+  const y = fix(b);
   return x.length === 7 && x === y && /^[0-9a-f]{7}$/.test(x);
 }
 

@@ -18,7 +18,7 @@ import { deviceSupportsLive, deviceSupportsFlicker } from '../ble/protocol';
 import { startLiveSpectrum, startTorchBearerLive, startFlicker, captureFlickerOnce, readFlickerSettings, writeFlickerSetting, type LiveSession, type FlickerReading } from '../ble/liveSessions';
 import type { FlickerSettingsApi } from '../components/FlickerSettingsModal';
 import type { FlickerUploadApi } from '../components/FlickerChart';
-import { onBridgeConnectRequest, onBridgeDisconnectRequest, setBridgeConnectInfo } from '../ble/bridgeSim';
+import { onBridgeConnectRequest, onBridgeDisconnectRequest, setBridgeConnectInfo, simulatingName } from '../ble/bridgeSim';
 import { initializeMeter, takeMeasurement, EMPTY_READING_ERROR } from '../ble/takeMeasurement';
 import { CMD_STOP_SAMPLING } from '../ble/protocol';
 import { MeterResult } from '../ble/parseResult';
@@ -31,7 +31,7 @@ import { uploadReadingToHcri, uploadFlickerToHcri } from '../hcri/uploadFlickerT
 import { getReportLink } from '../hcri/getReportLink';
 import { fetchSampleReading } from '../hcri/fetchSampleReading';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
-import { loadAutoConnectPreference, loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference, loadTestReportIdPreference, loadMunkiCalHoursPreference, loadMunkiBridgeIds, saveMunkiBridgeId, loadSideTabPreference, saveSideTabPreference, loadSideTabModePreference, saveFoldableSeen } from '../storage/preferences';
+import { loadAutoConnectPreference, loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference, loadTestReportIdPreference, loadMunkiCalMinutesPreference, loadMunkiBridgeIds, saveMunkiBridgeId, loadSideTabPreference, saveSideTabPreference, loadSideTabModePreference, saveFoldableSeen } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
 import { addReading, loadHistory, recordUpload, renameReading, setReadingFlicker, updateReadingLed } from '../storage/readingHistory';
 import { addFlicker, updateFlicker } from '../storage/flickerHistory';
@@ -47,7 +47,7 @@ import { shareSingleReadingCsv } from '../utils/shareCsv';
 import { hapticSuccess, hapticFailure } from '../utils/haptics';
 import { hpcsModelName } from '../ble/meterLabel';
 import { getTkRunState, onTkRunState, requestTkUpload, toggleTkRun } from '../ble/tklamp';
-import { getMunkiCalHours, setMunkiCalHours, munkiButtonMode, TB_KIND_TORCH_BEARER, TB_KIND_COLORMUNKI, TB_KIND_TKLAMP, MUNKI_DIAL_CALIBRATION, type TbMeterStatus } from '../ble/torchBearer';
+import { getMunkiCalMinutes, setMunkiCalMinutes, munkiButtonMode, TB_KIND_TORCH_BEARER, TB_KIND_COLORMUNKI, TB_KIND_TKLAMP, MUNKI_DIAL_CALIBRATION, TB_STATE_ERROR, isTorchBearerName, type TbMeterStatus } from '../ble/torchBearer';
 import { enableKeepAwake, disableKeepAwake } from '../utils/keepAwake';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLayoutMode, isSquareWindow, sideColumnWidth, MIN_GRID_WIDTH } from '../layout';
@@ -859,6 +859,10 @@ export default function HomeScreen({ navigation }: any) {
     Alert.alert('Test reading', `This is a sample from a public hCRI.io report, so it can't be ${what}. Take a real reading to do that.`);
   }, []);
 
+  const blockSimAction = useCallback((what: string) => {
+    Alert.alert('Simulated reading', `This reading came from the bridge's simulator, so it can't be ${what}. Take a real reading to do that.`);
+  }, []);
+
   // Everything that happens to a finished reading: optional flicker snapshot, result card, auto-save to History.
   // Shared by the Measure button and by a reading taken with the button on the Torch Bearer itself.
   const acceptReading = useCallback(async (r0: MeterResult) => {
@@ -886,6 +890,7 @@ export default function HomeScreen({ navigation }: any) {
             `from spectrum CCT ${a.cct.toFixed(0)} K, Ra ${a.ra}, Duv ${a.duv.toFixed(5)}, x/y ${a.x.toFixed(4)}/${a.y.toFixed(4)}`
         );
       }
+      { const sn = simulatingName(); if (sn) r = { ...r, simulated: sn }; }
       setResult(r);
       // A fresh reading hasn't been uploaded yet -- clears any checkmark
       // left over from the PREVIOUS reading's upload, which would
@@ -910,6 +915,10 @@ export default function HomeScreen({ navigation }: any) {
       // (HistoryScreen.tsx) with its own copy of the saved list, loaded
       // fresh from storage on focus -- so this just persists the reading;
       // it doesn't need to update any local list here.
+      if (r.simulated) {
+        appendLog(`Simulated ${r.simulated} reading -- not saved to History`);
+        return;
+      }
       try {
         const creds = await loadHcriCredentials();
         const label = defaultLabel(creds?.username ?? null, r.deviceName);
@@ -941,7 +950,7 @@ export default function HomeScreen({ navigation }: any) {
     saveMunkiBridgeId(id, tbMeter.kind === TB_KIND_COLORMUNKI).then(setMunkiBridgeIds).catch(() => {});
   }, [tbMeter?.kind]);
   useEffect(() => {
-    loadMunkiCalHoursPreference().then((h) => { setMunkiCalHours(h); setCalClock(Date.now()); }).catch(() => {});
+    loadMunkiCalMinutesPreference().then((h) => { setMunkiCalMinutes(h); setCalClock(Date.now()); }).catch(() => {});
     const id = setInterval(() => setCalClock(Date.now()), 30000);
     return () => clearInterval(id);
   }, []);
@@ -956,11 +965,15 @@ export default function HomeScreen({ navigation }: any) {
   const measureGenRef = useRef(0);
   // Pulling the Main screen down takes a reading (the same as Take reading); it does nothing when a reading cannot start.
   const [pullReading, setPullReading] = useState(false);
+  // Main's scroll view is only there for the pull gesture: its content is given exactly the visible height so nothing scrolls or hides.
+  const [mainScrollH, setMainScrollH] = useState(0);
   const pullToReadRef = useRef<() => void>(() => {});
   const pullToRead = useCallback(() => pullToReadRef.current(), []);
 
   const measure = useCallback(async () => {
     if (!connRef.current) return;
+    // A bridge with no instrument (and no simulation) has nothing to read, whichever button asked.
+    if (connRef.current.isTorchBearer() && connRef.current.getTbMeterStatus()?.state === TB_STATE_ERROR) return;
     const gen = ++measureGenRef.current;
     const stale = () => gen !== measureGenRef.current;
     setLiveUnsaved(null);
@@ -1130,7 +1143,9 @@ export default function HomeScreen({ navigation }: any) {
     sessionRef.current = startLive(
       connRef.current,
       appendLog,
-      (r) => {
+      (r0) => {
+        const sn = simulatingName();
+        const r = sn ? { ...r0, simulated: sn } : r0;
         liveLastRef.current = r;
         setResult(r);
         setUploadSucceeded(false);
@@ -1161,7 +1176,7 @@ export default function HomeScreen({ navigation }: any) {
   };
 
   pullToReadRef.current = () => {
-    if (statusRef.current !== 'connected' || mode !== 'idle') return;
+    if (statusRef.current !== 'connected' || mode !== 'idle' || tbMeter?.state === TB_STATE_ERROR) return;   // a bridge with no instrument has nothing to read
     setPullReading(true);
     measure();
     setTimeout(() => setPullReading(false), 700);
@@ -1246,6 +1261,10 @@ export default function HomeScreen({ navigation }: any) {
   const saveLive = useCallback(async () => {
     const r = liveUnsaved;
     if (!r || savingLive) return;
+    if (r.simulated) {
+      blockSimAction('saved');
+      return;
+    }
     setSavingLive(true);
     try {
       const creds = await loadHcriCredentials();
@@ -1260,7 +1279,7 @@ export default function HomeScreen({ navigation }: any) {
     } finally {
       setSavingLive(false);
     }
-  }, [liveUnsaved, savingLive, appendLog]);
+  }, [liveUnsaved, savingLive, appendLog, blockSimAction]);
 
   const flickerUploadApi = useMemo<FlickerUploadApi>(
     () => ({
@@ -1607,6 +1626,10 @@ export default function HomeScreen({ navigation }: any) {
       blockSampleAction('uploaded');
       return;
     }
+    if (result.simulated) {
+      blockSimAction('uploaded');
+      return;
+    }
     // Tapping Upload is "I'm done editing the title" regardless of whether
     // the field still has focus -- the keyboard sitting there through the
     // whole upload (and the extra scroll padding it forces, see
@@ -1683,7 +1706,7 @@ export default function HomeScreen({ navigation }: any) {
       Alert.alert('Upload failed', `Could not upload "${label}". Check Logs for details.`);
     }
     setStatus('connected');
-  }, [result, navigation, appendLog, uploadTitle, currentReadingId, blockSampleAction, lastUploadedReport]);
+  }, [result, navigation, appendLog, uploadTitle, currentReadingId, blockSampleAction, blockSimAction, lastUploadedReport]);
 
   // Resolves the current lastUploadedReport into a link (see
   // getReportLink.ts) and puts it on the clipboard. Needs its own fresh
@@ -1728,11 +1751,15 @@ export default function HomeScreen({ navigation }: any) {
       blockSampleAction('shared');
       return;
     }
+    if (result.simulated) {
+      blockSimAction('shared');
+      return;
+    }
     // Same label the current reading would upload under, so "share" and
     // "upload" always agree on what this reading is called.
     const label = uploadTitle.trim() || defaultLabel(cachedUsername, result.deviceName);
     withBackgroundDisconnectSuppressed(() => shareSingleReadingCsv(result, label));
-  }, [result, uploadTitle, cachedUsername, blockSampleAction]);
+  }, [result, uploadTitle, cachedUsername, blockSampleAction, blockSimAction]);
 
   const shareLog = useCallback(() => {
     withBackgroundDisconnectSuppressed(() => shareDebugLog(log));
@@ -1744,13 +1771,17 @@ export default function HomeScreen({ navigation }: any) {
   const [tkRun, setTkRun] = useState(getTkRunState());
   useEffect(() => onTkRunState(setTkRun), []);
   const munkiMain: { override?: { caption: string; tint?: string; disabled?: boolean; icon?: 'play' | 'stop'; onPress?: () => void }; note?: string } = (() => {
+    // Connected to a bridge that has no instrument behind it (and no simulation on): nothing to read.
+    if (tbMeter?.state === TB_STATE_ERROR && (status === 'connected' || status === 'uploading')) {
+      return { override: { caption: 'No instrument', disabled: true }, note: 'The bridge has no instrument plugged in. Plug one in, or pick one under Settings > Simulate bridge instrument.' };
+    }
     if (tbMeter?.kind === TB_KIND_TKLAMP && (status === 'connected' || status === 'uploading')) {
       if (tkRun.recording) return { override: { caption: 'Stop run', tint: '#D64545', icon: 'stop', onPress: toggleTkRun } };
       if (tkRun.armed) return { override: { caption: 'Cancel', tint: '#D64545', icon: 'stop', onPress: toggleTkRun } };
       return { override: { caption: 'Start run', disabled: !tkRun.canRecord, onPress: toggleTkRun } };
     }
     if (!tbMeter || tbMeter.kind !== TB_KIND_COLORMUNKI || (status !== 'connected' && status !== 'uploading')) return {};
-    const mode = munkiButtonMode(tbMeter, getMunkiCalHours(), calClock);
+    const mode = munkiButtonMode(tbMeter, getMunkiCalMinutes(), calClock);
     if (mode.kind === 'calibrate') return { override: { caption: 'Calibrate', tint: '#E8922E' }, note: 'Dial is on calibration: press Calibrate, keep the instrument still.' };
     if (mode.kind === 'blocked') return { override: { caption: mode.caption, disabled: true }, note: mode.note };
     return {};
@@ -1765,8 +1796,9 @@ export default function HomeScreen({ navigation }: any) {
         ? { title: 'Calibrating…', body: 'Keep the dial on Calibration and the meter still.', busy: true }
         : { title: 'Measuring…', body: 'Dim light can take 10–15 s. Keep the meter still.', busy: true };
     }
+    if (tbMeter?.state === TB_STATE_ERROR) return { title: 'No instrument', body: 'The bridge is connected, but nothing is plugged into it. Plug one in, or pick one under Settings > Simulate bridge instrument.' };
     if (tbMeter && tbMeter.kind === TB_KIND_COLORMUNKI) {
-      const mode = munkiButtonMode(tbMeter, getMunkiCalHours(), calClock);
+      const mode = munkiButtonMode(tbMeter, getMunkiCalMinutes(), calClock);
       if (mode.kind === 'calibrate') {
         return tbMeter.calibrated
           ? { title: 'Calibrated', body: 'Turn the dial to Ambient and tap Take reading.' }
@@ -1919,7 +1951,8 @@ export default function HomeScreen({ navigation }: any) {
       <View style={styles.mainArea}>
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={{ flexGrow: 1 }}
+          onLayout={(e) => setMainScrollH(Math.floor(e.nativeEvent.layout.height))}
+          contentContainerStyle={mainScrollH > 0 ? { height: mainScrollH } : { flexGrow: 1 }}
           alwaysBounceVertical
           keyboardShouldPersistTaps="handled"
           refreshControl={<RefreshControl refreshing={pullReading} onRefresh={pullToRead} tintColor={colors.accent} colors={[colors.accent]} />}
@@ -1955,7 +1988,7 @@ export default function HomeScreen({ navigation }: any) {
             copyingLink={copyingLink}
             onCopyLink={copyReportLink}
             statIds={statIds}
-            connectedDeviceName={tbMeter ? (tbMeter.kind === TB_KIND_COLORMUNKI ? 'ColorMunki' : tbMeter.kind === TB_KIND_TKLAMP ? 'TKLamp' : 'Torch Bearer') : hpcsModelName(deviceName)}
+            connectedDeviceName={tbMeter ? (tbMeter.state === TB_STATE_ERROR ? 'Bridge' : tbMeter.kind === TB_KIND_COLORMUNKI ? 'ColorMunki' : tbMeter.kind === TB_KIND_TKLAMP ? 'TKLamp' : 'Torch Bearer') : isTorchBearerName(deviceName) ? 'Bridge' : hpcsModelName(deviceName)}
             connectedDeviceId={status === 'connected' || status === 'measuring' ? connRef.current?.getDeviceId() ?? null : null}
             battery={battery}
             uploadTitle={uploadTitle}
@@ -1997,7 +2030,8 @@ export default function HomeScreen({ navigation }: any) {
       {activeTab === 'main' && (
         <ActionBar
           status={status}
-          hasReading={!!(result && analysis)}
+          // A TKLamp tester has no spectrum: an earlier spectrum reading must not offer TM-30 / Photo while its runs are on screen.
+          hasReading={!!(result && analysis) && !(tbMeter?.kind === TB_KIND_TKLAMP && (status === 'connected' || status === 'uploading'))}
           isSample={!!result?.sampleLabel}
           connect={() => connect({ promptIfBluetoothOff: true })}
           measure={measure}
@@ -2017,14 +2051,14 @@ export default function HomeScreen({ navigation }: any) {
           onCopyLink={copyReportLink}
           onResetConnection={resetConnection}
           onCancelConnect={cancelConnect}
-          liveSupported={deviceSupportsLive(deviceName) || (tbMeter?.kind === TB_KIND_TORCH_BEARER && (status === 'connected' || status === 'uploading' || status === 'measuring'))}
+          liveSupported={deviceSupportsLive(deviceName) || (tbMeter?.kind === TB_KIND_TORCH_BEARER && tbMeter.state !== TB_STATE_ERROR && (status === 'connected' || status === 'uploading' || status === 'measuring'))}
           // The landscape dashboard already shows the flicker chart, so it needs no Flicker button.
           flickerSupported={!gridCharts && deviceSupportsFlicker(deviceName) && mode !== 'live'}
           sampleHasFlicker={!gridCharts && !!(result?.sampleLabel && result.flicker)}
           activeMode={mode}
           onToggleLive={toggleLive}
           onToggleFlicker={() => setFlickerFocus((n) => n + 1)}
-          canSaveLive={!!liveUnsaved}
+          canSaveLive={!!liveUnsaved && !liveUnsaved.simulated}
           savingLive={savingLive}
           onShowTm30={() => {
             if (!result || !analysis) return;

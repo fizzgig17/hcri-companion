@@ -47,7 +47,7 @@ export async function addRuntime(r: Omit<SavedRuntime, 'id' | 'savedAt'>): Promi
   return entry;
 }
 
-export async function updateRuntime(id: string, patch: Partial<Pick<SavedRuntime, 'label' | 'uploaded'>>): Promise<void> {
+export async function updateRuntime(id: string, patch: Partial<Pick<SavedRuntime, 'label' | 'uploaded' | 'intervalSeconds' | 'values'>>): Promise<void> {
   const list = await loadRuntimes();
   await saveAll(list.map((r) => (r.id === id ? { ...r, ...patch } : r)));
 }
