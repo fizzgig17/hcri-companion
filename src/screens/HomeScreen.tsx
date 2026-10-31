@@ -2030,7 +2030,8 @@ export default function HomeScreen({ navigation }: any) {
       {activeTab === 'main' && (
         <ActionBar
           status={status}
-          hasReading={!!(result && analysis)}
+          // A TKLamp tester has no spectrum: an earlier spectrum reading must not offer TM-30 / Photo while its runs are on screen.
+          hasReading={!!(result && analysis) && !(tbMeter?.kind === TB_KIND_TKLAMP && (status === 'connected' || status === 'uploading'))}
           isSample={!!result?.sampleLabel}
           connect={() => connect({ promptIfBluetoothOff: true })}
           measure={measure}

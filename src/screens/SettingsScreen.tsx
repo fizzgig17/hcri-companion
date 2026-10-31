@@ -1287,28 +1287,28 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
       </Modal>
     </>
   );
-  const settingsRight = (
-      <View style={styles.statsSection}>
-        <View style={styles.statsHeaderRow}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-            <Text style={styles.statsTitle}>Main Screen Measurements</Text>
-            {helpButton('Main Screen Measurements', 'Check which measurements show on the Main tab after a reading. Hold the dotted handle and drag a row to reorder it.')}
-          </View>
-          <TouchableOpacity onPress={resetStatsToDefault}>
-            <Text style={styles.statsResetLink}>Reset to Default</Text>
-          </TouchableOpacity>
+  const settingsRight = section('measurements', 'Main screen measurements', 'Which numbers show, and their order', (
+    <View style={styles.statsSection}>
+      <View style={styles.statsHeaderRow}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+          <Text style={styles.statsTitle}>Check to show, drag to reorder</Text>
+          {helpButton('Main Screen Measurements', 'Check which measurements show on the Main tab after a reading. Hold the dotted handle and drag a row to reorder it.')}
         </View>
-        <View style={{ height: 14 }} />
-        <DraggableStatList
-          order={statPrefs.order}
-          enabled={statPrefs.enabled}
-          labelFor={(id) => STAT_METRIC_BY_ID[id]?.label ?? id}
-          onReorder={handleReorder}
-          onToggle={handleToggleStat}
-          onDragActiveChange={setDraggingStat}
-        />
+        <TouchableOpacity onPress={resetStatsToDefault}>
+          <Text style={styles.statsResetLink}>Reset to Default</Text>
+        </TouchableOpacity>
       </View>
-  );
+      <View style={{ height: 14 }} />
+      <DraggableStatList
+        order={statPrefs.order}
+        enabled={statPrefs.enabled}
+        labelFor={(id) => STAT_METRIC_BY_ID[id]?.label ?? id}
+        onReorder={handleReorder}
+        onToggle={handleToggleStat}
+        onDragActiveChange={setDraggingStat}
+      />
+    </View>
+  ));
 
   return (
     <SafeAreaView style={styles.container} edges={panel ? [] : IS_DEV_BUILD ? ['left', 'right'] : ['top', 'left', 'right']}>
