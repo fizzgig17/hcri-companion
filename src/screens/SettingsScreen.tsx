@@ -77,12 +77,14 @@ import {
   saveTkWindowPreference,
   loadTkTrimPreference,
   saveTkTrimPreference,
+  loadTkTrimPeakPreference,
+  saveTkTrimPeakPreference,
 } from '../storage/preferences';
 import { setTbCorrectionEnabled } from '../ble/tbCorrection';
 import { setTbFlip } from '../ble/tbDisplay';
 import { BRIDGE_SIM_OPTIONS, BRIDGE_SIM_BUTTON_ROLES, BridgeSimKind, BridgeButtonEvent, setBridgeSim, getBridgeSim, isBridgeLinked, getBridgeConnectInfo, onBridgeSimState, requestBridgeConnect, requestBridgeDisconnect, getLastBridgeButton, onBridgeButton, bridgeButtonText } from '../ble/bridgeSim';
 import { setMunkiCalHours } from '../ble/torchBearer';
-import { TK_RAW_PER_LM_DEFAULT, getTkRawPerLm, getTkTrim, getTkWindowS, setTkRawPerLm, setTkTrim, setTkWindowS } from '../ble/tklamp';
+import { TK_RAW_PER_LM_DEFAULT, getTkRawPerLm, getTkTrim, getTkTrimPeak, getTkWindowS, setTkRawPerLm, setTkTrim, setTkTrimPeak, setTkWindowS } from '../ble/tklamp';
 import {
   StatDisplayPrefs,
   loadStatDisplayPrefs,
@@ -181,6 +183,9 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   const [tkTrim, setTkTrimState] = useState(getTkTrim());
   useEffect(() => { loadTkTrimPreference().then((v) => { setTkTrim(v); setTkTrimState(v); }); }, []);
   const toggleTkTrim = async (v: boolean) => { setTkTrimState(v); setTkTrim(v); await saveTkTrimPreference(v); };
+  const [tkTrimPeak, setTkTrimPeakState] = useState(getTkTrimPeak());
+  useEffect(() => { loadTkTrimPeakPreference().then((v) => { setTkTrimPeak(v); setTkTrimPeakState(v); }); }, []);
+  const toggleTkTrimPeak = async (v: boolean) => { setTkTrimPeakState(v); setTkTrimPeak(v); await saveTkTrimPeakPreference(v); };
   const [tkWindow, setTkWindow] = useState(String(getTkWindowS()));
   const [help, setHelp] = useState<{ title: string; text: string } | null>(null);
   const [flickerWithReading, setFlickerWithReading] = useState(false);
@@ -1091,6 +1096,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
       )}
 
       {switchRow('Trim the dark start of a run', 'On by default. When you stop a TKLamp run, the near-dark readings before the light came on are dropped (everything before the output first reaches 2 percent of the run\'s peak, keeping one second of lead-in), so the saved and uploaded curve starts when the light does. Turn off to keep every reading from the moment you tapped Start run.', tkTrim, toggleTkTrim)}
+      {switchRow('Start a run at its peak', 'On by default. When you stop a TKLamp run, everything before the highest reading is dropped, so the saved and uploaded curve starts at the peak of the output. It is applied after the dark-start trim above. Turn off to keep the readings from before the peak.', tkTrimPeak, toggleTkTrimPeak)}
 
       {sectionHeader('Readings')}
       {switchRow('LED suggestions', "On by default. After a reading, hCRI.io suggests the LED (brand, model and CCT) from the shape of the spectrum and the reading's title, and you confirm it with one tap. Turn off to stop those requests and hide the suggestion cards. You can still add LED details yourself with the LED button.", ledSuggestions, toggleLedSuggestions)}

@@ -1,4 +1,4 @@
-import { trimLeading, parseTkSample, TkSmoother, TkRecorder, resampleRun, tkLumens, TK_RAW_PER_LM_DEFAULT, defaultRunLabel } from '../src/ble/tklamp';
+import { trimLeading, trimToPeak, parseTkSample, TkSmoother, TkRecorder, resampleRun, tkLumens, TK_RAW_PER_LM_DEFAULT, defaultRunLabel } from '../src/ble/tklamp';
 
 const pkt = (ms: number, raw: number) => {
   const b = new Uint8Array(9);
@@ -94,5 +94,20 @@ describe('trimLeading', () => {
   it('leaves an all-dark run alone', () => {
     const p = pts([0, 0, 0]);
     expect(trimLeading(p)).toBe(p);
+  });
+});
+
+describe('trimToPeak', () => {
+  const pts = (v: number[]) => v.map((lm, i) => ({ t: i, lm }));
+  it('starts the run at the highest reading and rebases time', () => {
+    const out = trimToPeak(pts([0, 5, 100, 90, 80]));
+    expect(out.map((p) => p.lm)).toEqual([100, 90, 80]);
+    expect(out[0].t).toBe(0);
+  });
+  it('leaves a run that already starts at its peak, or peaks at the very end, alone', () => {
+    const a = pts([9, 8, 7]);
+    const b = pts([1, 2, 3]);
+    expect(trimToPeak(a)).toBe(a);
+    expect(trimToPeak(b)).toBe(b);
   });
 });

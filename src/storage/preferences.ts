@@ -340,6 +340,20 @@ export async function saveTkTrimPreference(v: boolean): Promise<void> {
   await AsyncStorage.setItem(TK_TRIM_KEY, v ? 'true' : 'false');
 }
 
+const TK_TRIM_PEAK_KEY = 'hcri.io.pref.tklampTrimToPeak';
+
+export async function loadTkTrimPeakPreference(): Promise<boolean> {
+  try {
+    return (await AsyncStorage.getItem(TK_TRIM_PEAK_KEY)) !== 'false';
+  } catch {
+    return true;
+  }
+}
+
+export async function saveTkTrimPeakPreference(v: boolean): Promise<void> {
+  await AsyncStorage.setItem(TK_TRIM_PEAK_KEY, v ? 'true' : 'false');
+}
+
 // TKLamp run limits: start level, stop level, time limit and the no-readings timeout (see ble/tklamp.ts TkLimits).
 const TK_LIMITS_KEY = 'hcri.io.pref.tklampLimits';
 
