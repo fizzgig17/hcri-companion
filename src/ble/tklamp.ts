@@ -197,6 +197,35 @@ export function trimToPeak(points: TkPoint[]): TkPoint[] {
   return points.slice(best).map((p) => ({ t: p.t - t0, lm: p.lm }));
 }
 
+/** Starts the run at `startT` seconds (a point the person chose): drops everything before it and shifts times so it starts at 0. */
+export function trimFrom(points: TkPoint[], startT: number): TkPoint[] {
+  const kept = points.filter((p) => p.t >= startT);
+  if (kept.length < 2) return points;
+  const t0 = kept[0].t;
+  return kept.map((p) => ({ t: p.t - t0, lm: p.lm }));
+}
+
+/** Where (seconds into the raw recording) the Settings start option puts the start of the run. */
+export function optionStartT(points: TkPoint[]): number {
+  const trimmed = trimmedRunPoints(points);
+  return points.length && trimmed.length <= points.length ? points[points.length - trimmed.length].t : 0;
+}
+
+/** Output at `t` seconds, interpolated between the two readings around it. */
+export function lmAtT(points: TkPoint[], t: number): number {
+  if (!points.length) return 0;
+  if (t <= points[0].t) return points[0].lm;
+  const last = points[points.length - 1];
+  if (t >= last.t) return last.lm;
+  let lo = 0, hi = points.length - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (points[mid].t <= t) lo = mid; else hi = mid;
+  }
+  const a = points[lo], b = points[hi];
+  return b.t === a.t ? a.lm : a.lm + ((b.lm - a.lm) * (t - a.t)) / (b.t - a.t);
+}
+
 // Settings > TKLamp tester > "Start a run at its peak" (off by default; it replaces "Start at the first reading").
 let trimPeakOn = false;
 export function getTkTrimPeak(): boolean { return trimPeakOn; }

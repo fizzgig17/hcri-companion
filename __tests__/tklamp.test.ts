@@ -1,4 +1,4 @@
-import { trimLeading, trimToPeak, trimmedRunPoints, setTkTrim, setTkTrimPeak, parseTkSample, TkSmoother, TkRecorder, resampleRun, tkLumens, TK_RAW_PER_LM_DEFAULT, defaultRunLabel } from '../src/ble/tklamp';
+import { trimLeading, trimToPeak, trimFrom, optionStartT, lmAtT, trimmedRunPoints, setTkTrim, setTkTrimPeak, parseTkSample, TkSmoother, TkRecorder, resampleRun, tkLumens, TK_RAW_PER_LM_DEFAULT, defaultRunLabel } from '../src/ble/tklamp';
 
 const pkt = (ms: number, raw: number) => {
   const b = new Uint8Array(9);
@@ -126,5 +126,31 @@ describe('trimmedRunPoints', () => {
     setTkTrimPeak(true);
     expect(trimmedRunPoints(pts([0, 500, 1000, 950])).map((p) => p.lm)).toEqual([1000, 950]);
     setTkTrimPeak(false);
+  });
+});
+
+describe('chosen start (draggable line)', () => {
+  const raw = [0, 1, 2, 3, 4, 5].map((t, i) => ({ t, lm: [0, 0, 400, 900, 850, 800][i] }));
+  it('trimFrom drops everything before the chosen second and shifts the times', () => {
+    const out = trimFrom(raw, 3);
+    expect(out.map((p) => p.t)).toEqual([0, 1, 2]);
+    expect(out[0].lm).toBe(900);
+  });
+  it('trimFrom leaves the run alone when too little would be left', () => {
+    expect(trimFrom(raw, 5)).toBe(raw);
+  });
+  it('optionStartT says where the Settings option cuts', () => {
+    setTkTrimPeak(false);
+    setTkTrim(true);
+    expect(optionStartT(raw)).toBe(2);
+    setTkTrimPeak(true);
+    expect(optionStartT(raw)).toBe(3);
+    setTkTrimPeak(false);
+    setTkTrim(true);
+  });
+  it('lmAtT interpolates between readings and clamps at the ends', () => {
+    expect(lmAtT(raw, 2.5)).toBe(650);
+    expect(lmAtT(raw, -1)).toBe(0);
+    expect(lmAtT(raw, 99)).toBe(800);
   });
 });

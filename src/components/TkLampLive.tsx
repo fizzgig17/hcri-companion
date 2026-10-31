@@ -10,7 +10,7 @@ import { View, Text, TextInput, Alert, Modal, ScrollView, TouchableOpacity, Styl
 import RuntimeChart from './RuntimeChart';
 import { useTheme } from '../contexts/ThemeContext';
 import type { MeterConnection } from '../ble/MeterConnection';
-import { TK_LIMITS_DEFAULT, TK_RAW_PER_LM_DEFAULT, TK_STOP_BELOW_HOLD_S, TkRecorder, TkRunGuard, TkSmoother, defaultRunLabel, getTkLimits, getTkRawPerLm, getTkWindowS, onTkRawPerLm, onTkRunToggle, onTkUploadRequest, onTkWindowS, parseTkLimit, setTkLimits, setTkRunState, setTkTrim, setTkTrimPeak, setTkWindowS, trimmedRunPoints, resampleRun, scaleFromLamp, setTkRawPerLm, tkLumens, type TkLimits, type TkSample } from '../ble/tklamp';
+import { TK_LIMITS_DEFAULT, TK_RAW_PER_LM_DEFAULT, TK_STOP_BELOW_HOLD_S, TkRecorder, TkRunGuard, TkSmoother, defaultRunLabel, getTkLimits, getTkRawPerLm, getTkWindowS, onTkRawPerLm, onTkRunToggle, onTkUploadRequest, onTkWindowS, parseTkLimit, setTkLimits, setTkRunState, setTkTrim, setTkTrimPeak, setTkWindowS, trimmedRunPoints, resampleRun, trimFrom, optionStartT, lmAtT, scaleFromLamp, setTkRawPerLm, tkLumens, type TkLimits, type TkSample } from '../ble/tklamp';
 import { addRuntime, updateRuntime } from '../storage/runtimeHistory';
 import { loadHcriCredentials } from '../storage/secureStorage';
 import { loadTkLimitsPreference, loadTkScalePreference, loadTkTrimPreference, loadTkTrimPeakPreference, loadTkWindowPreference, saveTkLimitsPreference, saveTkScalePreference } from '../storage/preferences';
@@ -60,6 +60,15 @@ export default function TkLampLive({ conn }: Props) {
   const [windowS, setWindowS] = useState(getTkWindowS());
   const [calOpen, setCalOpen] = useState(false);
   const [armed, setArmed] = useState(false);              // waiting for the light to reach the start level
+  // "Choose start": drag a line on the finished run to say where it begins (instead of the Settings start options).
+  const [adjusting, setAdjusting] = useState(false);
+  const [startT, setStartT] = useState<number | null>(null);   // seconds into the raw recording; null = the Settings option decides
+  const [cursorT, setCursorT] = useState(0);
+  const [glow, setGlow] = useState(true);                       // the line pulses until it has been dragged once
+  const runPoints = () => {
+    const raw = recorder.current.points();
+    return startT != null ? trimFrom(raw, startT) : trimmedRunPoints(raw);
+  };
   const [limits, setLimitsState] = useState<TkLimits>(getTkLimits());
   const [drafts, setDrafts] = useState(() => limitDrafts(getTkLimits()));
 
@@ -207,6 +216,8 @@ export default function TkLampLive({ conn }: Props) {
     recordingRef.current = true;
     setRecording(true);
     setFinished(false);
+    setAdjusting(false);
+    setStartT(null);
     setUploadedNow(false);
     setRecSeconds(0);
     setRecCount(0);
@@ -235,12 +246,34 @@ export default function TkLampLive({ conn }: Props) {
         .catch(() => setNote('The run could not be saved on this phone.'));
     }
   };
+  const startAdjusting = () => {
+    const raw = recorder.current.points();
+    if (raw.length < 2) return;
+    setCursorT(startT ?? optionStartT(raw));
+    setGlow(true);
+    setAdjusting(true);
+  };
+  const doneAdjusting = () => {
+    const raw = recorder.current.points();
+    const chosen = Math.min(cursorT, raw.length ? raw[raw.length - 1].t : 0);
+    const kept = trimFrom(raw, chosen);
+    setAdjusting(false);
+    if (kept.length < 2) {
+      setNote('That start leaves too little of the run. Pick an earlier point.');
+      return;
+    }
+    setStartT(chosen);
+    setNote(null);
+    // The copy kept on the phone (History > Runtime) follows the chosen start too.
+    const r = resampleRun(kept);
+    if (r && savedId.current) updateRuntime(savedId.current, { intervalSeconds: r.intervalSeconds, values: r.values }).catch(() => {});
+  };
   const upload = async () => {
     if (simulatingName()) {
       setNote("This is a simulated run, so it can't be uploaded.");
       return;
     }
-    const r = resampleRun(trimmedRunPoints(recorder.current.points()));
+    const r = resampleRun(runPoints());
     if (!r) {
       setNote('The recording is too short to upload.');
       return;
@@ -266,6 +299,8 @@ export default function TkLampLive({ conn }: Props) {
         if (savedId.current) await updateRuntime(savedId.current, { label: label.trim() || defaultRunLabel(), uploaded: true }).catch(() => {});
         savedId.current = null;
         setFinished(false);
+        setAdjusting(false);
+        setStartT(null);
         setUploadedNow(true);
         recorder.current.reset();
         Alert.alert('Uploaded', `${label.trim() || 'Run'} is in your Runtime list on hCRI.io (Explore > Runtime).`);
@@ -321,6 +356,13 @@ export default function TkLampLive({ conn }: Props) {
     limitsTitle: { color: colors.text, fontSize: 13, fontWeight: '700', marginBottom: 2 },
     limitRow: { flexDirection: 'row', marginTop: 8 },
     limitCell: { flex: 1, marginRight: 8 },
+    adjustHint: { color: '#d92b2b', fontSize: 13, fontWeight: '600', textAlign: 'center', marginTop: 8 },
+    adjustRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 10 },
+    adjustBtn: { borderWidth: 1, borderColor: colors.cardBorder, borderRadius: 18, paddingHorizontal: 18, paddingVertical: 8, marginHorizontal: 6 },
+    adjustBtnMain: { backgroundColor: colors.accent, borderColor: colors.accent },
+    adjustBtnText: { color: colors.text, fontSize: 14, fontWeight: '600' },
+    chooseBtn: { alignSelf: 'center', borderWidth: 1, borderColor: '#d92b2b', borderRadius: 18, paddingHorizontal: 16, paddingVertical: 8, marginTop: 10 },
+    chooseBtnText: { color: '#d92b2b', fontSize: 13, fontWeight: '700' },
     wait: { color: colors.accent, fontSize: 14, fontWeight: '600', textAlign: 'center', marginTop: 10 },
   });
 
@@ -336,9 +378,33 @@ export default function TkLampLive({ conn }: Props) {
       {stale && <Text style={styles.stale}>No readings for 5 s. Is the tester still on and connected?</Text>}
 
       <View style={styles.chartBox}>
-        <RuntimeChart points={trace} windowS={windowS} follow />
+        {adjusting ? (
+          <RuntimeChart
+            points={recorder.current.points()}
+            windowS={0}
+            cursor={{ t: cursorT, glow }}
+            onCursorChange={(v) => { setCursorT(v); setGlow(false); }}
+            readoutAt={(v) => `${v.toFixed(1)} s · ${(() => { const x = lmAtT(recorder.current.points(), v); return x >= 100 ? x.toFixed(0) : x.toFixed(1); })()} lm`}
+          />
+        ) : (
+          <RuntimeChart points={trace} windowS={windowS} follow />
+        )}
       </View>
-      <Text style={styles.small}>Scale 0–top in lumens, {windowS >= 60 ? `${Math.round(windowS / 60 * 10) / 10} min` : `${windowS} s`} across the screen. Swipe the chart to look back.</Text>
+      {adjusting ? (
+        <View>
+          <Text style={styles.adjustHint}>Drag the glowing red line to where the run should start. Everything before it is left out.</Text>
+          <View style={styles.adjustRow}>
+            <TouchableOpacity style={styles.adjustBtn} onPress={() => { setCursorT(optionStartT(recorder.current.points())); setStartT(null); setGlow(true); }} accessibilityRole="button" accessibilityLabel="Put the start line back where the Settings start option puts it">
+              <Text style={styles.adjustBtnText}>Use default</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.adjustBtn, styles.adjustBtnMain]} onPress={doneAdjusting} accessibilityRole="button" accessibilityLabel="Keep this start">
+              <Text style={[styles.adjustBtnText, { color: '#fff' }]}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <Text style={styles.small}>Scale 0–top in lumens, {windowS >= 60 ? `${Math.round(windowS / 60 * 10) / 10} min` : `${windowS} s`} across the screen. Swipe the chart to look back.</Text>
+      )}
 
       {!recording && !finished && lm != null && <Text style={styles.small}>Press Start run below to record.</Text>}
       {recording && <Text style={styles.rec}>● Recording {fmtDur(recSeconds)} ({recCount} readings)</Text>}
@@ -349,6 +415,11 @@ export default function TkLampLive({ conn }: Props) {
           <Text style={styles.fieldLabel}>Name on hCRI.io (same name replaces an earlier run)</Text>
           <TextInput style={styles.input} value={label} onChangeText={setLabel} autoCapitalize="none" autoCorrect={false} maxLength={160} />
           <Text style={styles.small}>{fmtDur(recSeconds)} recorded, {recCount} readings. Tap Upload run below to send it to hCRI.io.</Text>
+          {!adjusting && (
+            <TouchableOpacity style={styles.chooseBtn} onPress={startAdjusting} accessibilityRole="button" accessibilityLabel="Choose where the run starts">
+              <Text style={styles.chooseBtnText}>{startT != null ? `Start: ${startT.toFixed(1)} s (chosen). Change` : 'Choose where the run starts'}</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
       {note && <Text style={styles.note}>{note}</Text>}
