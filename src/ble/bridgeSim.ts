@@ -27,7 +27,7 @@ export const BRIDGE_RESET_CMD_B64 = Buffer.from([0x08]).toString('base64');
 export const BRIDGE_SIM_BUTTON_ROLES: Record<Exclude<BridgeSimKind, 0>, { top: string; bottom: string }> = {
   1: { top: 'Read (one reading)', bottom: 'Live (simulated)' },
   2: { top: 'Turn the dial', bottom: 'Calibrate / measure' },
-  3: { top: 'Previous light level', bottom: 'Next light level' },
+  3: { top: 'Start / stop run', bottom: 'Next light level' },
 };
 
 /** Command 07 <kind>, base64, ready for the bridge's command characteristic. */

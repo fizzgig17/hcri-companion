@@ -36,7 +36,7 @@ import {
   otaPayloadSize, releaseAssetNames, releaseTag, releaseDownloadUrl, parseSums, parseImageInfo, sameCommit, sha256, toHexString,
   boardLabel, type OtaEvent, type BridgeInfo,
 } from './bridgeFirmware';
-import { parseTkSample, type TkSample } from './tklamp';
+import { parseTkSample, toggleTkRun, type TkSample } from './tklamp';
 import type { MeterResult } from './parseResult';
 import {
   saveLastDeviceId,
@@ -721,6 +721,8 @@ export class MeterConnection {
           if (be) {
             this.log(`Bridge: ${bridgeButtonText(be, getBridgeSim())}`);
             emitBridgeButton(be);
+            // TKLamp simulation: the top button is the run's Start / Stop (same as the Start run button in the bottom bar).
+            if (getBridgeSim() === 3 && be.button === 'top' && !be.pressed) toggleTkRun();
           }
           return;
         }
