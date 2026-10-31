@@ -18,7 +18,7 @@ import { deviceSupportsLive, deviceSupportsFlicker } from '../ble/protocol';
 import { startLiveSpectrum, startTorchBearerLive, startFlicker, captureFlickerOnce, readFlickerSettings, writeFlickerSetting, type LiveSession, type FlickerReading } from '../ble/liveSessions';
 import type { FlickerSettingsApi } from '../components/FlickerSettingsModal';
 import type { FlickerUploadApi } from '../components/FlickerChart';
-import { onBridgeConnectRequest, onBridgeDisconnectRequest, setBridgeConnectInfo } from '../ble/bridgeSim';
+import { onBridgeConnectRequest, onBridgeDisconnectRequest, setBridgeConnectInfo, simulatingName } from '../ble/bridgeSim';
 import { initializeMeter, takeMeasurement, EMPTY_READING_ERROR } from '../ble/takeMeasurement';
 import { CMD_STOP_SAMPLING } from '../ble/protocol';
 import { MeterResult } from '../ble/parseResult';
@@ -859,6 +859,10 @@ export default function HomeScreen({ navigation }: any) {
     Alert.alert('Test reading', `This is a sample from a public hCRI.io report, so it can't be ${what}. Take a real reading to do that.`);
   }, []);
 
+  const blockSimAction = useCallback((what: string) => {
+    Alert.alert('Simulated reading', `This reading came from the bridge's simulator, so it can't be ${what}. Take a real reading to do that.`);
+  }, []);
+
   // Everything that happens to a finished reading: optional flicker snapshot, result card, auto-save to History.
   // Shared by the Measure button and by a reading taken with the button on the Torch Bearer itself.
   const acceptReading = useCallback(async (r0: MeterResult) => {
@@ -886,6 +890,7 @@ export default function HomeScreen({ navigation }: any) {
             `from spectrum CCT ${a.cct.toFixed(0)} K, Ra ${a.ra}, Duv ${a.duv.toFixed(5)}, x/y ${a.x.toFixed(4)}/${a.y.toFixed(4)}`
         );
       }
+      { const sn = simulatingName(); if (sn) r = { ...r, simulated: sn }; }
       setResult(r);
       // A fresh reading hasn't been uploaded yet -- clears any checkmark
       // left over from the PREVIOUS reading's upload, which would
@@ -910,6 +915,10 @@ export default function HomeScreen({ navigation }: any) {
       // (HistoryScreen.tsx) with its own copy of the saved list, loaded
       // fresh from storage on focus -- so this just persists the reading;
       // it doesn't need to update any local list here.
+      if (r.simulated) {
+        appendLog(`Simulated ${r.simulated} reading -- not saved to History`);
+        return;
+      }
       try {
         const creds = await loadHcriCredentials();
         const label = defaultLabel(creds?.username ?? null, r.deviceName);
@@ -1130,7 +1139,9 @@ export default function HomeScreen({ navigation }: any) {
     sessionRef.current = startLive(
       connRef.current,
       appendLog,
-      (r) => {
+      (r0) => {
+        const sn = simulatingName();
+        const r = sn ? { ...r0, simulated: sn } : r0;
         liveLastRef.current = r;
         setResult(r);
         setUploadSucceeded(false);
@@ -1246,6 +1257,10 @@ export default function HomeScreen({ navigation }: any) {
   const saveLive = useCallback(async () => {
     const r = liveUnsaved;
     if (!r || savingLive) return;
+    if (r.simulated) {
+      blockSimAction('saved');
+      return;
+    }
     setSavingLive(true);
     try {
       const creds = await loadHcriCredentials();
@@ -1260,7 +1275,7 @@ export default function HomeScreen({ navigation }: any) {
     } finally {
       setSavingLive(false);
     }
-  }, [liveUnsaved, savingLive, appendLog]);
+  }, [liveUnsaved, savingLive, appendLog, blockSimAction]);
 
   const flickerUploadApi = useMemo<FlickerUploadApi>(
     () => ({
@@ -1607,6 +1622,10 @@ export default function HomeScreen({ navigation }: any) {
       blockSampleAction('uploaded');
       return;
     }
+    if (result.simulated) {
+      blockSimAction('uploaded');
+      return;
+    }
     // Tapping Upload is "I'm done editing the title" regardless of whether
     // the field still has focus -- the keyboard sitting there through the
     // whole upload (and the extra scroll padding it forces, see
@@ -1683,7 +1702,7 @@ export default function HomeScreen({ navigation }: any) {
       Alert.alert('Upload failed', `Could not upload "${label}". Check Logs for details.`);
     }
     setStatus('connected');
-  }, [result, navigation, appendLog, uploadTitle, currentReadingId, blockSampleAction, lastUploadedReport]);
+  }, [result, navigation, appendLog, uploadTitle, currentReadingId, blockSampleAction, blockSimAction, lastUploadedReport]);
 
   // Resolves the current lastUploadedReport into a link (see
   // getReportLink.ts) and puts it on the clipboard. Needs its own fresh
@@ -1728,11 +1747,15 @@ export default function HomeScreen({ navigation }: any) {
       blockSampleAction('shared');
       return;
     }
+    if (result.simulated) {
+      blockSimAction('shared');
+      return;
+    }
     // Same label the current reading would upload under, so "share" and
     // "upload" always agree on what this reading is called.
     const label = uploadTitle.trim() || defaultLabel(cachedUsername, result.deviceName);
     withBackgroundDisconnectSuppressed(() => shareSingleReadingCsv(result, label));
-  }, [result, uploadTitle, cachedUsername, blockSampleAction]);
+  }, [result, uploadTitle, cachedUsername, blockSampleAction, blockSimAction]);
 
   const shareLog = useCallback(() => {
     withBackgroundDisconnectSuppressed(() => shareDebugLog(log));
@@ -2024,7 +2047,7 @@ export default function HomeScreen({ navigation }: any) {
           activeMode={mode}
           onToggleLive={toggleLive}
           onToggleFlicker={() => setFlickerFocus((n) => n + 1)}
-          canSaveLive={!!liveUnsaved}
+          canSaveLive={!!liveUnsaved && !liveUnsaved.simulated}
           savingLive={savingLive}
           onShowTm30={() => {
             if (!result || !analysis) return;

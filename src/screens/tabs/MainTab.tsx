@@ -47,6 +47,7 @@ import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
 import HintPressable from '../../components/HintPressable';
 import { EMPTY_METER_RESULT, EMPTY_SPECTRAL_ANALYSIS } from '../../utils/placeholderReading';
 import { loadHistory, SavedReading } from '../../storage/readingHistory';
+import { useBridgeSimName } from '../../ble/useBridgeSimName';
 
 // Title field (56) + its top margin (8), always subtracted so the charts are
 // the same size whether or not a reading (and so the title) is showing.
@@ -261,6 +262,7 @@ export default function MainTab({
   // there's no feedback loop and the charts never shift when something below
   // (the docked title) appears.
   const [chartRegionH, setChartRegionH] = useState(0);
+  const simName = useBridgeSimName();
   const [chartRegionW, setChartRegionW] = useState(0);
 
   const styles = StyleSheet.create({
@@ -284,6 +286,8 @@ export default function MainTab({
 
     root: { flex: 1 },
     chartRegion: { flex: 1, minHeight: 0, overflow: 'hidden' },
+    simBanner: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, backgroundColor: '#F5C518', paddingVertical: 4, alignItems: 'center' },
+    simBannerText: { color: '#000', fontSize: 13, fontWeight: '700', letterSpacing: 0.3 },
     emptyOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28, backgroundColor: colors.card + 'B8' },
     emptyTitle: { color: colors.text, fontSize: 16, fontWeight: '600', textAlign: 'center' },
     emptyBody: { color: colors.muted, fontSize: 13, lineHeight: 18, textAlign: 'center', marginTop: 6 },
@@ -510,6 +514,11 @@ export default function MainTab({
           ) : (
           <SpectrumTab onShowCard={onShowCard} result={displayResult} analysis={displayAnalysis} extraHorizontalChrome={30} regionHeight={chartRegionH} sampleLabel={result?.sampleLabel} flicker={flicker} pagerResetKey={pagerResetKey} onPageKey={setPageKey} />
           )}
+          {simName ? (
+            <View style={styles.simBanner} pointerEvents="none">
+              <Text style={styles.simBannerText}>Simulating {simName}</Text>
+            </View>
+          ) : null}
           {!hasReading && emptyState && !(flicker && pageKey === 'flicker') && (
             <View style={styles.emptyOverlay} pointerEvents="box-none">
               {emptyState.spinner ? <ActivityIndicator color={colors.accent} style={{ marginBottom: 8 }} /> : null}

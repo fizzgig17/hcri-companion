@@ -15,6 +15,7 @@ import { addRuntime, updateRuntime } from '../storage/runtimeHistory';
 import { loadHcriCredentials } from '../storage/secureStorage';
 import { loadTkLimitsPreference, loadTkScalePreference, loadTkTrimPreference, loadTkTrimPeakPreference, loadTkWindowPreference, saveTkLimitsPreference, saveTkScalePreference } from '../storage/preferences';
 import { uploadRuntimeToHcri } from '../hcri/uploadRuntimeToHcri';
+import { simulatingName } from '../ble/bridgeSim';
 
 const LIMIT_FIELDS: { key: keyof TkLimits; label: string }[] = [
   { key: 'startAtLm', label: 'Start at (lumens)' },
@@ -222,7 +223,9 @@ export default function TkLampLive({ conn }: Props) {
     // Keep every finished run on the phone (History > Runtime), whether or not it is uploaded.
     const r = resampleRun(trimmedRunPoints(recorder.current.points()));
     savedId.current = null;
-    if (r) {
+    if (r && simulatingName()) {
+      setNote('Simulated run: not saved or uploaded.');
+    } else if (r) {
       const l = label.trim() || defaultRunLabel();
       addRuntime({ label: l, intervalSeconds: r.intervalSeconds, values: r.values, rawPerLm: scaleRef.current })
         .then((e) => { savedId.current = e.id; })
@@ -230,6 +233,10 @@ export default function TkLampLive({ conn }: Props) {
     }
   };
   const upload = async () => {
+    if (simulatingName()) {
+      setNote("This is a simulated run, so it can't be uploaded.");
+      return;
+    }
     const r = resampleRun(trimmedRunPoints(recorder.current.points()));
     if (!r) {
       setNote('The recording is too short to upload.');

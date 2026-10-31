@@ -42,6 +42,12 @@ export function getBridgeSim(): BridgeSimKind | null {
   return sim;
 }
 
+/** Name of the instrument being simulated right now ("Torch Bearer"...), or null when nothing is. */
+export function simulatingName(): string | null {
+  if (sim === null || sim === 0) return null;
+  return BRIDGE_SIM_OPTIONS.find(([k]) => k === sim)?.[1] ?? null;
+}
+
 /** Sets the choice. `notify` is false when only the app's own record changes (the bridge is not told). */
 export function setBridgeSim(kind: BridgeSimKind | null, notify = true): void {
   sim = kind;
