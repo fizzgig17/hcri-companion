@@ -6,14 +6,18 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { ScrollView, View, Text, TextInput, TouchableOpacity, ActivityIndicator, RefreshControl, StyleSheet, Alert, Modal, Linking, Platform, useWindowDimensions } from 'react-native';
+import { ScrollView, View, Text, TextInput, TouchableOpacity, ActivityIndicator, RefreshControl, StyleSheet, Alert, Modal, Linking, Platform, Share, useWindowDimensions } from 'react-native';
 import AppSwitch from '../components/AppSwitch';
 import { Icon, ICON_SIZE } from '../components/icons';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { useLayoutMode, useContentWidth, isSquareWindow } from '../layout';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IS_DEV_BUILD, HCRI_API_HOST } from '../hcri/buildTarget';
+import Clipboard from '@react-native-clipboard/clipboard';
 import PrimaryButton from '../components/PrimaryButton';
+import LiveStationView from '../components/LiveStationView';
+import LiveInfoEditor from '../components/LiveInfoEditor';
+import { getLiveStation, liveAction, type LiveStationInfo } from '../hcri/liveStation';
 import { loadBackupEnabled, saveBackupEnabled } from '../storage/backupState';
 import { restoreFromBackup, scheduleBackup } from '../hcri/backup';
 import HintPressable from '../components/HintPressable';
@@ -171,6 +175,11 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   // milestones and errors, which always show regardless of this setting).
   const [verboseLogging, setVerboseLogging] = useState(false);
   const [testReportId, setTestReportId] = useState('');
+  const [liveInfo, setLiveInfo] = useState<LiveStationInfo | null>(null);
+  const [liveBusy, setLiveBusy] = useState(false);
+  const [liveViewOpen, setLiveViewOpen] = useState(false);
+  const [liveStaleDraft, setLiveStaleDraft] = useState('5');
+  const [liveLowDraft, setLiveLowDraft] = useState('');
   const [tbCorrection, setTbCorrection] = useState(false);
   const [tbFlipped, setTbFlipped] = useState(false);
   const [simKind, setSimKind] = useState<BridgeSimKind | null>(null);
@@ -804,6 +813,32 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
     settingRow(label, helpText, <AppSwitch accessibilityLabel={label} value={value} onValueChange={onChange} />);
   const sectionHeader = (title: string) => <Text style={styles.sectionHeader}>{title}</Text>;
 
+  // Live station: the website's live link for TKLamp runs, with email alerts. The switch lives on hCRI.io; this phone only sends.
+  useEffect(() => {
+    if (!loadedToken) { setLiveInfo(null); return; }
+    getLiveStation(loadedToken).then((i) => {
+      setLiveInfo(i);
+      setLiveStaleDraft(String(i.settings.staleMin));
+      setLiveLowDraft(i.settings.lowLm > 0 ? String(i.settings.lowLm) : '');
+    }).catch(() => {});
+  }, [loadedToken]);
+  const liveCall = async (body: object) => {
+    if (!loadedToken) {
+      Alert.alert('Sign in first', 'Save your hCRI.io API token in the hCRI.io account section above, then turn Live station on.');
+      return;
+    }
+    setLiveBusy(true);
+    try {
+      const i = await liveAction(loadedToken, body);
+      setLiveInfo(i);
+    } catch (e: any) {
+      Alert.alert('Live station', e?.message ?? 'Could not reach hCRI.io.');
+    } finally {
+      setLiveBusy(false);
+    }
+  };
+  const liveSet = (k: string, v: boolean | number) => liveCall({ action: 'settings', settings: { [k]: v } });
+
   // Collapsible sections: tap the header to open or close it (the chevron turns); pulling the page down closes them all.
   const section = (key: string, title: string, subtitle: string, children: React.ReactNode) => {
     const isOpen = !!openSec[key];
@@ -953,6 +988,8 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
           saves it (same as tapping Save manually), then closes. Dismissing
           via the backdrop/Cancel just closes the overlay without creating
           anything, same as leaving the fields above blank. */}
+      <LiveStationView visible={liveViewOpen} token={liveInfo?.token ?? null} onClose={() => setLiveViewOpen(false)} />
+
       <Modal visible={tokenModalVisible} transparent animationType="fade" onRequestClose={closeTokenModal}>
         <TouchableOpacity style={[styles.modalBackdrop, { paddingTop: insets.top + 12, paddingBottom: kbUp ? 10 + kbHeight : insets.bottom + 12 }]} activeOpacity={1} onPress={closeTokenModal}>
           <TouchableOpacity style={[styles.modalSheet, { maxHeight: Math.max(200, winH - kbHeight - insets.top - (kbUp ? 0 : insets.bottom) - 24 - (kbUp ? 10 : 12)), padding: 14 }]} activeOpacity={1} onPress={() => {}}>
@@ -1232,6 +1269,44 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
       {switchRow('Start at the first reading', 'On by default. When you stop a TKLamp run, the dark readings before the light came on are dropped and the saved and uploaded curve starts at the first lit reading (the first one that reaches 2 percent of the run\'s peak), so a light that starts at 500 lm and ramps up is captured in full and you never see a jump from 0. Turning this on turns off Start at the peak. Turn both off to keep every reading from the moment you tapped Start run.', tkTrim, toggleTkTrim)}
       {switchRow('Start at the peak', 'Off by default. When you stop a TKLamp run, everything before the highest reading is dropped, so the saved and uploaded curve starts at the peak of the output. Use it for lights that overshoot at switch-on. Turning this on turns off Start at the first reading.', tkTrimPeak, toggleTkTrimPeak)}
 
+        </>
+      ))}
+
+      {section('live', 'Live station', 'Watch TKLamp runs from anywhere, email alerts', (
+        <>
+      {switchRow('Share TKLamp runs live', 'When on, each TKLamp run you record is sent to hCRI.io while it runs, so you (or anyone you give the link to) can watch it from the website or from this screen, and hCRI.io can email you if something goes wrong. Needs your hCRI.io API token (see the account section above). Simulated runs are never sent. The link always shows what is running now, or the last run.', !!liveInfo?.enabled, (v) => liveCall({ action: v ? 'enable' : 'disable' }))}
+      {!!liveInfo?.enabled && !!liveInfo.url && (
+        <>
+          <Text style={[styles.hint, { marginTop: 4 }]} selectable>{liveInfo.url}</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 14, marginTop: 10 }}>
+            {([
+              ['eye', 'View live', () => setLiveViewOpen(true), true],
+              ['copy', 'Copy link', () => { Clipboard.setString(liveInfo.url!); Alert.alert('Link copied', 'Paste it anywhere to share the live station.'); }, false],
+              ['share', 'Share link', () => { Share.share({ message: liveInfo.url! }).catch(() => {}); }, false],
+              ['external', 'Open in browser', () => { Linking.openURL(liveInfo.url!).catch(() => {}); }, false],
+              ['redo', 'Make a new link', () => Alert.alert('Make a new link?', 'The old link will stop working.', [{ text: 'Cancel', style: 'cancel' }, { text: 'New link', style: 'destructive', onPress: () => { liveCall({ action: 'rotate' }); } }]), false],
+            ] as const).map(([icon, label, onPress, primary]) => (
+              <TouchableOpacity key={icon} accessibilityRole="button" accessibilityLabel={label} onPress={onPress} activeOpacity={0.7}
+                style={{ width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: primary ? colors.accent : 'transparent', borderWidth: primary ? 0 : 1, borderColor: colors.cardBorder }}>
+                <Icon name={icon} size={18} color={primary ? '#fff' : colors.text} />
+              </TouchableOpacity>
+            ))}
+          </View>
+          <LiveInfoEditor />
+          <Text style={[styles.sectionHeader, { marginTop: 14 }]}>Email me when</Text>
+          {switchRow('A run finishes', 'Sent to your hCRI.io account email, once per run.', !!liveInfo.settings.emailDone, (v) => liveSet('emailDone', v))}
+          {switchRow('There is a problem', 'The tester or bridge stops sending readings during a run. Once per run.', !!liveInfo.settings.emailError, (v) => liveSet('emailError', v))}
+          {switchRow('No data arrives', 'Nothing has arrived for the number of minutes below: the phone may be off, out of signal, or disconnected. Once per silence.', !!liveInfo.settings.emailStale, (v) => liveSet('emailStale', v))}
+          {settingRow('No data for (minutes)', 'How long a run may stay silent before hCRI.io counts it as having no data (2 to 240).',
+            <TextInput accessibilityLabel="Minutes of silence before an alert" style={[styles.input, { width: 84, textAlign: 'center', marginTop: 0 }]} value={liveStaleDraft} onChangeText={setLiveStaleDraft}
+              onEndEditing={() => { const n = Math.max(2, Math.min(240, parseInt(liveStaleDraft, 10) || 5)); setLiveStaleDraft(String(n)); liveSet('staleMin', n); }} keyboardType="number-pad" returnKeyType="done" maxLength={3} />)}
+          {switchRow('The output falls low', 'Sends an email when the output stays below the limit below. Once per run.', !!liveInfo.settings.emailLow, (v) => liveSet('emailLow', v))}
+          {settingRow('Low limit (lumens)', 'The output that counts as low. Leave blank to switch the limit off.',
+            <TextInput accessibilityLabel="Low output limit in lumens" style={[styles.input, { width: 84, textAlign: 'center', marginTop: 0 }]} value={liveLowDraft} onChangeText={setLiveLowDraft}
+              onEndEditing={() => { const n = Math.max(0, parseFloat(liveLowDraft.replace(',', '.')) || 0); setLiveLowDraft(n > 0 ? String(n) : ''); liveSet('lowLm', n); }} keyboardType="decimal-pad" returnKeyType="done" maxLength={8} />)}
+        </>
+      )}
+      {liveBusy && <ActivityIndicator style={{ marginTop: 8 }} />}
         </>
       ))}
 
