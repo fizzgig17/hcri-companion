@@ -1278,13 +1278,20 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
       {!!liveInfo?.enabled && !!liveInfo.url && (
         <>
           <Text style={[styles.hint, { marginTop: 4 }]} selectable>{liveInfo.url}</Text>
-          <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-            <PrimaryButton title="View live" onPress={() => setLiveViewOpen(true)} style={[styles.noTopMargin, { flex: 1 }]} />
-            <PrimaryButton title="Copy link" variant="outline" onPress={() => { Clipboard.setString(liveInfo.url!); Alert.alert('Link copied', 'Paste it anywhere to share the live station.'); }} style={[styles.noTopMargin, { flex: 1 }]} />
-            <PrimaryButton title="Share" variant="outline" onPress={() => { Share.share({ message: liveInfo.url! }).catch(() => {}); }} style={[styles.noTopMargin, { flex: 1 }]} />
+          <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 14, marginTop: 10 }}>
+            {([
+              ['eye', 'View live', () => setLiveViewOpen(true), true],
+              ['copy', 'Copy link', () => { Clipboard.setString(liveInfo.url!); Alert.alert('Link copied', 'Paste it anywhere to share the live station.'); }, false],
+              ['share', 'Share link', () => { Share.share({ message: liveInfo.url! }).catch(() => {}); }, false],
+              ['external', 'Open in browser', () => { Linking.openURL(liveInfo.url!).catch(() => {}); }, false],
+              ['redo', 'Make a new link', () => Alert.alert('Make a new link?', 'The old link will stop working.', [{ text: 'Cancel', style: 'cancel' }, { text: 'New link', style: 'destructive', onPress: () => { liveCall({ action: 'rotate' }); } }]), false],
+            ] as const).map(([icon, label, onPress, primary]) => (
+              <TouchableOpacity key={icon} accessibilityRole="button" accessibilityLabel={label} onPress={onPress} activeOpacity={0.7}
+                style={{ width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: primary ? colors.accent : 'transparent', borderWidth: primary ? 0 : 1, borderColor: colors.cardBorder }}>
+                <Icon name={icon} size={18} color={primary ? '#fff' : colors.text} />
+              </TouchableOpacity>
+            ))}
           </View>
-          <Text style={[styles.hint, { textDecorationLine: 'underline' }]} onPress={() => Linking.openURL(liveInfo.url!).catch(() => {})}>Open in browser</Text>
-          <Text style={[styles.hint, { textDecorationLine: 'underline' }]} onPress={() => Alert.alert('Make a new link?', 'The old link will stop working.', [{ text: 'Cancel', style: 'cancel' }, { text: 'New link', style: 'destructive', onPress: () => { liveCall({ action: 'rotate' }); } }])}>Make a new link</Text>
           <LiveInfoEditor />
           <Text style={[styles.sectionHeader, { marginTop: 14 }]}>Email me when</Text>
           {switchRow('A run finishes', 'Sent to your hCRI.io account email, once per run.', !!liveInfo.settings.emailDone, (v) => liveSet('emailDone', v))}
