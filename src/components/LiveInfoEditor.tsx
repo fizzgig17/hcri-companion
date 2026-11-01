@@ -3,7 +3,7 @@
 // "What are you testing?": a name and some details typed by hand, shown on the hCRI.io live page and in the app's Live view,
 // and changeable while a run is going. Shown only when Live station is switched on for the account.
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, StyleSheet } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { loadHcriCredentials } from '../storage/secureStorage';
@@ -17,6 +17,8 @@ export default function LiveInfoEditor({ compact = false }: { compact?: boolean 
   const [details, setDetails] = useState('');
   const [saved, setSaved] = useState({ title: '', details: '' });
   const [err, setErr] = useState('');
+  const cur = useRef({ title: '', details: '', saved: { title: '', details: '' } });
+  cur.current = { title, details, saved };
 
   useEffect(() => {
     let alive = true;
@@ -33,6 +35,22 @@ export default function LiveInfoEditor({ compact = false }: { compact?: boolean 
     })();
     return () => { alive = false; };
   }, []);
+
+  // A note saved elsewhere (website, web logger, script) shows up here within seconds, unless it is being edited here.
+  useEffect(() => {
+    if (!token) return;
+    const id = setInterval(async () => {
+      const i = await getLiveStation(token).catch(() => null);
+      if (!i) return;
+      setOn(i.enabled);
+      const c = cur.current;
+      const untouched = c.title === c.saved.title && c.details === c.saved.details;
+      if (untouched && (i.info.title !== c.saved.title || i.info.details !== c.saved.details)) {
+        setTitle(i.info.title); setDetails(i.info.details); setSaved(i.info);
+      }
+    }, 5000);
+    return () => clearInterval(id);
+  }, [token]);
 
   const save = useCallback(async (t: string, d: string) => {
     if (!token || (t === saved.title && d === saved.details)) return;
