@@ -14,7 +14,8 @@ import { TK_LIMITS_DEFAULT, TK_RAW_PER_LM_DEFAULT, TK_STOP_BELOW_HOLD_S, TkRecor
 import { addRuntime, updateRuntime } from '../storage/runtimeHistory';
 import { loadHcriCredentials } from '../storage/secureStorage';
 import { loadTkLimitsPreference, loadTkScalePreference, loadTkTrimPreference, loadTkTrimPeakPreference, loadTkWindowPreference, saveTkLimitsPreference, saveTkScalePreference } from '../storage/preferences';
-import { startLiveRun, liveAdd, finishLiveRun } from '../hcri/liveStation';
+import LiveInfoEditor from './LiveInfoEditor';
+import { startLiveRun, liveAdd, finishLiveRun, liveMonitorAdd, stopLiveMonitor } from '../hcri/liveStation';
 import { uploadRuntimeToHcri } from '../hcri/uploadRuntimeToHcri';
 import { simulatingName } from '../ble/bridgeSim';
 
@@ -125,6 +126,8 @@ export default function TkLampLive({ conn }: Props) {
         if (!simulatingName()) liveAdd(s.ms, avg);
         const why = guard.current.onReading(avg, s.ms);
         if (why) stopRef.current(why);
+      } else if (!simulatingName()) {
+        liveMonitorAdd(s.ms, avg);
       }
       const now = Date.now();
       if (now - lastDraw.current > 250) {   // redraw about 4 times a second, however fast readings arrive
@@ -144,6 +147,7 @@ export default function TkLampLive({ conn }: Props) {
     return () => {
       off();
       clearInterval(timer);
+      stopLiveMonitor();
     };
   }, [conn]);
 
@@ -413,6 +417,7 @@ export default function TkLampLive({ conn }: Props) {
       )}
 
       {!recording && !finished && lm != null && <Text style={styles.small}>Press Start run below to record.</Text>}
+      <LiveInfoEditor compact />
       {recording && <Text style={styles.rec}>● Recording {fmtDur(recSeconds)} ({recCount} readings)</Text>}
       {armed && <Text style={styles.wait}>Waiting for the light to reach {limits.startAtLm} lm to start recording. Tap Cancel below to stop waiting.</Text>}
 

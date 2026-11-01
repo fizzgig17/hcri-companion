@@ -16,6 +16,7 @@ import { IS_DEV_BUILD, HCRI_API_HOST } from '../hcri/buildTarget';
 import Clipboard from '@react-native-clipboard/clipboard';
 import PrimaryButton from '../components/PrimaryButton';
 import LiveStationView from '../components/LiveStationView';
+import LiveInfoEditor from '../components/LiveInfoEditor';
 import { getLiveStation, liveAction, type LiveStationInfo } from '../hcri/liveStation';
 import { loadBackupEnabled, saveBackupEnabled } from '../storage/backupState';
 import { restoreFromBackup, scheduleBackup } from '../hcri/backup';
@@ -1284,6 +1285,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
           </View>
           <Text style={[styles.hint, { textDecorationLine: 'underline' }]} onPress={() => Linking.openURL(liveInfo.url!).catch(() => {})}>Open in browser</Text>
           <Text style={[styles.hint, { textDecorationLine: 'underline' }]} onPress={() => Alert.alert('Make a new link?', 'The old link will stop working.', [{ text: 'Cancel', style: 'cancel' }, { text: 'New link', style: 'destructive', onPress: () => { liveCall({ action: 'rotate' }); } }])}>Make a new link</Text>
+          <LiveInfoEditor />
           <Text style={[styles.sectionHeader, { marginTop: 14 }]}>Email me when</Text>
           {switchRow('A run finishes', 'Sent to your hCRI.io account email, once per run.', !!liveInfo.settings.emailDone, (v) => liveSet('emailDone', v))}
           {switchRow('There is a problem', 'The tester or bridge stops sending readings during a run. Once per run.', !!liveInfo.settings.emailError, (v) => liveSet('emailError', v))}

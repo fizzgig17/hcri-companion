@@ -23,6 +23,7 @@ export interface LiveSettings {
 }
 export interface LiveRunSummary {
   runId: string;
+  kind: 'run' | 'monitor';
   label: string;
   unit: string;
   status: 'idle' | 'running' | 'finished' | 'error';
@@ -35,11 +36,17 @@ export interface LiveRunSummary {
   ageSeconds: number | null;
   stale: boolean;
 }
+/** What the owner typed about the light being tested; shown on the live pages. */
+export interface LiveInfo {
+  title: string;
+  details: string;
+}
 export interface LiveStationInfo {
   enabled: boolean;
   token: string | null;
   url: string | null;
   settings: LiveSettings;
+  info: LiveInfo;
   run: LiveRunSummary;
 }
 export interface LiveShared {
@@ -47,6 +54,7 @@ export interface LiveShared {
   from: number;
   values: number[];
   run: LiveRunSummary | null;
+  info?: LiveInfo;
 }
 
 async function call(token: string, method: 'GET' | 'POST', body?: object): Promise<any> {
@@ -75,11 +83,10 @@ export async function fetchLiveShared(stationToken: string, since = -1): Promise
 
 // ── The run in progress (module level, used by the TKLamp screen) ────────
 
-let active: LiveRelay | null = null;
+let active: LiveRelay | null = null;    // the run being recorded
+let monitor: LiveRelay | null = null;   // the plain live reading while no run is recording
 
-/** Starts sending a run if the person is signed in and has Live station switched on (here or on the website). */
-export function startLiveRun(getLabel: () => string): void {
-  if (active) { active.stopTimers(); active = null; }
+function makeRelay(kind: 'run' | 'monitor', getLabel: () => string): LiveRelay {
   // Readings are collected from the first second; whether to send them is worked out meanwhile (signed in, switched on).
   const tokenP: Promise<string | null> = (async () => {
     const creds = await loadHcriCredentials().catch(() => null);
@@ -88,13 +95,32 @@ export function startLiveRun(getLabel: () => string): void {
     const info = await getLiveStation(creds.token).catch(() => null);
     return info?.enabled ? creds.token : null;
   })();
-  const relay = new LiveRelay(`r${Date.now().toString(36)}${Math.floor(Math.random() * 1e4).toString(36)}`, getLabel, async (b) => {
+  const relay = new LiveRelay(`${kind === 'run' ? 'r' : 'm'}${Date.now().toString(36)}${Math.floor(Math.random() * 1e4).toString(36)}`, getLabel, async (b) => {
     const t = await tokenP;
     if (!t) return { count: 0, enabled: false };
     return call(t, 'POST', b);
-  });
-  active = relay;
+  }, kind);
   relay.start();
+  return relay;
+}
+
+/** Starts sending a run if the person is signed in and has Live station switched on (here or on the website). */
+export function startLiveRun(getLabel: () => string): void {
+  stopLiveMonitor();
+  if (active) active.stopTimers();
+  active = makeRelay('run', getLabel);
+}
+
+/** While no run records, the tester's live number goes to the station too, so it shows "Live" rather than nothing. */
+export function liveMonitorAdd(ms: number, lm: number): void {
+  if (!monitor) monitor = makeRelay('monitor', () => 'Live reading');
+  monitor.add(ms, lm);
+}
+
+export function stopLiveMonitor(): void {
+  const m = monitor;
+  monitor = null;
+  if (m) m.finish('finished').catch(() => {});
 }
 
 export function liveAdd(ms: number, lm: number): void {

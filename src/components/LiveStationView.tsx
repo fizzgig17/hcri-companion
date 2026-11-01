@@ -38,6 +38,7 @@ export default function LiveStationView({ visible, token, onClose }: Props) {
   const [run, setRun] = useState<LiveRunSummary | null>(null);
   const [values, setValues] = useState<number[]>([]);
   const [off, setOff] = useState(false);
+  const [info, setInfo] = useState<{ title: string; details: string } | null>(null);
   const [err, setErr] = useState('');
   const [got, setGot] = useState(0);
   const [now, setNow] = useState(() => Date.now());
@@ -60,6 +61,7 @@ export default function LiveStationView({ visible, token, onClose }: Props) {
         setValues(held.current);
         setRun(d.run);
         setOff(!d.live);
+        setInfo(d.info ?? null);
         setErr('');
         setGot(Date.now());
       } catch (e: any) {
@@ -93,9 +95,10 @@ export default function LiveStationView({ visible, token, onClose }: Props) {
   });
 
   const age = run?.ageSeconds == null ? null : run.ageSeconds + Math.max(0, (now - got) / 1000);
-  let chip = 'Live';
+  const isRun = run?.kind !== 'monitor';
+  let chip = isRun ? 'Live run' : 'Live';
   let chipColor = colors.accent;
-  if (run?.status === 'finished') { chip = 'Finished'; chipColor = colors.muted; }
+  if (run?.status === 'finished') { chip = isRun ? 'Finished' : 'Stopped'; chipColor = colors.muted; }
   else if (run?.status === 'error') { chip = 'Problem'; chipColor = colors.danger; }
   else if (run?.stale) { chip = `No data for ${fmtDur(age ?? 0)}`; chipColor = colors.warning; }
   const last = values.length ? values[values.length - 1] : run?.last ?? null;
@@ -114,14 +117,15 @@ export default function LiveStationView({ visible, token, onClose }: Props) {
         <ScrollView contentContainerStyle={styles.body}>
           {!token && <Text style={styles.small}>Turn on Live station in Settings first.</Text>}
           {token && off && <Text style={styles.small}>The live station is switched off.</Text>}
-          {token && !off && idle && <Text style={styles.small}>Nothing is running right now. This screen updates by itself when a run starts.</Text>}
+          {token && !off && idle && <Text style={styles.small}>Nothing is live right now. This screen updates by itself when a tester starts sending.</Text>}
           {token && !off && !idle && run && (
             <>
-              <Text style={[styles.title, { flex: 0 }]}>{run.label || 'TKLamp run'}</Text>
+              <Text style={[styles.title, { flex: 0 }]}>{info?.title || (isRun ? (run.label || 'TKLamp run') : 'Live reading')}</Text>
               <View style={[styles.chip, { borderColor: chipColor }]}><Text style={[styles.chipText, { color: chipColor }]}>{chip}</Text></View>
+              {!!info?.details && <Text style={[styles.small, { color: colors.text, marginTop: 8, lineHeight: 19 }]}>{info.details}</Text>}
               {run.status === 'error' && !!run.message && <Text style={styles.err}>{run.message}</Text>}
               <Text style={{ marginTop: 10 }}><Text style={styles.big}>{fmtNum(last)}</Text><Text style={styles.unit}> {run.unit || 'lm'}</Text></Text>
-              <Text style={styles.small}>Running for {fmtDur(elapsed)} · last reading {fmtAgo(age)}</Text>
+              <Text style={styles.small}>{isRun ? `Running for ${fmtDur(elapsed)} · ` : ''}last reading {fmtAgo(age)}</Text>
               <View style={{ marginTop: 14 }}>
                 <RuntimeChart points={points} windowS={0} height={220} />
               </View>

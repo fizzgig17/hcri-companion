@@ -3,7 +3,7 @@
 // The pure part of the live station relay (no network or storage of its own, so it can be tested): per-second averaging of
 // readings and the batching/resend logic. liveStation.ts wires it to hCRI.io.
 
-const FLUSH_MS = 10000;
+const FLUSH_MS = 5000;
 const FIRST_FLUSH_MS = 3000;
 const BATCH = 1000;
 
@@ -50,7 +50,7 @@ export class LiveRelay {
   private first: ReturnType<typeof setTimeout> | null = null;
   off = false;   // the owner switched the station off on the server: stop sending
 
-  constructor(private runId: string, private getLabel: () => string, private send: LiveSend) {}
+  constructor(private runId: string, private getLabel: () => string, private send: LiveSend, private kind: 'run' | 'monitor' = 'run') {}
 
   start(): void {
     this.first = setTimeout(() => { this.flush().catch(() => {}); }, FIRST_FLUSH_MS);
@@ -77,7 +77,7 @@ export class LiveRelay {
         const lastChunk = this.sent + chunk.length >= vals.length;
         if (chunk.length === 0 && status === 'running') return true;   // nothing new: stay quiet so the server can notice a silent run
         const r = await this.send({
-          runId: this.runId, label: this.getLabel(), unit: 'lm', intervalSeconds: 1, startIndex: this.sent, values: chunk,
+          runId: this.runId, kind: this.kind, label: this.getLabel(), unit: 'lm', intervalSeconds: 1, startIndex: this.sent, values: chunk,
           status: lastChunk ? status : 'running', ...(lastChunk && message ? { message } : {}),
         });
         if (r.enabled === false) { this.off = true; return true; }
