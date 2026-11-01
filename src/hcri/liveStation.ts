@@ -48,6 +48,7 @@ export interface LiveStationInfo {
   settings: LiveSettings;
   info: LiveInfo;
   run: LiveRunSummary;
+  command?: { id: string; action: LiveCommand } | null;
 }
 export interface LiveShared {
   live: boolean;
@@ -83,6 +84,21 @@ export async function fetchLiveShared(stationToken: string, since = -1): Promise
 
 // ── The run in progress (module level, used by the TKLamp screen) ────────
 
+// Remote control: Start / Stop / Clear asked for from the website or another phone arrive in the answer to a send; each is
+// carried out once (by the TKLamp screen, which registers a handler) and acknowledged with the next send.
+export type LiveCommand = 'start' | 'stop' | 'clear';
+let commandHandler: ((c: LiveCommand) => void) | null = null;
+let cmdAck = '';
+let cmdSeen = '';
+export function setLiveCommandHandler(h: ((c: LiveCommand) => void) | null): void { commandHandler = h; }
+function handleCommand(c: { id: string; action: string } | undefined): void {
+  if (!c || !c.id || c.id === cmdSeen) return;
+  if (!['start', 'stop', 'clear'].includes(c.action) || !commandHandler) return;   // nobody here can do it: leave it for another sender
+  cmdSeen = c.id;
+  cmdAck = c.id;
+  commandHandler(c.action as LiveCommand);
+}
+
 let active: LiveRelay | null = null;    // the run being recorded
 let monitor: LiveRelay | null = null;   // the plain live reading while no run is recording
 
@@ -98,7 +114,11 @@ function makeRelay(kind: 'run' | 'monitor', getLabel: () => string): LiveRelay {
   const relay = new LiveRelay(`${kind === 'run' ? 'r' : 'm'}${Date.now().toString(36)}${Math.floor(Math.random() * 1e4).toString(36)}`, getLabel, async (b) => {
     const t = await tokenP;
     if (!t) return { count: 0, enabled: false };
-    return call(t, 'POST', b);
+    const sentAck = cmdAck;
+    const res = await call(t, 'POST', sentAck ? { ...b, ack: sentAck } : b);
+    if (sentAck && cmdAck === sentAck) cmdAck = '';
+    handleCommand(res?.command);
+    return res;
   }, kind);
   relay.start();
   return relay;
@@ -132,3 +152,16 @@ export function finishLiveRun(status: 'finished' | 'error', message = ''): void 
   active = null;
   if (r) r.finish(status, message).catch(() => {});
 }
+
+/** Clears the live page (and starts the live reading afresh with the next reading). */
+export function clearLiveStation(): void {
+  const m = monitor;
+  monitor = null;
+  if (m) m.stopTimers();
+  setTimeout(() => {
+    loadHcriCredentials().then((c) => { if (c?.token) liveAction(c.token, { action: 'clear' }).catch(() => {}); }).catch(() => {});
+  }, 1200);   // after any send already under way
+}
+
+/** Asks the connected logger or app to start, stop or clear (the live page's control buttons). */
+export const sendLiveCommand = (token: string, command: LiveCommand): Promise<LiveStationInfo> => liveAction(token, { action: 'command', command });

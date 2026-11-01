@@ -15,7 +15,7 @@ import { addRuntime, updateRuntime } from '../storage/runtimeHistory';
 import { loadHcriCredentials } from '../storage/secureStorage';
 import { loadTkLimitsPreference, loadTkScalePreference, loadTkTrimPreference, loadTkTrimPeakPreference, loadTkWindowPreference, saveTkLimitsPreference, saveTkScalePreference } from '../storage/preferences';
 import LiveInfoEditor from './LiveInfoEditor';
-import { startLiveRun, liveAdd, finishLiveRun, liveMonitorAdd, stopLiveMonitor } from '../hcri/liveStation';
+import { startLiveRun, liveAdd, finishLiveRun, liveMonitorAdd, stopLiveMonitor, setLiveCommandHandler, clearLiveStation } from '../hcri/liveStation';
 import { uploadRuntimeToHcri } from '../hcri/uploadRuntimeToHcri';
 import { simulatingName } from '../ble/bridgeSim';
 
@@ -199,6 +199,7 @@ export default function TkLampLive({ conn }: Props) {
     setLm(null);
     setStale(false);
     lastRx.current = 0;
+    if (!simulatingName()) clearLiveStation();
   };
 
   // Calibrate from a lamp of known output: a steady reading of it, taken at the current scale, sets the new scale.
@@ -255,6 +256,17 @@ export default function TkLampLive({ conn }: Props) {
         .catch(() => setNote('The run could not be saved on this phone.'));
     }
   };
+  // Start / Stop / Clear asked for from the website or another phone's Live view.
+  const remoteRef = useRef<(c: string) => void>(() => {});
+  remoteRef.current = (c) => {
+    if (c === 'start') { if (!recordingRef.current && lm != null && !stale) start(); }
+    else if (c === 'stop') { if (recordingRef.current) stop('Stopped from the Live view.'); }
+    else if (c === 'clear') { if (!recordingRef.current) clearScreen(); }
+  };
+  useEffect(() => {
+    setLiveCommandHandler((c) => remoteRef.current(c));
+    return () => setLiveCommandHandler(null);
+  }, []);
   const startAdjusting = () => {
     const raw = recorder.current.points();
     if (raw.length < 2) return;

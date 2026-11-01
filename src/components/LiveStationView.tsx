@@ -7,7 +7,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, SafeAreaView } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import RuntimeChart from './RuntimeChart';
-import { fetchLiveShared, type LiveRunSummary } from '../hcri/liveStation';
+import { fetchLiveShared, getLiveStation, sendLiveCommand, type LiveCommand, type LiveRunSummary } from '../hcri/liveStation';
+import { loadHcriCredentials } from '../storage/secureStorage';
+import LiveInfoEditor from './LiveInfoEditor';
 
 interface Props {
   visible: boolean;
@@ -42,12 +44,15 @@ export default function LiveStationView({ visible, token, onClose }: Props) {
   const [err, setErr] = useState('');
   const [got, setGot] = useState(0);
   const [now, setNow] = useState(() => Date.now());
+  const [apiTok, setApiTok] = useState<string | null>(null);
+  const [pending, setPending] = useState('');
   const held = useRef<number[]>([]);
   const whole = useRef(false);
 
   useEffect(() => {
     if (!visible || !token) return;
     let alive = true;
+    loadHcriCredentials().then((c) => { if (alive) setApiTok(c?.token ?? null); }).catch(() => {});
     held.current = [];
     whole.current = false;
     const load = async () => {
@@ -74,6 +79,21 @@ export default function LiveStationView({ visible, token, onClose }: Props) {
     return () => { alive = false; clearInterval(id); clearInterval(tick); };
   }, [visible, token]);
 
+  // A command waiting for the tester's phone or computer to pick it up (shown until it does).
+  useEffect(() => {
+    if (!visible || !apiTok) return;
+    let alive = true;
+    const poll = () => getLiveStation(apiTok).then((i) => { if (alive) setPending(i.command?.action ?? ''); }).catch(() => {});
+    poll();
+    const id = setInterval(poll, 3000);
+    return () => { alive = false; clearInterval(id); };
+  }, [visible, apiTok]);
+  const send = (c: LiveCommand) => {
+    if (!apiTok) return;
+    setPending(c);
+    sendLiveCommand(apiTok, c).then((i) => setPending(i.command?.action ?? '')).catch((e: any) => { setPending(''); setErr(e?.message ?? 'Could not send that.'); });
+  };
+
   const points = useMemo(() => {
     const dt = run?.intervalSeconds || 1;
     return values.map((lm, i) => ({ t: i * dt, lm }));
@@ -92,6 +112,9 @@ export default function LiveStationView({ visible, token, onClose }: Props) {
     chip: { alignSelf: 'flex-start', borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 3, marginTop: 8 },
     chipText: { fontSize: 13, fontWeight: '700' },
     err: { color: colors.danger, marginTop: 10 },
+    ctl: { flexDirection: 'row', gap: 8, marginTop: 14, flexWrap: 'wrap' },
+    ctlBtn: { borderWidth: 1.5, borderRadius: 18, paddingHorizontal: 16, paddingVertical: 7 },
+    ctlText: { fontSize: 14, fontWeight: '700' },
   });
 
   const age = run?.ageSeconds == null ? null : run.ageSeconds + Math.max(0, (now - got) / 1000);
@@ -104,6 +127,14 @@ export default function LiveStationView({ visible, token, onClose }: Props) {
   const last = values.length ? values[values.length - 1] : run?.last ?? null;
   const elapsed = run?.status === 'running' && !run.stale && run.startedAt ? (now - new Date(run.startedAt).getTime()) / 1000 : points.length ? points[points.length - 1].t : 0;
   const idle = !run || run.status === 'idle' || !run.runId;
+  const online = !!run && run.status === 'running' && !run.stale && (run.ageSeconds == null || run.ageSeconds < 30);
+  const running = online && isRun;
+  const ctl = (label: string, cmd: LiveCommand, enabled: boolean, color: string) => (
+    <TouchableOpacity key={cmd} disabled={!enabled || !!pending} onPress={() => send(cmd)} accessibilityRole="button" accessibilityLabel={label}
+      style={[styles.ctlBtn, { borderColor: color, opacity: enabled && !pending ? 1 : 0.4 }]}>
+      <Text style={[styles.ctlText, { color }]}>{label}</Text>
+    </TouchableOpacity>
+  );
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
@@ -129,6 +160,19 @@ export default function LiveStationView({ visible, token, onClose }: Props) {
               <View style={{ marginTop: 14 }}>
                 <RuntimeChart points={points} windowS={0} height={220} />
               </View>
+            </>
+          )}
+          {!!apiTok && !!token && !off && (
+            <>
+              <View style={styles.ctl}>
+                {ctl('Start run', 'start', online && !running, colors.accent)}
+                {ctl('Stop run', 'stop', running, colors.danger)}
+                {ctl('Clear', 'clear', !running, colors.muted)}
+              </View>
+              <Text style={styles.small}>
+                {pending ? `${pending[0].toUpperCase()}${pending.slice(1)} sent: waiting for the tester's phone or computer (up to 5 seconds)…` : online ? 'Carried out by the app or web logger that is connected to the tester.' : 'Needs the app or the web logger connected to the tester, with Live on.'}
+              </Text>
+              <LiveInfoEditor />
             </>
           )}
           {!!err && <Text style={styles.err}>{err}</Text>}
