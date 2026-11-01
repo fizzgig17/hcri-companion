@@ -20,7 +20,7 @@ export interface SavedFlicker {
   uploaded?: boolean;
 }
 
-type ReadingRef = { id: string; reportId?: number; result: { flicker?: unknown } };
+type ReadingRef = { id: string; reportId?: number | string; result: { flicker?: unknown } };
 
 /** The reading a saved flicker is attached to, if that reading still exists. */
 export function attachedReading<R extends { id: string }>(f: SavedFlicker, readings: R[]): R | undefined {

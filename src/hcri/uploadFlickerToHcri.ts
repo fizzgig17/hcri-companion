@@ -13,7 +13,7 @@ const HCRI_FLICKER_URL = `${HCRI_API_BASE}/index.php/api/v1/flicker`;
 
 export async function uploadFlickerToHcri(
   flicker: FlickerCapture,
-  opts: { reportId?: number; label: string; model?: string; notes?: string },
+  opts: { reportId?: number | string; label: string; model?: string; notes?: string },
   token: string,
   log?: (msg: string) => void
 ): Promise<boolean> {
@@ -30,7 +30,7 @@ export async function uploadFlickerToHcri(
       label: opts.label,
       capturedAt: new Date().toISOString(),
     };
-    if (typeof opts.reportId === 'number') body.reportId = opts.reportId;
+    if (opts.reportId != null) body.reportId = opts.reportId;
     if (opts.notes) body.notes = opts.notes;
     if (typeof flicker.spanMs === 'number') body.spanMs = flicker.spanMs;
     if (opts.model) body.model = opts.model;
@@ -62,11 +62,11 @@ export async function uploadReadingToHcri(
   token: string,
   log?: (msg: string) => void,
   /** The reading's existing report id, if it was uploaded before: that report is updated in place. */
-  replaceId?: number
+  replaceId?: number | string
 ): Promise<UploadResult> {
   const res = await uploadToHcri(csv, label, token, log, replaceId);
   // A replaced report already has this reading's flicker attached from the first upload.
-  if (res.success && !res.replaced && result.flicker && typeof res.reportId === 'number') {
+  if (res.success && !res.replaced && result.flicker && res.reportId != null) {
     await uploadFlickerToHcri(
       result.flicker,
       { reportId: res.reportId, label, model: result.deviceName },

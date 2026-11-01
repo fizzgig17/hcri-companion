@@ -261,7 +261,7 @@ export default function HistoryScreen({ navigation, embedded, refreshKey, onRena
    * one succeeding should leave the row's link current, same requirement
    * as a successful upload from Main/Data (see HomeScreen.tsx's upload()).
    */
-  const saveReportLink = useCallback(async (id: string, reportId: number, isPublic: boolean) => {
+  const saveReportLink = useCallback(async (id: string, reportId: number | string | string, isPublic: boolean) => {
     try {
       await setReadingReportLink(id, reportId, isPublic);
       syncLedForReading(id);
@@ -302,7 +302,7 @@ export default function HistoryScreen({ navigation, embedded, refreshKey, onRena
         const csv = buildCsv(entry.result);
         const res = await uploadReadingToHcri(entry.result, csv, label, creds.token, appendLog, entry.reportId);
         appendLog(res.message);
-        if (res.success && typeof res.reportId === 'number' && typeof res.isPublic === 'boolean') {
+        if (res.success && res.reportId != null && typeof res.isPublic === 'boolean') {
           await saveReportLink(id, res.reportId, res.isPublic);
         }
         Alert.alert(
@@ -359,7 +359,7 @@ export default function HistoryScreen({ navigation, embedded, refreshKey, onRena
             appendLog(res.message);
             if (res.success) {
               okCount += 1;
-              if (typeof res.reportId === 'number' && typeof res.isPublic === 'boolean') {
+              if (res.reportId != null && typeof res.isPublic === 'boolean') {
                 await saveReportLink(id, res.reportId, res.isPublic);
               }
             } else {
@@ -398,7 +398,7 @@ export default function HistoryScreen({ navigation, embedded, refreshKey, onRena
   // three, so only one request runs at a time.
   const withReportLink = useCallback(
     async (reading: SavedReading, then: (link: string) => void | Promise<void>) => {
-      if (typeof reading.reportId !== 'number' || typeof reading.reportIsPublic !== 'boolean') return;
+      if (reading.reportId == null || typeof reading.reportIsPublic !== 'boolean') return;
       const creds = await loadHcriCredentials();
       if (!creds) {
         Alert.alert('No hCRI.io account set up', 'Add your username and API token first.', [

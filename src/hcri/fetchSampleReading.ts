@@ -40,7 +40,7 @@ async function getJson(url: string): Promise<any> {
 const REPORTS_API = `${HCRI_API_BASE}/index.php/api/reports`;
 
 /** The report's first flicker reading (oldest), if it has one. Best effort: any problem just means no flicker page. */
-async function fetchFirstFlicker(reportId: number): Promise<FlickerCapture | undefined> {
+async function fetchFirstFlicker(reportId: number | string): Promise<FlickerCapture | undefined> {
   try {
     const data = await getJson(`${REPORTS_API}/${reportId}/flicker`);
     const list: any[] = Array.isArray(data?.readings) ? data.readings : [];
@@ -67,8 +67,8 @@ async function fetchFirstFlicker(reportId: number): Promise<FlickerCapture | und
  * Loads a public report's spectrum as a MeterResult: report `reportId` if given (developer setting), else a random one.
  * If the report has flicker readings, the first one comes along as `flicker`. Throws a user-presentable Error on failure.
  */
-export async function fetchSampleReading(reportId?: number): Promise<MeterResult> {
-  if (reportId && reportId > 0) {
+export async function fetchSampleReading(reportId?: number | string): Promise<MeterResult> {
+  if (reportId) {
     let detail: any;
     try {
       detail = await getJson(`${API}/${reportId}`);
@@ -86,7 +86,7 @@ export async function fetchSampleReading(reportId?: number): Promise<MeterResult
   const pages = Math.max(1, Math.min(Number(first?.pages) || 1, MAX_PAGES));
   const page = 1 + Math.floor(Math.random() * pages);
   const listing = page === 1 ? first : await getJson(`${API}?perPage=${PER_PAGE}&page=${page}`);
-  const candidates: any[] = (listing?.reports ?? []).filter((r: any) => r && typeof r.id === 'number' && !r.private);
+  const candidates: any[] = (listing?.reports ?? []).filter((r: any) => r && (typeof r.id === 'string' || typeof r.id === 'number') && r.id !== '' && !r.private);
   if (candidates.length === 0) throw new Error('No public reports were available.');
 
   // A report can be missing its spectrum (old/manual entries) -- try a few at random before giving up.
@@ -102,7 +102,7 @@ export async function fetchSampleReading(reportId?: number): Promise<MeterResult
   throw new Error('Could not find a public report with spectrum data. Try again.');
 }
 
-function sampleFromDetail(detail: any, report: { id: number; label?: string }): MeterResult | null {
+function sampleFromDetail(detail: any, report: { id: number | string; label?: string }): MeterResult | null {
   const wls: number[] = detail?.wls ?? [];
   const vals: number[] = detail?.vals ?? [];
   if (wls.length < 10 || wls.length !== vals.length) return null;
