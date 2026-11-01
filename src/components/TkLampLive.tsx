@@ -14,6 +14,7 @@ import { TK_LIMITS_DEFAULT, TK_RAW_PER_LM_DEFAULT, TK_STOP_BELOW_HOLD_S, TkRecor
 import { addRuntime, updateRuntime } from '../storage/runtimeHistory';
 import { loadHcriCredentials } from '../storage/secureStorage';
 import { loadTkLimitsPreference, loadTkScalePreference, loadTkTrimPreference, loadTkTrimPeakPreference, loadTkWindowPreference, saveTkLimitsPreference, saveTkScalePreference } from '../storage/preferences';
+import { startLiveRun, liveAdd, finishLiveRun } from '../hcri/liveStation';
 import { uploadRuntimeToHcri } from '../hcri/uploadRuntimeToHcri';
 import { simulatingName } from '../ble/bridgeSim';
 
@@ -84,6 +85,7 @@ export default function TkLampLive({ conn }: Props) {
   const guard = useRef(new TkRunGuard(getTkLimits()));
   const startRef = useRef<() => void>(() => {});
   const stopRef = useRef<(why?: string) => void>(() => {});
+  const labelRef = useRef('');
 
   useEffect(() => {
     loadTkScalePreference(TK_RAW_PER_LM_DEFAULT).then(setTkRawPerLm);
@@ -120,6 +122,7 @@ export default function TkLampLive({ conn }: Props) {
       }
       if (recordingRef.current) {
         recorder.current.add(s, scaleRef.current);
+        if (!simulatingName()) liveAdd(s.ms, avg);
         const why = guard.current.onReading(avg, s.ms);
         if (why) stopRef.current(why);
       }
@@ -215,6 +218,7 @@ export default function TkLampLive({ conn }: Props) {
     setArmed(false);
     recordingRef.current = true;
     setRecording(true);
+    if (!simulatingName()) startLiveRun(() => labelRef.current);
     setFinished(false);
     setAdjusting(false);
     setStartT(null);
@@ -232,6 +236,7 @@ export default function TkLampLive({ conn }: Props) {
     setRecSeconds(recorder.current.seconds);
     setRecCount(recorder.current.count);
     setFinished(recorder.current.count > 1);
+    finishLiveRun(why && /^No readings/.test(why) ? 'error' : 'finished', why && /^No readings/.test(why) ? 'The tester stopped sending readings.' : '');
     if (recorder.current.count <= 1) setNote('Nothing recorded. Make sure readings are coming in, then try again.');
     else if (why) setNote(`Run stopped automatically: ${why}`);
     // Keep every finished run on the phone (History > Runtime), whether or not it is uploaded.
@@ -310,6 +315,7 @@ export default function TkLampLive({ conn }: Props) {
     }
   };
 
+  labelRef.current = label.trim() || defaultRunLabel();
   uploadRef.current = upload;
   startRef.current = start;
   stopRef.current = stop;
