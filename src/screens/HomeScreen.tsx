@@ -174,7 +174,7 @@ export default function HomeScreen({ navigation }: any) {
   // uploadSucceeded any time a fresh upload attempt starts, same reasoning
   // as that flag: a link for a PREVIOUS reading's report should never sit
   // next to a checkmark that looks like it's describing this one.
-  const [lastUploadedReport, setLastUploadedReport] = useState<{ id: number; isPublic: boolean } | null>(null);
+  const [lastUploadedReport, setLastUploadedReport] = useState<{ id: number | string; isPublic: boolean } | null>(null);
   // The History entry (readingHistory.ts) that measure() just auto-saved
   // the CURRENT reading as -- kept around purely so upload() can write the
   // upload title and the resulting report link back onto that same History
@@ -838,8 +838,8 @@ export default function HomeScreen({ navigation }: any) {
     if (loadingTestReading) return;
     setLoadingTestReading(true);
     try {
-      const wanted = parseInt(await loadTestReportIdPreference().catch(() => ''), 10);
-      const sample = await fetchSampleReading(IS_DEV_BUILD && wanted > 0 ? wanted : undefined);
+      const wanted = (await loadTestReportIdPreference().catch(() => '')).trim();
+      const sample = await fetchSampleReading(IS_DEV_BUILD && wanted ? wanted : undefined);
       setResult(sample);
       setFlickerReading(sample.flicker ?? null);
       setFlickerFromReading(!!sample.flicker);
@@ -1648,7 +1648,7 @@ export default function HomeScreen({ navigation }: any) {
     }
 
     // If this reading was uploaded before, update that report instead of creating a duplicate.
-    let replaceId: number | undefined = lastUploadedReport?.id;
+    let replaceId: number | string | undefined = lastUploadedReport?.id;
     if (!replaceId && currentReadingId) {
       try { replaceId = (await loadHistory()).find((r) => r.id === currentReadingId)?.reportId; } catch { /* upload as new */ }
     }
@@ -1678,7 +1678,7 @@ export default function HomeScreen({ navigation }: any) {
       // Only set when the server actually returned both fields (see
       // UploadResult's own comment) -- an older/unexpected response shape
       // just means no copy-link icon shows, not a broken upload.
-      if (typeof res.reportId === 'number' && typeof res.isPublic === 'boolean') {
+      if (res.reportId != null && typeof res.isPublic === 'boolean') {
         setLastUploadedReport({ id: res.reportId, isPublic: res.isPublic });
       }
       // Sync this upload back onto the matching History row -- the title

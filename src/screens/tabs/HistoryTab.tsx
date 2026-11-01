@@ -436,7 +436,7 @@ function HistoryRow({
           from the stored spectrum, so it's there for every reading. */}
       {!selectMode && (
         <View style={styles.linkRow}>
-          {typeof reading.reportId === 'number' && (
+          {reading.reportId != null && (
             <>
               <TouchableOpacity
                 onPress={() => onCopyLink(reading)}

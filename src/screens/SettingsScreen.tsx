@@ -1252,19 +1252,20 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
       {IS_DEV_BUILD && (
         <View style={[styles.settingBlock, { marginBottom: 16 }]}>
           <View style={styles.settingBlockLabelRow}>
-            <Text style={styles.settingLabel}>Test report number (developer)</Text>
-            {helpButton('Test report number', `“Show a test reading” loads this public report from ${HCRI_API_HOST} instead of a random one, including its first flicker reading if it has one. Leave blank for a random report.`)}
+            <Text style={styles.settingLabel}>Test report id (developer)</Text>
+            {helpButton('Test report id', `“Show a test reading” loads this public report from ${HCRI_API_HOST} instead of a random one, including its first flicker reading if it has one. Leave blank for a random report.`)}
           </View>
           <TextInput
             style={styles.input}
             value={testReportId}
             onChangeText={(v) => {
-              const digits = v.replace(/\D/g, '');
+              const digits = v.replace(/[^A-Za-z0-9]/g, '');
               setTestReportId(digits);
               saveTestReportIdPreference(digits).catch(() => {});
             }}
-            keyboardType="number-pad"
-            placeholder="e.g. 1234 (blank = random)"
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="e.g. k7m2qx9vte (blank = random)"
             placeholderTextColor={colors.mutedFaint}
             accessibilityLabel="Test report number"
           />

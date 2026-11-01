@@ -39,7 +39,7 @@ export async function fetchLedSuggestion(spectrum: MeterResult['spectrum'], toke
  * values) and also the first LED as the older flat brand / model / cct, which a server that predates LED lists still reads.
  * Returns true if the server accepted it.
  */
-export async function saveLedDetails(reportId: number, leds: LedDetails[], token: string): Promise<boolean> {
+export async function saveLedDetails(reportId: number | string | string, leds: LedDetails[], token: string): Promise<boolean> {
   try {
     const first = leds[0] ?? {};
     const res = await fetchWithTimeout(`${BASE}/reports/${reportId}/led`, {

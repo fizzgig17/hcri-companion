@@ -23,7 +23,7 @@ export interface UploadResult {
    * response wasn't the JSON shape expected (treated as "can't offer a
    * link for this one" rather than a hard error -- the upload itself
    * already succeeded either way). */
-  reportId?: number;
+  reportId?: number | string;
   isPublic?: boolean;
   /** True when the server overwrote the report named by replaceId instead of creating a new one. */
   replaced?: boolean;
@@ -35,7 +35,7 @@ export async function uploadToHcri(
   token: string,
   log?: (msg: string) => void,
   /** Id of this reading's existing hCRI.io report: the server overwrites it instead of creating a duplicate. */
-  replaceId?: number
+  replaceId?: number | string
 ): Promise<UploadResult> {
   // Deliberately logs the server + endpoint + label + a masked form of the
   // key actually used -- never `csv` (that's the full wavelength/value
@@ -80,12 +80,12 @@ export async function uploadToHcri(
   // Best-effort parse for id/isPublic -- `text` is logged verbatim above
   // regardless, so a parse failure here only costs the copy-link feature,
   // never the upload's own success/message result.
-  let reportId: number | undefined;
+  let reportId: number | string | undefined;
   let isPublic: boolean | undefined;
   let replaced: boolean | undefined;
   try {
     const parsed = JSON.parse(text);
-    if (typeof parsed.id === 'number') reportId = parsed.id;
+    if (typeof parsed.id === 'number' || (typeof parsed.id === 'string' && parsed.id)) reportId = parsed.id;
     if (typeof parsed.isPublic === 'boolean') isPublic = parsed.isPublic;
     if (typeof parsed.replaced === 'boolean') replaced = parsed.replaced;
   } catch {

@@ -95,7 +95,7 @@ export interface SavedReading {
    * Missing entirely for a reading that's never been uploaded, or was
    * uploaded before this field existed.
    */
-  reportId?: number;
+  reportId?: number | string;
   reportIsPublic?: boolean;
   /** LED details the person confirmed (or picked via "Other") for this reading. */
   led?: { brand?: string; model?: string; cct?: string };
@@ -177,7 +177,7 @@ export async function renameReading(id: string, label: string): Promise<void> {
  * the previous {reportId, isPublic} -- there's no stale-link case to guard
  * against beyond always overwriting rather than merging/ignoring.
  */
-export async function setReadingReportLink(id: string, reportId: number, isPublic: boolean): Promise<void> {
+export async function setReadingReportLink(id: string, reportId: number | string | string, isPublic: boolean): Promise<void> {
   const existing = await loadHistory();
   const next = existing.map((r) => (r.id === id ? { ...r, reportId, reportIsPublic: isPublic, ledSynced: false } : r));
   await saveAll(next);
@@ -202,13 +202,13 @@ export async function setReadingReportLink(id: string, reportId: number, isPubli
 export async function recordUpload(
   id: string,
   label: string,
-  reportId?: number,
+  reportId?: number | string,
   isPublic?: boolean
 ): Promise<void> {
   const existing = await loadHistory();
   const next = existing.map((r) =>
     r.id === id
-      ? { ...r, label, ...(typeof reportId === 'number' && typeof isPublic === 'boolean' ? { reportId, reportIsPublic: isPublic, ledSynced: false } : {}) }
+      ? { ...r, label, ...(reportId != null && typeof isPublic === 'boolean' ? { reportId, reportIsPublic: isPublic, ledSynced: false } : {}) }
       : r
   );
   await saveAll(next);

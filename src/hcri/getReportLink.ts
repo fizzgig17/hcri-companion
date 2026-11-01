@@ -19,7 +19,7 @@ import { HCRI_API_BASE } from './apiConfig';
 import { maskSecret } from '../utils/maskSecret';
 import fetchWithTimeout from './fetchWithTimeout';
 
-function shareUrl(reportId: number): string {
+function shareUrl(reportId: number | string): string {
   return `${HCRI_API_BASE}/index.php/api/v1/reports/${reportId}/share`;
 }
 
@@ -38,7 +38,7 @@ export interface ReportLinkResult {
  * endpoint above.
  */
 export async function getReportLink(
-  reportId: number,
+  reportId: number | string,
   isPublic: boolean,
   token: string,
   log?: (msg: string) => void
