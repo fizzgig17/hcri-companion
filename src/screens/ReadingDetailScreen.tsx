@@ -115,7 +115,7 @@ export default function ReadingDetailScreen({ route, navigation }: any) {
     savedAt: { color: colors.muted, fontSize: 12, fontFamily: 'monospace', flexShrink: 1 },
     catButton: { marginLeft: 12 },
     catSummaryRow: { marginTop: -4, marginBottom: 12 },
-    catText: { color: colors.muted, fontSize: 13 },
+    catText: { color: colors.muted, fontSize: 11 },
 
     resultCard: {
       backgroundColor: colors.card,
