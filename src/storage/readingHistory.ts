@@ -109,6 +109,10 @@ export interface SavedReading {
   ledSynced?: boolean;
   /** True when the person removed all LED details, so the removal still has to be sent to the report on hCRI.io. */
   ledCleared?: boolean;
+  /** The other categories chosen with Categorize (light brand, light model, optic, lumens, current), one value each. LEDs are in `leds`. */
+  categories?: Partial<Record<'light_brand' | 'light_model' | 'optic' | 'lumens' | 'current', string>>;
+  /** False while `categories` still has to be sent to the report on hCRI.io (set on every change, cleared once sent). */
+  catSynced?: boolean;
 }
 
 function makeId(): string {
@@ -236,10 +240,22 @@ export async function setReadingFlicker(id: string, flicker: NonNullable<MeterRe
   await saveAll(next);
 }
 
+/** Applies a patch to several readings in ONE storage write (bulk Categorize); `fn` returns the changes for each reading, or null to leave it alone. */
+export async function patchReadings(ids: string[], fn: (r: SavedReading) => Partial<SavedReading> | null): Promise<void> {
+  if (!ids.length) return;
+  const idSet = new Set(ids);
+  const existing = await loadHistory();
+  await saveAll(existing.map((r) => {
+    if (!idSet.has(r.id)) return r;
+    const ch = fn(r);
+    return ch ? { ...r, ...ch } : r;
+  }));
+}
+
 /** Patches LED-related fields of one reading (confirm / dismiss / cache a suggestion / mark synced). */
 export async function updateReadingLed(
   id: string,
-  patch: Partial<Pick<SavedReading, 'led' | 'leds' | 'ledDismissed' | 'ledSuggestion' | 'ledSynced' | 'ledCleared'>>
+  patch: Partial<Pick<SavedReading, 'led' | 'leds' | 'ledDismissed' | 'ledSuggestion' | 'ledSynced' | 'ledCleared' | 'categories' | 'catSynced'>>
 ): Promise<void> {
   const existing = await loadHistory();
   await saveAll(existing.map((r) => (r.id === id ? { ...r, ...patch } : r)));

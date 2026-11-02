@@ -51,7 +51,8 @@ import { IS_DEV_BUILD } from '../hcri/buildTarget';
 import { tm30InputFromReading, Tm30Input } from '../utils/tm30Report';
 import ShareCardModal from '../components/ShareCardModal';
 import { analyzeSpectrum } from '../utils/spectralAnalysis';
-import LedPickerModal from '../components/LedPickerModal';
+import CategorizeModal from '../components/CategorizeModal';
+import { applyCategories, CategoryValues, loadLastCategorize, saveLastCategorize, valuesOfReading } from '../hcri/categorize';
 import { EMPTY_LED_LISTS, getCachedLedLists, LedLists, refreshLedLists } from '../hcri/ledLists';
 import { fetchLedSuggestion, LedDetails } from '../hcri/ledApi';
 import useLedSuggestionsEnabled from '../hooks/useLedSuggestionsEnabled';
@@ -108,7 +109,10 @@ export default function HistoryScreen({ navigation, embedded, refreshKey, onRena
   // LED details: cached dropdown lists, plus a lazy suggestion lookup for readings that were never asked about
   // (needs the API token and internet; quietly does nothing otherwise).
   const [ledLists, setLedLists] = useState<LedLists>(EMPTY_LED_LISTS);
-  const [ledPickFor, setLedPickFor] = useState<SavedReading | null>(null);
+  // The Categorize dialog: which readings it is for (one from a row, or the checked ones from Select mode), and what was
+  // applied last time (a starting point for the fields).
+  const [catFor, setCatFor] = useState<{ ids: string[]; done?: (applied: boolean) => void } | null>(null);
+  const [lastCat, setLastCat] = useState<CategoryValues | undefined>(undefined);
   const [cardInput, setCardInput] = useState<Tm30Input | null>(null);
   useEffect(() => {
     let live = true;
@@ -128,8 +132,34 @@ export default function HistoryScreen({ navigation, embedded, refreshKey, onRena
     setHistory((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
     return updateReadingLed(id, patch);
   }, []);
+  const openCategorize = useCallback((r: SavedReading) => {
+    loadLastCategorize().then(setLastCat).catch(() => {});
+    setCatFor({ ids: [r.id] });
+  }, []);
+  const categorizeMany = useCallback((ids: string[]) => new Promise<boolean>((resolve) => {
+    loadLastCategorize().then(setLastCat).catch(() => {});
+    setCatFor({ ids, done: resolve });
+  }), []);
+  const closeCategorize = useCallback((applied: boolean) => {
+    setCatFor((cur) => { cur?.done?.(applied); return null; });
+  }, []);
+  const applyCategorize = useCallback(async (values: CategoryValues, replace: boolean) => {
+    const ids = catFor?.ids ?? [];
+    closeCategorize(true);
+    try {
+      await saveLastCategorize(values);
+      const res = await applyCategories(ids, values, replace);
+      await refreshHistory();
+      const parts: string[] = [];
+      if (res.skipped) parts.push(`${res.skipped} already had values and were left as they are.`);
+      if (res.pendingSend) parts.push(`${res.pendingSend} will be sent to hCRI.io once they are uploaded, or when you are online.`);
+      if (!res.changed) Alert.alert('Nothing changed', parts.join('\n') || 'No reading needed the values you chose.');
+      else if (parts.length) Alert.alert(`Categorized ${res.changed} reading${res.changed === 1 ? '' : 's'}`, parts.join('\n'));
+    } catch (e: any) {
+      Alert.alert('Not categorized', String(e?.message ?? e));
+    }
+  }, [catFor, closeCategorize, refreshHistory]);
   const confirmLed = useCallback(async (id: string, d: LedDetails[]) => {
-    setLedPickFor(null);
     await patchLed(id, { ...ledPatch(d), ledSynced: false, ledDismissed: !d.some(hasLed), ledCleared: !d.some(hasLed) }).catch(() => {
       Alert.alert('LED details not saved', "They couldn't be saved on this device. Try again.");
     });
@@ -532,7 +562,8 @@ export default function HistoryScreen({ navigation, embedded, refreshKey, onRena
           onCopyLink={copyReportLinkFromHistory}
           onOpenReport={openReportFromHistory}
           onLedConfirm={(id, d) => confirmLed(id, [d])}
-          onLedPick={setLedPickFor}
+          onLedPick={openCategorize}
+          onCategorizeMany={categorizeMany}
           onLedDismiss={(id) => { patchLed(id, { ledDismissed: true }).catch(() => {}); }}
           onOpenTm30={(reading) => {
             try {
@@ -562,12 +593,15 @@ export default function HistoryScreen({ navigation, embedded, refreshKey, onRena
         onPick={(f) => flickerPickFor && attachFlicker(flickerPickFor, f)}
         onCancel={() => setFlickerPickFor(null)}
       />
-      <LedPickerModal
-        visible={!!ledPickFor}
+      <CategorizeModal
+        visible={!!catFor}
+        title={catFor && catFor.ids.length > 1 ? `Categorize ${catFor.ids.length} readings` : 'Categorize'}
         lists={ledLists}
-        initial={ledPickFor && ledsOfReading(ledPickFor).length ? ledsOfReading(ledPickFor) : (ledSuggestionsEnabled && ledPickFor && ledPickFor.ledSuggestion && ledPickFor.ledSuggestion !== 'none' ? [{ brand: ledPickFor.ledSuggestion.brand, model: ledPickFor.ledSuggestion.model, cct: ledPickFor.ledSuggestion.cct ?? undefined }] : undefined)}
-        onSave={(d) => ledPickFor && confirmLed(ledPickFor.id, d)}
-        onCancel={() => setLedPickFor(null)}
+        bulk={!!catFor && catFor.ids.length > 1}
+        initial={catFor && catFor.ids.length === 1 ? (() => { const r = history.find((x) => x.id === catFor.ids[0]); return r ? valuesOfReading(r) : undefined; })() : undefined}
+        remembered={lastCat}
+        onApply={applyCategorize}
+        onCancel={() => closeCategorize(false)}
       />
     </Frame>
   );

@@ -16,9 +16,14 @@
 // and there's no deep-linking concern here that would need it to be
 // JSON-serializable-only.
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
-import { SavedReading } from '../storage/readingHistory';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { View, Text, ScrollView, StyleSheet, useWindowDimensions, TouchableOpacity, Alert } from 'react-native';
+import { SavedReading, loadHistory } from '../storage/readingHistory';
+import CategorizeModal from '../components/CategorizeModal';
+import { Icon, ICON_SIZE } from '../components/icons';
+import { applyCategories, CategoryValues, loadLastCategorize, otherCategoriesLine, saveLastCategorize, valuesOfReading } from '../hcri/categorize';
+import { EMPTY_LED_LISTS, getCachedLedLists, LedLists, refreshLedLists } from '../hcri/ledLists';
+import { ledsLine, ledsOfReading } from '../hcri/leds';
 import { analyzeSpectrum } from '../utils/spectralAnalysis';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
 import { STAT_METRIC_BY_ID } from '../utils/statMetrics';
@@ -41,7 +46,33 @@ function formatSavedAt(ms: number): string {
 export default function ReadingDetailScreen({ route, navigation }: any) {
   const [dragging, setDragging] = useState(false);
   const { colors } = useTheme();
-  const reading: SavedReading = route.params.reading;
+  // The reading as it was when this page opened; re-read from History after Categorize so its categories show here.
+  const [reading, setReading] = useState<SavedReading>(route.params.reading);
+  const [catOpen, setCatOpen] = useState(false);
+  const [lastCat, setLastCat] = useState<CategoryValues | undefined>(undefined);
+  const [lists, setLists] = useState<LedLists>(EMPTY_LED_LISTS);
+  useEffect(() => {
+    let live = true;
+    getCachedLedLists().then((l) => live && setLists(l));
+    refreshLedLists().then((l) => live && setLists(l));
+    return () => { live = false; };
+  }, []);
+  const openCategorize = useCallback(() => {
+    loadLastCategorize().then(setLastCat).catch(() => {});
+    setCatOpen(true);
+  }, []);
+  const applyCategorize = useCallback(async (values: CategoryValues) => {
+    setCatOpen(false);
+    try {
+      await saveLastCategorize(values);
+      const res = await applyCategories([reading.id], values, true);
+      const fresh = (await loadHistory()).find((x) => x.id === reading.id);
+      if (fresh) setReading(fresh);
+      if (res.pendingSend) Alert.alert('Saved on this phone', 'It will be sent to hCRI.io once the reading is uploaded, or when you are online.');
+    } catch (e: any) {
+      Alert.alert('Not categorized', String(e?.message ?? e));
+    }
+  }, [reading.id]);
   // Tablets: every graph at once (spectrum, CIE, R1-R15 and, when the reading has one, flicker), like Home.
   const layoutMode = useLayoutMode();
   // Landscape dashboards get the draggable grid; portrait/compact swipe through the charts in their original order.
@@ -79,6 +110,9 @@ export default function ReadingDetailScreen({ route, navigation }: any) {
     content: { padding: 16, paddingBottom: 32 },
 
     savedAt: { color: colors.muted, fontSize: 12, fontFamily: 'monospace', marginBottom: 10 },
+    catRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+    catText: { color: colors.accent, fontSize: 13, marginLeft: 6, flexShrink: 1 },
+    catEdit: { color: colors.accent, fontSize: 12, fontWeight: '600', marginLeft: 8 },
 
     resultCard: {
       backgroundColor: colors.card,
@@ -95,6 +129,16 @@ export default function ReadingDetailScreen({ route, navigation }: any) {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} scrollEnabled={!dragging}>
       <Text style={styles.savedAt}>{formatSavedAt(reading.savedAt)}</Text>
+
+      {!reading.result.sampleLabel && (
+        <TouchableOpacity onPress={openCategorize} accessibilityRole="button" accessibilityLabel="Categorize this reading" style={styles.catRow}>
+          <Icon name="tag" color={colors.accent} size={ICON_SIZE.inline} />
+          <Text style={styles.catText} numberOfLines={2}>
+            {[ledsOfReading(reading).length ? ledsLine(ledsOfReading(reading)) : '', otherCategoriesLine(reading)].filter(Boolean).join('  ·  ') || 'Categorize'}
+          </Text>
+          <Text style={styles.catEdit}>{ledsOfReading(reading).length || otherCategoriesLine(reading) ? 'Edit' : ''}</Text>
+        </TouchableOpacity>
+      )}
 
       <View style={styles.resultCard}>
         <View style={styles.statGrid}>
@@ -133,6 +177,15 @@ export default function ReadingDetailScreen({ route, navigation }: any) {
           flicker={reading.result.flicker ? { reading: reading.result.flicker, running: false, focusNonce: 0, history: [] } : undefined}
         />
       )}
+      <CategorizeModal
+        visible={catOpen}
+        title="Categorize"
+        lists={lists}
+        initial={valuesOfReading(reading)}
+        remembered={lastCat}
+        onApply={applyCategorize}
+        onCancel={() => setCatOpen(false)}
+      />
     </ScrollView>
   );
 }

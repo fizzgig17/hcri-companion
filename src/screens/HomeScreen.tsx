@@ -311,7 +311,7 @@ export default function HomeScreen({ navigation }: any) {
   useEffect(() => {
     let live = true;
     getCachedLedLists().then((l) => live && setLedLists(l));
-    refreshLedLists().then((l) => live && setLedLists(l));
+    refreshLedLists(true).then((l) => live && setLedLists(l));   // once per app start, if there's a connection
     return () => { live = false; };
   }, []);
 

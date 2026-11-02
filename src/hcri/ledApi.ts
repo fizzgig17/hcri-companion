@@ -55,3 +55,20 @@ export async function saveLedDetails(reportId: number | string | string, leds: L
     return false;
   }
 }
+
+/**
+ * Saves the other categories (light_brand, light_model, optic, lumens, current; one value each) on an uploaded report.
+ * Sends only those fields, never `leds`, so the report's LEDs are left exactly as they are. Empty values are skipped by the server.
+ */
+export async function saveCategoryDetails(reportId: number | string, values: Record<string, string>, token: string): Promise<boolean> {
+  try {
+    const res = await fetchWithTimeout(`${BASE}/reports/${reportId}/led`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(values),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}

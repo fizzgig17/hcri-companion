@@ -50,6 +50,7 @@ const tint = (hex: string, alpha: string) => (/^#[0-9a-f]{6}$/i.test(hex) ? hex 
 import { analyzeSpectrum } from '../../utils/spectralAnalysis';
 import LedSuggestionCard from '../../components/LedSuggestionCard';
 import { ledsLine, ledsOfReading } from '../../hcri/leds';
+import { otherCategoriesLine } from '../../hcri/categorize';
 
 interface Props {
   history: SavedReading[];
@@ -67,6 +68,8 @@ interface Props {
   onShareAll: () => void;
   /** Shares just the checked readings (Select mode) as one CSV -- or as a single reading's own CSV when only one is checked. */
   onShareMany: (ids: string[]) => void;
+  /** Categorize the checked readings (Select mode). Resolves true once the categories were applied (Select mode then closes). Omit to hide the button. */
+  onCategorizeMany?: (ids: string[]) => Promise<boolean>;
   /** Opens the Compare screen for 2-6 checked readings (Select mode). Omit to hide the button. */
   onCompareMany?: (readings: SavedReading[]) => void;
   /** Opens ReadingDetailScreen for one saved reading -- the same measurement grid and Spectrum/Chrom/R-Values pages the Main/Spectrum tabs show for the current reading, just fed this past one instead (see ReadingDetailScreen.tsx). */
@@ -364,7 +367,7 @@ function HistoryRow({
       </TouchableOpacity>
 
       {ledsOfReading(reading).length ? (
-        <TouchableOpacity onPress={() => onLedPick(reading)} disabled={selectMode} style={{ marginTop: 4 }} accessibilityRole="button" accessibilityLabel="LED details. Tap to edit.">
+        <TouchableOpacity onPress={() => onLedPick(reading)} disabled={selectMode} style={{ marginTop: 4 }} accessibilityRole="button" accessibilityLabel="LED details. Tap to categorize.">
           <View style={styles.ledLine}>
             <Icon name="bulb" color={colors.muted} size={ICON_SIZE.inline} />
             <Text style={[styles.ledText, { flexShrink: 1 }]}>{ledsLine(ledsOfReading(reading))}</Text>
@@ -386,13 +389,27 @@ function HistoryRow({
           />
         </View>
       ) : !selectMode && !reading.result.sampleLabel ? (
-        <TouchableOpacity onPress={() => onLedPick(reading)} style={{ marginTop: 4 }} accessibilityRole="button" accessibilityLabel="Add LED details to this reading">
+        <TouchableOpacity onPress={() => onLedPick(reading)} style={{ marginTop: 4 }} accessibilityRole="button" accessibilityLabel="Categorize this reading">
           <View style={styles.ledLine}>
-            <Icon name="bulb" color={colors.accent} size={ICON_SIZE.inline} />
-            <Text style={[styles.ledText, { color: colors.accent }]}>Add LED details</Text>
+            <Icon name="tag" color={colors.accent} size={ICON_SIZE.inline} />
+            <Text style={[styles.ledText, { color: colors.accent }]}>Categorize</Text>
           </View>
         </TouchableOpacity>
       ) : null}
+      {!!otherCategoriesLine(reading) && (
+        <TouchableOpacity onPress={() => onLedPick(reading)} disabled={selectMode} style={{ marginTop: 4 }} accessibilityRole="button" accessibilityLabel="Categories. Tap to edit.">
+          <View style={styles.ledLine}>
+            <Icon name="tag" color={colors.muted} size={ICON_SIZE.inline} />
+            <Text style={[styles.ledText, { flexShrink: 1 }]}>{otherCategoriesLine(reading)}</Text>
+            {!selectMode && (
+              <View style={styles.ledEdit}>
+                <Icon name="edit" color={colors.accent} size={ICON_SIZE.inline} />
+                <Text style={styles.ledEditText}>Edit</Text>
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+      )}
 
       <Modal
         visible={modalVisible}
@@ -526,6 +543,7 @@ export default function HistoryTab({
   onShareAll,
   onShareMany,
   onCompareMany,
+  onCategorizeMany,
   onOpen,
   uploadingId,
   bulkUploading,
@@ -634,6 +652,12 @@ export default function HistoryTab({
     if (selected.size === 0) return;
     const ids = history.filter((r) => selected.has(r.id)).map((r) => r.id);
     onShareMany(ids);
+  };
+
+  const handleCategorizeSelected = async () => {
+    if (!onCategorizeMany || selected.size === 0) return;
+    const ids = history.filter((r) => selected.has(r.id)).map((r) => r.id);
+    if (await onCategorizeMany(ids)) exitSelectMode();
   };
 
   const handleCompareSelected = () => {
@@ -792,6 +816,7 @@ export default function HistoryTab({
           <View style={styles.selectBarButtons}>
             {([
               ...(onCompareMany ? [{ icon: 'compare' as const, label: 'Compare', onPress: handleCompareSelected, color: colors.info, border: colors.info }] : []),
+              ...(onCategorizeMany ? [{ icon: 'tag' as const, label: 'Categorize', onPress: handleCategorizeSelected, color: colors.text }] : []),
               { icon: 'share' as const, label: 'Share', onPress: handleShareSelected, color: colors.text },
               { icon: 'trash' as const, label: bulkDeleting ? 'Deleting…' : 'Delete', onPress: handleDeleteSelected, color: colors.danger, border: colors.danger },
               { icon: 'upload' as const, label: bulkUploading ? 'Uploading…' : selected.size ? `Upload (${selected.size})` : 'Upload', onPress: handleUploadSelected, color: colors.accent, border: colors.accent },
@@ -808,7 +833,7 @@ export default function HistoryTab({
                   style={[styles.selectBarIconButton, 'border' in b && { borderColor: b.border }, off && { opacity: 0.5 }]}
                 >
                   <Icon name={b.icon} color={b.color} size={ICON_SIZE.row} />
-                  <Text style={[styles.selectBarIconText, { color: b.color }]} numberOfLines={1}>{b.label}</Text>
+                  <Text style={[styles.selectBarIconText, { color: b.color }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{b.label}</Text>
                 </TouchableOpacity>
               );
             })}

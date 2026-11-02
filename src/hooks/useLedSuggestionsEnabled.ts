@@ -14,7 +14,7 @@ export default function useLedSuggestionsEnabled(navigation: Nav): boolean {
   useEffect(() => {
     let live = true;
     const load = () => {
-      loadLedSuggestionsPreference().then((v) => live && setEnabled(v)).catch(() => live && setEnabled(true));
+      loadLedSuggestionsPreference().then((v) => live && setEnabled(v)).catch(() => live && setEnabled(false));
     };
     load();
     const unsub = navigation.addListener('focus', load);

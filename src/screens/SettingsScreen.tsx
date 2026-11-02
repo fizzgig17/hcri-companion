@@ -207,7 +207,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   const [help, setHelp] = useState<{ title: string; text: string } | null>(null);
   const [flickerWithReading, setFlickerWithReading] = useState(false);
   const [sideTabMode, setSideTabMode] = useState<SideTabMode>('remember');
-  const [ledSuggestions, setLedSuggestions] = useState(true);
+  const [ledSuggestions, setLedSuggestions] = useState(false);
   const [autoConnect, setAutoConnect] = useState(true);
   // Which measurements show on the Main tab's result card, and in what
   // order -- starts from the built-in default so the list renders
@@ -1312,7 +1312,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
 
       {section('readings', 'Readings & feedback', 'LED suggestions, flicker, haptics', (
         <>
-      {switchRow('LED suggestions', "On by default. After a reading, hCRI.io suggests the LED (brand, model and CCT) from the shape of the spectrum and the reading's title, and you confirm it with one tap. Turn off to stop those requests and hide the suggestion cards. You can still add LED details yourself with the LED button.", ledSuggestions, toggleLedSuggestions)}
+      {switchRow('LED suggestions', "Off by default. Turn on and, after a reading, hCRI.io suggests the LED (brand, model and CCT) from the shape of the spectrum and the reading's title, and you confirm it with one tap. While off, the app makes no suggestion requests and shows no suggestion cards. You can always categorize a reading yourself with the Categorize button.", ledSuggestions, toggleLedSuggestions)}
       {switchRow('Capture flicker with each reading', 'After each reading, also take a one-shot flicker capture (frequency, percent flicker, flicker index and waveform). Adds a few seconds per reading and only works on meters that support flicker. Saved with the reading, shown on its Flicker page, included in shared CSVs, and uploaded with the reading to hCRI.io (attached to its report). Even when off, you can add a flicker sample to a reading from the Flicker tab before uploading it.', flickerWithReading, toggleFlickerWithReading)}
 
       {switchRow('Button taps', 'A short tick when you press a button in the bar at the bottom of the Main screen.', hapticTaps, toggleHapticTaps)}
