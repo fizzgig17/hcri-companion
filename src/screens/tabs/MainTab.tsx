@@ -39,10 +39,8 @@ import type { FlickerUploadApi } from '../../components/FlickerChart';
 import type { BatteryStatus } from '../../ble/protocol';
 import { SpectralAnalysis } from '../../utils/spectralAnalysis';
 import LedSuggestionCard from '../../components/LedSuggestionCard';
-import LedPickerModal from '../../components/LedPickerModal';
 import { LedDetails, LedSuggestion } from '../../hcri/ledApi';
 import { hasLed } from '../../hcri/leds';
-import { LedLists } from '../../hcri/ledLists';
 import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
 import HintPressable from '../../components/HintPressable';
 import { EMPTY_METER_RESULT, EMPTY_SPECTRAL_ANALYSIS } from '../../utils/placeholderReading';
@@ -71,13 +69,11 @@ interface Props {
   ledCurrent?: LedDetails[] | null;
   /** Opens the LED picker for the current reading (the pill in the title box). */
   onLedEdit?: () => void;
-  ledLists?: LedLists;
-  ledPickerOpen?: boolean;
+  /** The reading's other categories on one line (light, optic, lumens, current), for the Categorize pill. */
+  categoriesCurrent?: string;
   onLedYes?: () => void;
   onLedOther?: () => void;
   onLedClose?: () => void;
-  onLedPickerCancel?: () => void;
-  onLedPickerSave?: (d: LedDetails[]) => void;
   status: Status;
   isBusy: boolean;
   result: MeterResult | null;
@@ -219,7 +215,7 @@ export default function MainTab({
   onOpenSavedReading,
   wide,
   portrait,
-  ledSuggestion, ledCurrent, onLedEdit, ledLists, ledPickerOpen, onLedYes, onLedOther, onLedClose, onLedPickerCancel, onLedPickerSave,
+  ledSuggestion, ledCurrent, onLedEdit, categoriesCurrent, onLedYes, onLedOther, onLedClose,
 }: Props) {
   const { colors, statusColors } = useTheme();
   const canSwitchMeters = status === 'connected' && (devicePickerDevices?.length ?? 0) > 1;
@@ -538,15 +534,6 @@ export default function MainTab({
             <LedSuggestionCard floating suggestion={ledSuggestion} onYes={onLedYes} onOther={onLedOther} onClose={onLedClose} />
           )}
         </View>
-        {ledLists && onLedPickerSave && onLedPickerCancel && (
-          <LedPickerModal
-            visible={!!ledPickerOpen}
-            lists={ledLists}
-            initial={ledCurrent ?? (ledSuggestion ? [{ brand: ledSuggestion.brand, model: ledSuggestion.model, cct: ledSuggestion.cct ?? undefined }] : undefined)}
-            onSave={onLedPickerSave}
-            onCancel={onLedPickerCancel}
-          />
-        )}
         {!hasReading && <View style={[styles.titleInputWrap, { opacity: 0 }]} />}
         {hasReading && (
           <TouchableOpacity
@@ -568,13 +555,13 @@ export default function MainTab({
               {uploadTitle.length > 0 ? uploadTitle : defaultLabel(cachedUsername, displayResult.deviceName)}
             </Text>
             {!result?.sampleLabel && onLedEdit && (
-              <TouchableOpacity style={styles.ledPill} onPress={onLedEdit} accessibilityRole="button" accessibilityLabel="LED details for this reading">
+              <TouchableOpacity style={styles.ledPill} onPress={onLedEdit} accessibilityRole="button" accessibilityLabel="Categorize this reading">
                 <View style={[styles.ledPillInner, { flexDirection: 'row', alignItems: 'center' }]}>
-                  <Icon name="bulb" color={ledCurrent && ledCurrent.some(hasLed) ? colors.accent : colors.muted} size={ICON_SIZE.inline} />
-                  <Text style={{ color: ledCurrent && ledCurrent.some(hasLed) ? colors.accent : colors.muted, fontSize: 12, fontWeight: '600', marginLeft: 4 }}>
-                    {ledCurrent && ledCurrent.filter(hasLed).length > 1 ? `${ledCurrent.filter(hasLed).length} LEDs` : ledCurrent && ledCurrent.some(hasLed) ? 'LED' : 'Add LED'}
+                  <Icon name="tag" color={ledCurrent && ledCurrent.some(hasLed) || categoriesCurrent ? colors.accent : colors.muted} size={ICON_SIZE.inline} />
+                  <Text style={{ color: ledCurrent && ledCurrent.some(hasLed) || categoriesCurrent ? colors.accent : colors.muted, fontSize: 12, fontWeight: '600', marginLeft: 4 }}>
+                    {ledCurrent && ledCurrent.filter(hasLed).length > 1 ? `${ledCurrent.filter(hasLed).length} LEDs` : ledCurrent && ledCurrent.some(hasLed) ? 'LED' : categoriesCurrent ? 'Categories' : 'Categorize'}
                   </Text>
-                  {ledCurrent && ledCurrent.some(hasLed) && <View style={{ marginLeft: 3 }}><Icon name="check" color={colors.accent} size={12} /></View>}
+                  {(ledCurrent && ledCurrent.some(hasLed) || categoriesCurrent) && <View style={{ marginLeft: 3 }}><Icon name="check" color={colors.accent} size={12} /></View>}
                 </View>
               </TouchableOpacity>
             )}

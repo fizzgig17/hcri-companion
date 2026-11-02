@@ -33,7 +33,7 @@ import { fetchSampleReading } from '../hcri/fetchSampleReading';
 import { loadHcriCredentials, loadLastDeviceId } from '../storage/secureStorage';
 import { loadAutoConnectPreference, loadKeepAwakePreference, loadStayConnectedInBackgroundPreference, loadFlickerWithReadingPreference, loadTestReportIdPreference, loadMunkiCalMinutesPreference, loadMunkiBridgeIds, saveMunkiBridgeId, loadSideTabPreference, saveSideTabPreference, loadSideTabModePreference, saveFoldableSeen } from '../storage/preferences';
 import { loadStatDisplayPrefs, visibleStatIds, defaultStatDisplayPrefs } from '../storage/statDisplayPrefs';
-import { addReading, loadHistory, recordUpload, renameReading, setReadingFlicker, updateReadingLed } from '../storage/readingHistory';
+import { addReading, loadHistory, recordUpload, renameReading, setReadingFlicker, updateReadingLed, SavedReading } from '../storage/readingHistory';
 import { addFlicker, updateFlicker } from '../storage/flickerHistory';
 import { fetchLedSuggestion, LedDetails, LedSuggestion } from '../hcri/ledApi';
 import useLedSuggestionsEnabled from '../hooks/useLedSuggestionsEnabled';
@@ -41,6 +41,8 @@ import { ledPatch, hasLed, ledsOfReading } from '../hcri/leds';
 import { syncLedForReading } from '../hcri/ledSync';
 import { initBackup, offerRestoreIfEmpty, scheduleBackup } from '../hcri/backup';
 import { EMPTY_LED_LISTS, getCachedLedLists, LedLists, refreshLedLists } from '../hcri/ledLists';
+import CategorizeModal from '../components/CategorizeModal';
+import { applyCategories, CategoryValues, loadLastCategorize, otherCategoriesLine, saveLastCategorize } from '../hcri/categorize';
 import { IS_DEV_BUILD } from '../hcri/buildTarget';
 import { shareDebugLog } from '../utils/shareLog';
 import { shareSingleReadingCsv } from '../utils/shareCsv';
@@ -193,6 +195,9 @@ export default function HomeScreen({ navigation }: any) {
   const ledSuggestionsEnabled = useLedSuggestionsEnabled(navigation);
   const [ledPickerOpen, setLedPickerOpen] = useState(false);
   const [currentLeds, setCurrentLeds] = useState<LedDetails[]>([]);
+  // The current reading's other categories (light, optic, lumens, current) and what Categorize applied last time.
+  const [currentCats, setCurrentCats] = useState<NonNullable<SavedReading['categories']>>({});
+  const [lastCat, setLastCat] = useState<CategoryValues | undefined>(undefined);
   const [ledLists, setLedLists] = useState<LedLists>(EMPTY_LED_LISTS);
   // True while the copy-link button's own request (getReportLink, for a
   // private report only -- a public one resolves with no request) is in
@@ -321,6 +326,7 @@ export default function HomeScreen({ navigation }: any) {
   useEffect(() => {
     setLedSuggestion(null);
     setCurrentLeds([]);
+    setCurrentCats({});
     ledCardClosedRef.current = false;
   }, [currentReadingId]);
   // The LEDs can also be edited from History; pick up the saved ones when this screen comes back into view (and when the
@@ -333,6 +339,7 @@ export default function HomeScreen({ navigation }: any) {
       if (!entry) return;
       const leds = ledsOfReading(entry);
       setCurrentLeds(leds);
+      setCurrentCats(entry.categories ?? {});
       if (leds.length || entry.ledDismissed) setLedSuggestion(null);
     } catch {
       // keep what is shown
@@ -360,6 +367,26 @@ export default function HomeScreen({ navigation }: any) {
     }, 400);
     return () => { live = false; clearTimeout(t); };
   }, [currentReadingId, uploadTitle, ledSuggestionsEnabled]);
+
+  // Categorize for the current reading (the pill on Main, the Categories block on Data, the suggestion card's Other).
+  useEffect(() => {
+    if (ledPickerOpen) loadLastCategorize().then(setLastCat).catch(() => {});
+  }, [ledPickerOpen]);
+  const applyCurrentCategorize = useCallback(async (values: CategoryValues) => {
+    const id = currentReadingId;
+    setLedPickerOpen(false);
+    setLedSuggestion(null);
+    if (!id) return;
+    try {
+      await saveLastCategorize(values);
+      const res = await applyCategories([id], values, true);
+      await refreshLedFromHistory();
+      if (res.pendingSend) Alert.alert('Saved on this phone', 'It will be sent to hCRI.io once the reading is uploaded, or when you are online.');
+    } catch (e: any) {
+      appendLog(`Failed to categorize: ${e?.message ?? e}`);
+      Alert.alert('Not categorized', String(e?.message ?? e));
+    }
+  }, [currentReadingId, refreshLedFromHistory, appendLog]);
 
   const confirmLed = useCallback(async (d: LedDetails[]) => {
     const id = currentReadingId;
@@ -1879,10 +1906,7 @@ export default function HomeScreen({ navigation }: any) {
       cachedUsername={cachedUsername}
       ledCurrent={currentLeds.length ? currentLeds : null}
       onLedEdit={currentReadingId ? () => setLedPickerOpen(true) : undefined}
-      ledLists={ledLists}
-      ledPickerOpen={ledPickerOpen}
-      onLedPickerSave={confirmLed}
-      onLedPickerCancel={() => setLedPickerOpen(false)}
+      categoriesCurrent={otherCategoriesLine({ categories: currentCats })}
       />
   );
 
@@ -1997,13 +2021,10 @@ export default function HomeScreen({ navigation }: any) {
             ledSuggestion={ledSuggestion}
             ledCurrent={currentLeds.length ? currentLeds : null}
             onLedEdit={currentReadingId ? () => setLedPickerOpen(true) : undefined}
-            ledLists={ledLists}
-            ledPickerOpen={ledPickerOpen}
+            categoriesCurrent={otherCategoriesLine({ categories: currentCats })}
             onLedYes={() => ledSuggestion && confirmLed([{ brand: ledSuggestion.brand, model: ledSuggestion.model, cct: ledSuggestion.cct ?? undefined }])}
             onLedOther={() => setLedPickerOpen(true)}
             onLedClose={() => { ledCardClosedRef.current = true; setLedSuggestion(null); }}
-            onLedPickerCancel={() => setLedPickerOpen(false)}
-            onLedPickerSave={confirmLed}
             scrollInputIntoView={scrollInputIntoView}
             pagerResetKey={pagerResetKey}
             emptyState={emptyState}
@@ -2118,6 +2139,15 @@ export default function HomeScreen({ navigation }: any) {
         </View>
       )}
       </View>
+      <CategorizeModal
+        visible={ledPickerOpen}
+        title="Categorize"
+        lists={ledLists}
+        initial={{ leds: currentLeds.length ? currentLeds : ledSuggestion ? [{ brand: ledSuggestion.brand, model: ledSuggestion.model, cct: ledSuggestion.cct ?? undefined }] : [], other: currentCats }}
+        remembered={lastCat}
+        onApply={applyCurrentCategorize}
+        onCancel={() => setLedPickerOpen(false)}
+      />
     </SafeAreaView>
   );
 }
