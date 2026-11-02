@@ -105,14 +105,17 @@ export default function ReadingDetailScreen({ route, navigation }: any) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const catSummary = [ledsOfReading(reading).length ? ledsLine(ledsOfReading(reading)) : '', otherCategoriesLine(reading)].filter(Boolean).join('  ·  ');
+
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
     content: { padding: 16, paddingBottom: 32 },
 
-    savedAt: { color: colors.muted, fontSize: 12, fontFamily: 'monospace', marginBottom: 10 },
-    catRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-    catText: { color: colors.accent, fontSize: 13, marginLeft: 6, flexShrink: 1 },
-    catEdit: { color: colors.accent, fontSize: 12, fontWeight: '600', marginLeft: 8 },
+    savedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+    savedAt: { color: colors.muted, fontSize: 12, fontFamily: 'monospace', flexShrink: 1 },
+    catButton: { marginLeft: 12 },
+    catSummaryRow: { marginTop: -4, marginBottom: 12 },
+    catText: { color: colors.muted, fontSize: 13 },
 
     resultCard: {
       backgroundColor: colors.card,
@@ -128,15 +131,23 @@ export default function ReadingDetailScreen({ route, navigation }: any) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} scrollEnabled={!dragging}>
-      <Text style={styles.savedAt}>{formatSavedAt(reading.savedAt)}</Text>
-
-      {!reading.result.sampleLabel && (
-        <TouchableOpacity onPress={openCategorize} accessibilityRole="button" accessibilityLabel="Categorize this reading" style={styles.catRow}>
-          <Icon name="tag" color={colors.accent} size={ICON_SIZE.inline} />
-          <Text style={styles.catText} numberOfLines={2}>
-            {[ledsOfReading(reading).length ? ledsLine(ledsOfReading(reading)) : '', otherCategoriesLine(reading)].filter(Boolean).join('  ·  ') || 'Categorize'}
-          </Text>
-          <Text style={styles.catEdit}>{ledsOfReading(reading).length || otherCategoriesLine(reading) ? 'Edit' : ''}</Text>
+      <View style={styles.savedRow}>
+        <Text style={styles.savedAt}>{formatSavedAt(reading.savedAt)}</Text>
+        {!reading.result.sampleLabel && (
+          <TouchableOpacity
+            onPress={openCategorize}
+            accessibilityRole="button"
+            accessibilityLabel="Categorize this reading"
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={styles.catButton}
+          >
+            <Icon name="tag" color={catSummary ? colors.accent : colors.text} size={ICON_SIZE.row} />
+          </TouchableOpacity>
+        )}
+      </View>
+      {!!catSummary && !reading.result.sampleLabel && (
+        <TouchableOpacity onPress={openCategorize} accessibilityRole="button" accessibilityLabel="Categories. Tap to edit." style={styles.catSummaryRow}>
+          <Text style={styles.catText} numberOfLines={3}>{catSummary}</Text>
         </TouchableOpacity>
       )}
 
