@@ -339,6 +339,11 @@ function HistoryRow({
             <HintPressable hint="Upload to hCRI.io" onPress={() => onUploadWithLabel(reading.id, reading.label)} disabled={uploading} style={{ marginRight: 14, opacity: uploading ? 0.6 : 1 }} accessibilityRole="button" accessibilityLabel="Upload reading" hitSlop={{ top: 10, bottom: 10, left: 7, right: 7 }}>
               {uploading ? <ActivityIndicator size="small" color={colors.accent} /> : <Icon name="upload" color={colors.accent} size={ICON_SIZE.row} />}
             </HintPressable>
+            {!reading.result.sampleLabel && (
+              <HintPressable hint="Categorize (LEDs, light, optic, lumens, current)" onPress={() => onLedPick(reading)} style={{ marginRight: 14 }} accessibilityRole="button" accessibilityLabel="Categorize reading" hitSlop={{ top: 10, bottom: 10, left: 7, right: 7 }}>
+                <Icon name="tag" color={ledsOfReading(reading).length || otherCategoriesLine(reading) ? colors.accent : colors.text} size={ICON_SIZE.row} />
+              </HintPressable>
+            )}
             <HintPressable hint="Share CSV" onPress={() => onShareOne(reading)} style={{ marginRight: 14 }} accessibilityRole="button" accessibilityLabel="Share CSV" hitSlop={{ top: 10, bottom: 10, left: 7, right: 7 }}>
               <Icon name="share" color={colors.text} size={ICON_SIZE.row} />
             </HintPressable>
@@ -388,13 +393,6 @@ function HistoryRow({
             onClose={() => onLedDismiss(reading.id)}
           />
         </View>
-      ) : !selectMode && !reading.result.sampleLabel ? (
-        <TouchableOpacity onPress={() => onLedPick(reading)} style={{ marginTop: 4 }} accessibilityRole="button" accessibilityLabel="Categorize this reading">
-          <View style={styles.ledLine}>
-            <Icon name="tag" color={colors.accent} size={ICON_SIZE.inline} />
-            <Text style={[styles.ledText, { color: colors.accent }]}>Categorize</Text>
-          </View>
-        </TouchableOpacity>
       ) : null}
       {!!otherCategoriesLine(reading) && (
         <TouchableOpacity onPress={() => onLedPick(reading)} disabled={selectMode} style={{ marginTop: 4 }} accessibilityRole="button" accessibilityLabel="Categories. Tap to edit.">
