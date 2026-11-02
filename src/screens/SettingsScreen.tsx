@@ -1148,7 +1148,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
         </>
       ))}
 
-      {section('bridge', 'ESP32 bridge', 'Screen flip, firmware, simulator', (
+      {section('bridge', 'ESP32 bridge', IS_DEV_BUILD ? 'Screen flip, firmware, simulator' : 'Screen flip, firmware', (
         <>
       {/* The spectral correction now lives in the bridge firmware (the app only applies it for older firmware, always on).
           The switch is kept in code in case it is needed again: set SHOW_TB_CORRECTION_SWITCH to true. */}

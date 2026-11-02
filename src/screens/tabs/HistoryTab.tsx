@@ -371,11 +371,13 @@ function HistoryRow({
         <Text style={styles.labelText}>{reading.label}</Text>
       </TouchableOpacity>
 
-      {ledsOfReading(reading).length ? (
-        <TouchableOpacity onPress={() => onLedPick(reading)} disabled={selectMode} style={{ marginTop: 4 }} accessibilityRole="button" accessibilityLabel="LED details. Tap to categorize.">
+      {ledsOfReading(reading).length || otherCategoriesLine(reading) ? (
+        <TouchableOpacity onPress={() => onLedPick(reading)} disabled={selectMode} style={{ marginTop: 4 }} accessibilityRole="button" accessibilityLabel="Categories. Tap to edit.">
           <View style={styles.ledLine}>
-            <Icon name="bulb" color={colors.muted} size={ICON_SIZE.inline} />
-            <Text style={[styles.ledText, { flexShrink: 1 }]}>{ledsLine(ledsOfReading(reading))}</Text>
+            <Icon name="tag" color={colors.muted} size={ICON_SIZE.inline} />
+            <Text style={[styles.ledText, { flexShrink: 1 }]}>
+              {[ledsOfReading(reading).length ? ledsLine(ledsOfReading(reading)) : '', otherCategoriesLine(reading)].filter(Boolean).join('  ·  ')}
+            </Text>
             {!selectMode && (
               <View style={styles.ledEdit}>
                 <Icon name="edit" color={colors.accent} size={ICON_SIZE.inline} />
@@ -394,21 +396,6 @@ function HistoryRow({
           />
         </View>
       ) : null}
-      {!!otherCategoriesLine(reading) && (
-        <TouchableOpacity onPress={() => onLedPick(reading)} disabled={selectMode} style={{ marginTop: 4 }} accessibilityRole="button" accessibilityLabel="Categories. Tap to edit.">
-          <View style={styles.ledLine}>
-            <Icon name="tag" color={colors.muted} size={ICON_SIZE.inline} />
-            <Text style={[styles.ledText, { flexShrink: 1 }]}>{otherCategoriesLine(reading)}</Text>
-            {!selectMode && (
-              <View style={styles.ledEdit}>
-                <Icon name="edit" color={colors.accent} size={ICON_SIZE.inline} />
-                <Text style={styles.ledEditText}>Edit</Text>
-              </View>
-            )}
-          </View>
-        </TouchableOpacity>
-      )}
-
       <Modal
         visible={modalVisible}
         transparent
