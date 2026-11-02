@@ -18,10 +18,8 @@ import { SpectralAnalysis } from '../../utils/spectralAnalysis';
 import { buildCsv, defaultLabel } from '../../hcri/buildCsv';
 import { HCRI_BRAND_HOST } from '../../hcri/buildTarget';
 import { STAT_METRIC_BY_ID } from '../../utils/statMetrics';
-import LedPickerModal from '../../components/LedPickerModal';
 import { LedDetails } from '../../hcri/ledApi';
 import { hasLed } from '../../hcri/leds';
-import { LedLists } from '../../hcri/ledLists';
 
 
 // The core colorimetric numbers (CCT/Ra/Duv/Lux/Rf/R9/Rg), still worth
@@ -72,10 +70,8 @@ interface Props {
   ledCurrent?: LedDetails[] | null;
   /** Opens the LED picker; undefined until the reading is saved to History. */
   onLedEdit?: () => void;
-  ledLists?: LedLists | null;
-  ledPickerOpen?: boolean;
-  onLedPickerSave?: (d: LedDetails[]) => void;
-  onLedPickerCancel?: () => void;
+  /** The reading's other categories on one line (light, optic, lumens, current). */
+  categoriesCurrent?: string;
 }
 
 export default function DataTab({
@@ -94,10 +90,7 @@ export default function DataTab({
   scrollInputIntoView,
   ledCurrent,
   onLedEdit,
-  ledLists,
-  ledPickerOpen,
-  onLedPickerSave,
-  onLedPickerCancel,
+  categoriesCurrent,
 }: Props) {
   const { colors } = useTheme();
   // See HomeScreen.tsx's scrollInputIntoView comment -- needs a ref to the
@@ -274,12 +267,12 @@ export default function DataTab({
             everything that goes with this reading. */}
         <View style={styles.ledBlock}>
           <View style={styles.ledHeader}>
-            <Text style={styles.fieldLabel}>LED</Text>
+            <Text style={styles.fieldLabel}>Categories</Text>
             {onLedEdit && (
-              <TouchableOpacity onPress={onLedEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel="Edit LED details">
+              <TouchableOpacity onPress={onLedEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel="Categorize this reading">
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Icon name={ledCurrent && ledCurrent.some(hasLed) ? 'edit' : 'bulb'} color={colors.accent} size={ICON_SIZE.inline} />
-                  <Text style={[styles.ledEdit, { marginLeft: 4 }]}>{ledCurrent && ledCurrent.some(hasLed) ? 'Edit' : 'Add LED details'}</Text>
+                  <Icon name={ledCurrent && ledCurrent.some(hasLed) || categoriesCurrent ? 'edit' : 'tag'} color={colors.accent} size={ICON_SIZE.inline} />
+                  <Text style={[styles.ledEdit, { marginLeft: 4 }]}>{ledCurrent && ledCurrent.some(hasLed) || categoriesCurrent ? 'Edit' : 'Categorize'}</Text>
                 </View>
               </TouchableOpacity>
             )}
@@ -296,18 +289,12 @@ export default function DataTab({
               ))}
             </>
           ) : (
-            <Text style={styles.ledNone}>{onLedEdit ? 'No LED details yet.' : 'LED details can be added once the reading is saved.'}</Text>
+            <Text style={styles.ledNone}>{onLedEdit ? (categoriesCurrent ? 'No LEDs set.' : 'Nothing categorized yet.') : 'A reading can be categorized once it is saved.'}</Text>
+          )}
+          {!!categoriesCurrent && (
+            <View style={styles.row}><Text style={styles.rowLabel}>Light</Text><Text style={styles.rowValue}>{categoriesCurrent}</Text></View>
           )}
         </View>
-        {ledLists && onLedPickerSave && onLedPickerCancel && (
-          <LedPickerModal
-            visible={!!ledPickerOpen}
-            lists={ledLists}
-            initial={ledCurrent ?? undefined}
-            onSave={onLedPickerSave}
-            onCancel={onLedPickerCancel}
-          />
-        )}
 
         {/* Exactly what buildCsv() will send -- calling the real function
             rather than reconstructing the format here, so this preview can

@@ -20,7 +20,7 @@ interface Props {
   onCancel: () => void;
 }
 
-function Field({ label, value, onChange, options, placeholder, keyboardType }: {
+export function Field({ label, value, onChange, options, placeholder, keyboardType }: {
   label: string; value: string; onChange: (v: string) => void; options: string[]; placeholder: string; keyboardType?: 'default' | 'numeric';
 }) {
   const { colors } = useTheme();

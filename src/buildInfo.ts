@@ -21,7 +21,7 @@
 // the GitHub run number, see .github/workflows/ios-testflight.yml).
 import { Platform } from 'react-native';
 
-export const ANDROID_VERSION = '2026.11.1.1';
+export const ANDROID_VERSION = '2026.11.1.2';
 // Keep equal to versionCode in android/app/build.gradle.
 export const ANDROID_BUILD_NUMBER = 77;
 export const ANDROID_BUILD_DATE = '2026-11-01';

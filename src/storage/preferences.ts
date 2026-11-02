@@ -141,12 +141,12 @@ export async function saveFlickerWithReadingPreference(enabled: boolean): Promis
   await AsyncStorage.setItem(FLICKER_WITH_READING_KEY, enabled ? 'true' : 'false');
 }
 
-// Default ON -- hCRI.io suggests the LED (brand, model, CCT) from the spectrum after each reading. Turning it
-// off stops those requests and hides the suggestion cards; adding LED details by hand still works.
+// Default OFF -- turn on and hCRI.io suggests the LED (brand, model, CCT) from the spectrum after each reading.
+// Off, the app makes no suggestion requests and shows no suggestion cards; adding LED details by hand still works.
 const LED_SUGGESTIONS_KEY = 'hcri.io.pref.ledSuggestions';
 
 export async function loadLedSuggestionsPreference(): Promise<boolean> {
-  return (await AsyncStorage.getItem(LED_SUGGESTIONS_KEY)) !== 'false';
+  return (await AsyncStorage.getItem(LED_SUGGESTIONS_KEY)) === 'true';
 }
 
 export async function saveLedSuggestionsPreference(enabled: boolean): Promise<void> {
