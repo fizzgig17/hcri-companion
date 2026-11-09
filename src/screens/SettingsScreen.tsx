@@ -1107,7 +1107,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
         </TouchableOpacity>
       </Modal>
 
-      {switchRow('Back up readings to hCRI.io', "Saves your reading history and saved flickers to your own hCRI.io account after each change, so reinstalling the app or changing phones doesn't lose it. Needs your API token (see hCRI.io account above); readings taken before you sign in are sent once you do. Backed-up readings are private to you: they are not reports and nobody else can see them. Deleting a reading here removes it from the backup too.", cloudBackup, toggleCloudBackup)}
+      {switchRow('Back up readings to hCRI.io', "Saves your reading history and saved flickers to your own hCRI.io account after each change, so reinstalling the app or changing phones doesn't lose it. Needs your API token (see hCRI.io account above); readings taken before you sign in are sent once you do. Backed-up readings are private to you: they are not reports and nobody else can see them. Deleting a reading here does not remove it from the backup; the app can never delete backed-up items, you can do that from the App history page on hCRI.io.", cloudBackup, toggleCloudBackup)}
       {hasSaved && (
         <View style={styles.saveButtonWrap}>
           <PrimaryButton title={restoring ? 'Restoring…' : 'Restore readings from backup'} onPress={restoreBackup} variant="outline" style={styles.noTopMargin} />

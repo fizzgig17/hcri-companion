@@ -6,8 +6,8 @@
 //  - Runs by itself a few seconds after the history changes, when the app comes back to the foreground, and once a
 //    token is saved. With no token saved nothing happens; the first run after signing in sends everything that
 //    hasn't been sent yet ("catches up").
-//  - Only new or edited readings are sent. Deleting a reading in the app removes it from the backup too; readings
-//    that merely scroll off the end of the history stay in the backup.
+//  - Only new or edited readings are sent. The app can NEVER delete anything from the backup (not even readings deleted
+//    in the app): backed-up items are removed only by the person, from their App history page on hCRI.io.
 //  - Restoring adds back readings the app doesn't have.
 
 import { Alert } from 'react-native';
@@ -34,7 +34,6 @@ import {
 
 const BACKUP_URL = `${HCRI_API_BASE}/index.php/api/v1/backup`;
 const UPLOAD_BATCH = 10;
-const DELETE_BATCH = 100;
 const RESTORE_PAGE = 10;
 const BACKUP_DELAY_MS = 4000;
 
@@ -71,16 +70,7 @@ export async function runBackup(log?: (m: string) => void): Promise<BackupRunRes
       const items = [...(await loadHistory()).map(readingItem), ...(await loadFlickers()).map(flickerItem)];
       const plan = planBackup(items, await loadBackupState());
 
-      for (let i = 0; i < plan.deleteIds.length; i += DELETE_BATCH) {
-        const ids = plan.deleteIds.slice(i, i + DELETE_BATCH);
-        const res = await fetchWithTimeout(BACKUP_URL, { method: 'POST', headers: headers(creds.token), body: JSON.stringify({ delete: ids }) });
-        if (!res.ok) return fail(res.status, log, uploaded);
-        await withBackupState((s) => {
-          const set = new Set(ids);
-          s.pendingDelete = s.pendingDelete.filter((id) => !set.has(id));
-          for (const id of ids) delete s.synced[id];
-        });
-      }
+      // The app never asks the server to delete anything: removing a backed-up item is only possible by the person on hCRI.io.
 
       for (let i = 0; i < plan.upload.length; i += UPLOAD_BATCH) {
         const batch = plan.upload.slice(i, i + UPLOAD_BATCH);
