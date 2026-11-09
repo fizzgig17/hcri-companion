@@ -22,6 +22,7 @@ import { createChunkedStore } from './chunkedList';
 const STORAGE_KEY = 'hcri.io.readingHistory.v1';
 // One storage entry per reading (see chunkedList.ts): a single blob of 100+ spectra can grow too big for the phone's
 // storage to read back, which made History look empty and every new save fail. The old v1 blob is migrated on first use.
+import { ensureHistoryMode, fullHistoryMode, FULL_HISTORY_LIMIT } from './historyMode';
 const store = createChunkedStore<SavedReading>('hcri.io.readingHistory.v2', STORAGE_KEY);
 
 // Caps how many readings get kept locally -- unbounded growth would mean an
@@ -44,6 +45,7 @@ export const HISTORY_LIMIT = MAX_HISTORY;
  * MAX_HISTORY_HARD, so a long run without uploading doesn't silently discard data.
  */
 export function trimHistory(list: SavedReading[]): SavedReading[] {
+  if (fullHistoryMode()) return list.length > FULL_HISTORY_LIMIT ? list.slice(0, FULL_HISTORY_LIMIT) : list;   // refreshed from the server: keep up to what the backup holds
   let over = list.length - MAX_HISTORY;
   if (over <= 0) return list;
   const drop = new Set<number>();
@@ -120,6 +122,7 @@ function makeId(): string {
 }
 
 export async function loadHistory(): Promise<SavedReading[]> {
+  await ensureHistoryMode();
   return store.load();
 }
 
@@ -151,6 +154,12 @@ export async function mergeRestoredReadings(restored: SavedReading[]): Promise<n
   await saveAll(merged);
   const kept = new Set(merged.map((r) => r.id));
   return fresh.filter((r) => kept.has(r.id)).length;
+}
+
+/** Overwrites the local history with exactly these readings (used by "Refresh history from server"). */
+export async function replaceHistory(readings: SavedReading[]): Promise<void> {
+  await ensureHistoryMode();
+  await saveAll(trimHistory([...readings].sort((a, b) => b.savedAt - a.savedAt)));
 }
 
 /** Call once per completed measurement -- adds it to the front of history (most recent first) and returns the saved entry (including its new id). Computes `analysis` here, once, from `result.spectrum` -- see SavedReading's own comment on that field for why. */

@@ -40,9 +40,9 @@ export function flickerAssociation(f: SavedFlicker, readings: ReadingRef[]): 're
   return f.uploaded ? 'uploaded' : 'none';
 }
 
-export function trimFlickers(list: SavedFlicker[]): SavedFlicker[] {
+export function trimFlickers(list: SavedFlicker[], limit: number = FLICKER_LIMIT): SavedFlicker[] {
   // Newest first; the oldest fall off the end.
-  return list.length > FLICKER_LIMIT ? list.slice(0, FLICKER_LIMIT) : list;
+  return list.length > limit ? list.slice(0, limit) : list;
 }
 
 /** True for a server item that looks like a saved flicker. */

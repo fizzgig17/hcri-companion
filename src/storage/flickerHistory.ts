@@ -19,14 +19,18 @@ import { SavedFlicker, FLICKER_LIMIT, trimFlickers, isRestorableFlicker, attache
 export { FLICKER_LIMIT, trimFlickers, isRestorableFlicker, attachedReading, flickersForReading, flickerAssociation };
 export type { SavedFlicker };
 
+import { ensureHistoryMode, fullHistoryMode, FULL_HISTORY_LIMIT } from './historyMode';
 const store = createChunkedStore<SavedFlicker>('hcri.io.flickerHistory.v2', 'hcri.io.flickerHistory.v1');
 
 function makeId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** The most flickers kept locally: the usual limit, or the backup's when History was refreshed from the server. */
+const keepLimit = () => (fullHistoryMode() ? FULL_HISTORY_LIMIT : FLICKER_LIMIT);
+
 export async function loadFlickers(): Promise<SavedFlicker[]> {
-  try { return await store.load(); } catch { return []; }
+  try { await ensureHistoryMode(); return await store.load(); } catch { return []; }
 }
 
 async function saveAll(list: SavedFlicker[]): Promise<void> {
@@ -37,7 +41,7 @@ async function saveAll(list: SavedFlicker[]): Promise<void> {
 /** Saves a standalone flicker sample (newest first). */
 export async function addFlicker(flicker: FlickerCapture, label: string, model?: string): Promise<SavedFlicker> {
   const entry: SavedFlicker = { id: makeId(), label, savedAt: Date.now(), flicker, ...(model ? { model } : {}) };
-  await saveAll(trimFlickers([entry, ...(await loadFlickers())]));
+  await saveAll(trimFlickers([entry, ...(await loadFlickers())], keepLimit()));
   return entry;
 }
 
@@ -53,13 +57,19 @@ export async function deleteFlickers(ids: string[]): Promise<void> {
   queueBackupDelete(ids.map(flickerBackupId));
 }
 
+/** Overwrites the saved flickers with exactly these (used by "Refresh history from server"). */
+export async function replaceFlickers(list: SavedFlicker[]): Promise<void> {
+  await ensureHistoryMode();
+  await saveAll(trimFlickers([...list].sort((a, b) => b.savedAt - a.savedAt), keepLimit()));
+}
+
 /** Adds flickers restored from the cloud backup that aren't here yet. Returns how many ended up in the list. */
 export async function mergeRestoredFlickers(restored: SavedFlicker[]): Promise<number> {
   const existing = await loadFlickers();
   const have = new Set(existing.map((f) => f.id));
   const fresh = restored.filter((f) => !have.has(f.id));
   if (!fresh.length) return 0;
-  const merged = trimFlickers([...existing, ...fresh].sort((a, b) => b.savedAt - a.savedAt));
+  const merged = trimFlickers([...existing, ...fresh].sort((a, b) => b.savedAt - a.savedAt), keepLimit());
   await saveAll(merged);
   const kept = new Set(merged.map((f) => f.id));
   return fresh.filter((f) => kept.has(f.id)).length;

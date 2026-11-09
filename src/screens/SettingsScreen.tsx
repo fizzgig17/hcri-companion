@@ -19,7 +19,7 @@ import LiveStationView from '../components/LiveStationView';
 import LiveInfoEditor from '../components/LiveInfoEditor';
 import { getLiveStation, liveAction, type LiveStationInfo } from '../hcri/liveStation';
 import { loadBackupEnabled, saveBackupEnabled } from '../storage/backupState';
-import { restoreFromBackup, scheduleBackup } from '../hcri/backup';
+import { restoreFromBackup, refreshFromServer, scheduleBackup } from '../hcri/backup';
 import HintPressable from '../components/HintPressable';
 import BridgeFirmwareSection from '../components/BridgeFirmwareSection';
 import Svg, { Circle, Path } from 'react-native-svg';
@@ -163,6 +163,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   const [keepAwake, setKeepAwake] = useState(false);
   const [cloudBackup, setCloudBackup] = useState(true);
   const [restoring, setRestoring] = useState(false);
+  const [refreshing, setRefreshing] = useState<string | null>(null);   // progress text while History is being replaced from the server
   const [hapticTaps, setHapticTaps] = useState(true);
   const [hapticResults, setHapticResults] = useState(true);
   // Default true ("stay connected") -- matches loadStayConnectedInBackground
@@ -426,6 +427,28 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
     } else {
       Alert.alert('Restored', `Added ${r.added} item${r.added === 1 ? '' : 's'} (readings and saved flickers) to History.`);
     }
+  };
+
+  const refreshHistory = () => {
+    if (refreshing) return;
+    Alert.alert(
+      'Replace History with the server copy?',
+      'This overwrites the readings and flickers on this phone with what your hCRI.io backup holds (anything not yet backed up is sent first). History will then keep everything from the server, 50 shown at a time. Reports already uploaded are not affected.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Replace',
+          style: 'destructive',
+          onPress: async () => {
+            setRefreshing('Starting…');
+            const r = await refreshFromServer((d, t) => setRefreshing(`Loading ${d} of ${t}…`));
+            setRefreshing(null);
+            if (!r.ok) Alert.alert('Could not refresh', `${r.message ?? 'Something went wrong.'} Nothing on this phone was changed.`);
+            else Alert.alert('History refreshed', `History now holds ${r.readings} reading${r.readings === 1 ? '' : 's'} and ${r.flickers} saved flicker${r.flickers === 1 ? '' : 's'} from the server.`);
+          },
+        },
+      ]
+    );
   };
 
   const toggleKeepAwake = async (value: boolean) => {
@@ -1088,6 +1111,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
       {hasSaved && (
         <View style={styles.saveButtonWrap}>
           <PrimaryButton title={restoring ? 'Restoring…' : 'Restore readings from backup'} onPress={restoreBackup} variant="outline" style={styles.noTopMargin} />
+          <PrimaryButton title={refreshing ?? 'Refresh history from server (overwrite)'} onPress={refreshHistory} variant="outline" style={styles.noTopMargin} />
         </View>
       )}
 
