@@ -29,6 +29,10 @@ import Svg, { Polyline, Path } from 'react-native-svg';
 import CollapsibleSection from '../../components/CollapsibleSection';
 import { useTheme } from '../../contexts/ThemeContext';
 import { SavedReading, HISTORY_LIMIT, HISTORY_WARN_AT } from '../../storage/readingHistory';
+import { fullHistoryMode } from '../../storage/historyMode';
+
+/** Readings drawn at first, and added per tap on "Show more". */
+const PAGE_SIZE = 50;
 
 // Round selection mark used by the rows and the Select all control: an empty ring, a filled circle with a
 // white tick, or (Select all only) a filled circle with a dash when some but not all are selected.
@@ -575,6 +579,7 @@ export default function HistoryTab({
     });
   };
 
+  const [shown, setShown] = useState(PAGE_SIZE);
   const everySelected = history.length > 0 && selected.size === history.length;
   // The "Select all" checkbox: checks everything, or clears everything when it's already all checked.
   // Clearing everything leaves select mode, same as unchecking the last row.
@@ -595,12 +600,14 @@ export default function HistoryTab({
   // seen keeps each bucket's own readings in that same order, and the
   // buckets themselves come out newest-first too (today's readings aside,
   // that starts with Yesterday) with no separate sort needed.
+  // Only the newest `shown` readings are drawn (50 to start, 50 more per tap on "Show more"), so a long history stays quick.
+  const visibleHistory = useMemo(() => history.slice(0, shown), [history, shown]);
   const { todayReadings, pastGroups } = useMemo(() => {
     const todayStart = startOfDay(Date.now());
     const today: SavedReading[] = [];
     const order: number[] = [];
     const byDay = new Map<number, SavedReading[]>();
-    for (const r of history) {
+    for (const r of visibleHistory) {
       const dayStart = startOfDay(r.savedAt);
       if (dayStart === todayStart) {
         today.push(r);
@@ -622,7 +629,7 @@ export default function HistoryTab({
         readings: byDay.get(dayStart)!,
       })),
     };
-  }, [history]);
+  }, [visibleHistory]);
 
   const handleUploadSelected = () => {
     if (selected.size === 0) return;
@@ -723,6 +730,8 @@ export default function HistoryTab({
     selectBarIconText: { fontSize: 11.5, fontWeight: '500', marginTop: 3 },
     selectBarButton: { marginTop: 0, marginLeft: 8, flex: 1, paddingHorizontal: 8, paddingVertical: 10 },
 
+    showMore: { alignSelf: 'center', marginTop: 12, paddingVertical: 9, paddingHorizontal: 22, borderRadius: 8, borderWidth: 1, borderColor: colors.cardBorder },
+    showMoreText: { color: colors.muted, fontSize: 13, fontWeight: '600' },
     limitNote: { color: colors.muted, fontSize: 12, lineHeight: 17, marginBottom: 10 },
     dateGroup: { marginBottom: 2 },
     todayLabel: {
@@ -755,7 +764,7 @@ export default function HistoryTab({
 
   return (
     <View>
-      {history.length >= HISTORY_WARN_AT && (
+      {!fullHistoryMode() && history.length >= HISTORY_WARN_AT && (
         <Text style={styles.limitNote}>
           History keeps your most recent {HISTORY_LIMIT} readings. When it's full, the oldest uploaded readings are removed first; readings you haven't uploaded are kept.
         </Text>
@@ -896,6 +905,12 @@ export default function HistoryTab({
           </View>
         </CollapsibleSection>
       ))}
+
+      {history.length > shown && (
+        <TouchableOpacity style={styles.showMore} onPress={() => setShown((n) => n + PAGE_SIZE)} accessibilityRole="button" accessibilityLabel="Show 50 more readings">
+          <Text style={styles.showMoreText}>Show more ({shown} of {history.length})</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }

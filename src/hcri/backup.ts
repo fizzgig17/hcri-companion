@@ -6,19 +6,21 @@
 //  - Runs by itself a few seconds after the history changes, when the app comes back to the foreground, and once a
 //    token is saved. With no token saved nothing happens; the first run after signing in sends everything that
 //    hasn't been sent yet ("catches up").
-//  - Only new or edited readings are sent. Deleting a reading in the app removes it from the backup too; readings
-//    that merely scroll off the end of the history stay in the backup.
+//  - Only new or edited readings are sent. The app can NEVER delete anything from the backup (not even readings deleted
+//    in the app): backed-up items are removed only by the person, from their App history page on hCRI.io.
 //  - Restoring adds back readings the app doesn't have.
 
 import { Alert } from 'react-native';
 import { fingerprintOf, planBackup, isRestorableReading, readingItem, flickerItem, isFlickerBackupId, flickerBackupId } from './backupPlan';
-import { loadFlickers, mergeRestoredFlickers, isRestorableFlicker, SavedFlicker } from '../storage/flickerHistory';
+import { loadFlickers, mergeRestoredFlickers, replaceFlickers, isRestorableFlicker, SavedFlicker } from '../storage/flickerHistory';
+import { setFullHistoryMode } from '../storage/historyMode';
 import { HCRI_API_BASE } from './apiConfig';
 import fetchWithTimeout from './fetchWithTimeout';
 import { loadHcriCredentials } from '../storage/secureStorage';
 import {
   loadHistory,
   mergeRestoredReadings,
+  replaceHistory,
   setHistoryChangeListener,
   SavedReading,
 } from '../storage/readingHistory';
@@ -32,7 +34,6 @@ import {
 
 const BACKUP_URL = `${HCRI_API_BASE}/index.php/api/v1/backup`;
 const UPLOAD_BATCH = 10;
-const DELETE_BATCH = 100;
 const RESTORE_PAGE = 10;
 const BACKUP_DELAY_MS = 4000;
 
@@ -69,16 +70,7 @@ export async function runBackup(log?: (m: string) => void): Promise<BackupRunRes
       const items = [...(await loadHistory()).map(readingItem), ...(await loadFlickers()).map(flickerItem)];
       const plan = planBackup(items, await loadBackupState());
 
-      for (let i = 0; i < plan.deleteIds.length; i += DELETE_BATCH) {
-        const ids = plan.deleteIds.slice(i, i + DELETE_BATCH);
-        const res = await fetchWithTimeout(BACKUP_URL, { method: 'POST', headers: headers(creds.token), body: JSON.stringify({ delete: ids }) });
-        if (!res.ok) return fail(res.status, log, uploaded);
-        await withBackupState((s) => {
-          const set = new Set(ids);
-          s.pendingDelete = s.pendingDelete.filter((id) => !set.has(id));
-          for (const id of ids) delete s.synced[id];
-        });
-      }
+      // The app never asks the server to delete anything: removing a backed-up item is only possible by the person on hCRI.io.
 
       for (let i = 0; i < plan.upload.length; i += UPLOAD_BATCH) {
         const batch = plan.upload.slice(i, i + UPLOAD_BATCH);
@@ -179,6 +171,68 @@ export async function restoreFromBackup(onProgress?: (done: number, total: numbe
   } catch (e: any) {
     return { ok: false, added, total, message: String(e?.message ?? e) };
   }
+}
+
+export interface RefreshResult {
+  ok: boolean;
+  readings: number;
+  flickers: number;
+  message?: string;
+}
+
+/**
+ * Overwrites the local History with what the hCRI.io backup holds (everything, up to the backup's limit), and lifts the
+ * usual 100-reading cap so all of it stays reachable. Anything not yet backed up is sent first; if that fails, or the
+ * backup can't be read in full, nothing local is changed.
+ */
+export async function refreshFromServer(onProgress?: (done: number, total: number) => void): Promise<RefreshResult> {
+  const fail = (message: string): RefreshResult => ({ ok: false, readings: 0, flickers: 0, message });
+  if (!(await loadBackupEnabled())) return fail('Turn on "Back up readings to hCRI.io" first, so nothing on this phone is lost.');
+  const creds = await loadHcriCredentials().catch(() => null);
+  if (!creds?.token) return fail('Save your hCRI.io API token in Settings first.');
+
+  const sent = await runBackup();
+  if (sent.status !== 'done') return fail(sent.message ?? 'Could not back up the readings on this phone first. Try again in a moment.');
+
+  const readings: SavedReading[] = [];
+  const flickers: SavedFlicker[] = [];
+  let after = '';
+  let total = 0;
+  let seen = 0;
+  try {
+    for (let page = 0; page < 2000; page++) {
+      const url = `${BACKUP_URL}?limit=${RESTORE_PAGE}${after ? `&after=${encodeURIComponent(after)}` : ''}`;
+      const res = await fetchWithTimeout(url, { headers: headers(creds.token) }, 60000);
+      if (!res.ok) return fail(res.status === 401 || res.status === 403 ? 'Your hCRI.io API token was not accepted.' : `hCRI.io answered ${res.status}.`);
+      const data = await res.json();
+      total = Number(data?.total) || total;
+      const rawItems: any[] = Array.isArray(data?.items) ? data.items : [];
+      for (const it of rawItems) {
+        const p = it?.reading;
+        if (typeof it?.id !== 'string') continue;
+        if (isFlickerBackupId(it.id)) { if (isRestorableFlicker(p)) flickers.push(p); }
+        else if (isRestorableReading(p)) readings.push(p);
+      }
+      seen += rawItems.length;
+      onProgress?.(seen, total);
+      if (!data?.next) break;
+      after = String(data.next);
+    }
+  } catch (e: any) {
+    return fail(String(e?.message ?? e));
+  }
+
+  // Everything came down: only now replace what's on the phone.
+  await setFullHistoryMode(true);
+  await replaceHistory(readings);
+  await replaceFlickers(flickers);
+  await withBackupState((s) => {
+    s.synced = {};
+    s.pendingDelete = [];
+    for (const r of readings) s.synced[r.id] = fingerprintOf(r);
+    for (const f of flickers) s.synced[flickerBackupId(f.id)] = fingerprintOf(f);
+  });
+  return { ok: true, readings: readings.length, flickers: flickers.length };
 }
 
 /**
