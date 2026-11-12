@@ -27,12 +27,15 @@ interface Props {
   remembered?: CategoryValues;
   /** True for several readings: shows the fill-only / replace choice. */
   bulk?: boolean;
+  /** Categorizing a light: no lumens / current (a light has no single value for those). */
+  light?: boolean;
   onApply: (values: CategoryValues, replace: boolean) => void;
   onCancel: () => void;
 }
 
-export default function CategorizeModal({ visible, title, lists, initial, remembered, bulk, onApply, onCancel }: Props) {
+export default function CategorizeModal({ visible, title, lists, initial, remembered, bulk, light, onApply, onCancel }: Props) {
   const { colors } = useTheme();
+  const kinds = light ? OTHER_KINDS.filter((k) => !k.numeric) : OTHER_KINDS;
   const [values, setValues] = useState<CategoryValues>(EMPTY_VALUES);
   const [replace, setReplace] = useState(false);
   const [ledOpen, setLedOpen] = useState(false);
@@ -54,7 +57,7 @@ export default function CategorizeModal({ visible, title, lists, initial, rememb
     const own = initial ?? EMPTY_VALUES;
     const mem = remembered ?? EMPTY_VALUES;
     const other: CategoryValues['other'] = {};
-    for (const { kind } of OTHER_KINDS) other[kind] = own.other[kind] || mem.other[kind] || '';
+    for (const { kind } of kinds) other[kind] = own.other[kind] || mem.other[kind] || '';
     setValues({ leds: own.leds.some(hasLed) ? own.leds : mem.leds, other });
     setReplace(false);
     setLedOpen(false);
@@ -88,7 +91,7 @@ export default function CategorizeModal({ visible, title, lists, initial, rememb
                 <Text numberOfLines={2} style={{ color: leds.length ? colors.text : colors.mutedFaint, fontSize: 15, flexShrink: 1 }}>{leds.length ? ledsLine(leds) : 'Not set'}</Text>
                 <Text style={{ color: colors.accent, fontSize: 13, fontWeight: '600', marginLeft: 8 }}>{leds.length ? 'Edit' : 'Add'}</Text>
               </TouchableOpacity>
-              {OTHER_KINDS.map(({ kind, label, numeric }) => (
+              {kinds.map(({ kind, label, numeric }) => (
                 <Field
                   key={kind}
                   label={label}
@@ -121,7 +124,7 @@ export default function CategorizeModal({ visible, title, lists, initial, rememb
                 </View>
               )}
               <Text style={{ color: colors.mutedFaint, fontSize: 11 }}>
-                Blank fields are left as they are. Values that aren’t in the list yet are sent to hCRI.io for review (lumens and current are added as typed). Nothing changes until you tap Categorize.
+                Blank fields are left as they are. {light ? 'Values that aren’t in the lists yet are not kept on a light; suggest them from a reading or on hCRI.io.' : 'Values that aren’t in the list yet are sent to hCRI.io for review (lumens and current are added as typed).'} Nothing changes until you tap Categorize.
               </Text>
             </ScrollView>
             <View style={styles.row}>

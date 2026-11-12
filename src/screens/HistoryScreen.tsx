@@ -38,6 +38,7 @@ import {
 import { loadFlickers, updateFlicker, deleteFlickers, flickersForReading, attachedReading, SavedFlicker } from '../storage/flickerHistory';
 import FlickerHistoryTab from './tabs/FlickerHistoryTab';
 import RuntimeHistoryTab from './tabs/RuntimeHistoryTab';
+import LightsHistoryTab from './tabs/LightsHistoryTab';
 import { loadRuntimes, updateRuntime, deleteRuntime, onRuntimeHistoryChanged, SavedRuntime } from '../storage/runtimeHistory';
 import { uploadRuntimeToHcri } from '../hcri/uploadRuntimeToHcri';
 import FlickerPickerModal from '../components/FlickerPickerModal';
@@ -85,7 +86,7 @@ export default function HistoryScreen({ navigation, embedded, refreshKey, onRena
   const [copyingLinkId, setCopyingLinkId] = useState<string | null>(null);
 
   // Saved standalone flicker samples (the "Flicker" list), and the picker for attaching one to a reading.
-  const [section, setSection] = useState<'readings' | 'flicker' | 'runtime'>('readings');
+  const [section, setSection] = useState<'readings' | 'flicker' | 'runtime' | 'lights'>('readings');
   // Recorded TKLamp runs (the "Runtime" list).
   const [runs, setRuns] = useState<SavedRuntime[]>([]);
   const [runUploadingId, setRunUploadingId] = useState<string | null>(null);
@@ -528,16 +529,18 @@ export default function HistoryScreen({ navigation, embedded, refreshKey, onRena
       <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>History</Text>
         <View style={styles.switchRow}>
-          {(['readings', 'flicker', 'runtime'] as const).map((k) => {
+          {(['readings', 'flicker', 'runtime', 'lights'] as const).map((k) => {
             const active = section === k;
             return (
               <TouchableOpacity key={k} style={[styles.switchBtn, active && styles.switchBtnActive]} onPress={() => setSection(k)} accessibilityRole="button" accessibilityState={{ selected: active }}>
-                <Text style={[styles.switchText, active && styles.switchTextActive]}>{k === 'readings' ? 'Readings' : k === 'flicker' ? `Flicker${flickers.length ? ` (${flickers.length})` : ''}` : `Runtime${runs.length ? ` (${runs.length})` : ''}`}</Text>
+                <Text style={[styles.switchText, active && styles.switchTextActive]}>{k === 'readings' ? 'Readings' : k === 'lights' ? 'Lights' : k === 'flicker' ? `Flicker${flickers.length ? ` (${flickers.length})` : ''}` : `Runtime${runs.length ? ` (${runs.length})` : ''}`}</Text>
               </TouchableOpacity>
             );
           })}
         </View>
-        {section === 'runtime' ? (
+        {section === 'lights' ? (
+          <LightsHistoryTab history={history} lists={ledLists} onOpenReading={(reading) => navigation.navigate('ReadingDetail', { reading })} />
+        ) : section === 'runtime' ? (
           <RuntimeHistoryTab runs={runs} loading={historyLoading} uploadingId={runUploadingId} onRename={renameRun} onDelete={deleteRun} onUpload={uploadSavedRun} />
         ) : section === 'flicker' ? (
           <FlickerHistoryTab flickers={flickers} readings={history} loading={historyLoading} uploadingId={flickerUploadingId} onRename={renameFlicker} onDelete={deleteFlicker} onUpload={uploadSavedFlicker} />
