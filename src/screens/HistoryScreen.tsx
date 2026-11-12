@@ -39,6 +39,7 @@ import { loadFlickers, updateFlicker, deleteFlickers, flickersForReading, attach
 import FlickerHistoryTab from './tabs/FlickerHistoryTab';
 import RuntimeHistoryTab from './tabs/RuntimeHistoryTab';
 import LightsHistoryTab from './tabs/LightsHistoryTab';
+import AddToLightModal from '../components/AddToLightModal';
 import { loadRuntimes, updateRuntime, deleteRuntime, onRuntimeHistoryChanged, SavedRuntime } from '../storage/runtimeHistory';
 import { uploadRuntimeToHcri } from '../hcri/uploadRuntimeToHcri';
 import FlickerPickerModal from '../components/FlickerPickerModal';
@@ -86,6 +87,8 @@ export default function HistoryScreen({ navigation, embedded, refreshKey, onRena
   const [copyingLinkId, setCopyingLinkId] = useState<string | null>(null);
 
   // Saved standalone flicker samples (the "Flicker" list), and the picker for attaching one to a reading.
+  const [lightPick, setLightPick] = useState<SavedReading[] | null>(null);   // readings being put on a light
+  const [openLightId, setOpenLightId] = useState<string | null>(null);
   const [section, setSection] = useState<'readings' | 'flicker' | 'runtime' | 'lights'>('readings');
   // Recorded TKLamp runs (the "Runtime" list).
   const [runs, setRuns] = useState<SavedRuntime[]>([]);
@@ -539,7 +542,7 @@ export default function HistoryScreen({ navigation, embedded, refreshKey, onRena
           })}
         </View>
         {section === 'lights' ? (
-          <LightsHistoryTab history={history} lists={ledLists} onOpenReading={(reading) => navigation.navigate('ReadingDetail', { reading })} />
+          <LightsHistoryTab focusId={openLightId} onFocused={() => setOpenLightId(null)} history={history} lists={ledLists} onOpenReading={(reading) => navigation.navigate('ReadingDetail', { reading })} />
         ) : section === 'runtime' ? (
           <RuntimeHistoryTab runs={runs} loading={historyLoading} uploadingId={runUploadingId} onRename={renameRun} onDelete={deleteRun} onUpload={uploadSavedRun} />
         ) : section === 'flicker' ? (
@@ -560,6 +563,7 @@ export default function HistoryScreen({ navigation, embedded, refreshKey, onRena
           onShareMany={shareManyFromHistory}
           onOpen={(reading) => navigation.navigate('ReadingDetail', { reading })}
           onCompareMany={(readings) => navigation.navigate('Compare', { readings })}
+          onAddToLight={(readings) => setLightPick(readings)}
           uploadingId={historyUploadingId}
           bulkUploading={historyBulkUploading}
           onCopyLink={copyReportLinkFromHistory}
@@ -595,6 +599,18 @@ export default function HistoryScreen({ navigation, embedded, refreshKey, onRena
         flickers={flickerPickFor ? flickersForReading(flickerPickFor, flickers, history) : []}
         onPick={(f) => flickerPickFor && attachFlicker(flickerPickFor, f)}
         onCancel={() => setFlickerPickFor(null)}
+      />
+      <AddToLightModal
+        visible={!!lightPick}
+        readings={(lightPick ?? []).map((r) => ({ id: r.id, label: r.label, reportId: r.reportId }))}
+        onClose={() => setLightPick(null)}
+        onAdded={(light, n) => {
+          setLightPick(null);
+          Alert.alert('Added to light', `${n} reading${n === 1 ? '' : 's'} added to “${light.name}”. Open Lights and sync to upload them to hCRI.io.`, [
+            { text: 'Later', style: 'cancel' },
+            { text: 'Open light', onPress: () => { setOpenLightId(light.id); setSection('lights'); } },
+          ]);
+        }}
       />
       <CategorizeModal
         visible={!!catFor}

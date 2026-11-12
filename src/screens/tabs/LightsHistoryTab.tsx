@@ -123,10 +123,13 @@ function LightsGate({ invalid, onDone }: { invalid: boolean; onDone: () => void 
 interface Props {
   history: SavedReading[];
   lists: LedLists;
+  /** Open this light (set by History's "To light" shortcut); `onFocused` tells History it was opened. */
+  focusId?: string | null;
+  onFocused?: () => void;
   onOpenReading: (r: SavedReading) => void;
 }
 
-export default function LightsHistoryTab({ history, lists, onOpenReading }: Props) {
+export default function LightsHistoryTab({ history, lists, onOpenReading, focusId, onFocused }: Props) {
   const { colors } = useTheme();
   const { appendLog: appendLogLive } = useLog();
   const logRef = useRef(appendLogLive);
@@ -163,6 +166,7 @@ export default function LightsHistoryTab({ history, lists, onOpenReading }: Prop
   }, [appendLog]);
   useEffect(() => { check(); }, [check]);
 
+  useEffect(() => { if (focusId) { setOpenId(focusId); onFocused?.(); } }, [focusId]);   // eslint-disable-line react-hooks/exhaustive-deps
   const open = lights.find((l) => l.id === openId) || null;
   const byId = useMemo(() => new Map(history.map((h) => [h.id, h])), [history]);
   const sendable = access === 'ok';
