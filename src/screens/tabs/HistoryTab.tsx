@@ -76,6 +76,8 @@ interface Props {
   onCategorizeMany?: (ids: string[]) => Promise<boolean>;
   /** Opens the Compare screen for 2-6 checked readings (Select mode). Omit to hide the button. */
   onCompareMany?: (readings: SavedReading[]) => void;
+  /** Puts the checked readings on a light (Select mode). Omit to hide the button. */
+  onAddToLight?: (readings: SavedReading[]) => void;
   /** Opens ReadingDetailScreen for one saved reading -- the same measurement grid and Spectrum/Chrom/R-Values pages the Main/Spectrum tabs show for the current reading, just fed this past one instead (see ReadingDetailScreen.tsx). */
   onOpen: (reading: SavedReading) => void;
   /** Which reading (if any) is currently mid-upload, so only ITS button shows a spinner/disables -- the others stay usable. Also used to show progress during a bulk upload, since that walks this same id through the list one at a time. */
@@ -532,6 +534,7 @@ export default function HistoryTab({
   onShareAll,
   onShareMany,
   onCompareMany,
+  onAddToLight,
   onCategorizeMany,
   onOpen,
   uploadingId,
@@ -650,6 +653,11 @@ export default function HistoryTab({
     if (!onCategorizeMany || selected.size === 0) return;
     const ids = history.filter((r) => selected.has(r.id)).map((r) => r.id);
     if (await onCategorizeMany(ids)) exitSelectMode();
+  };
+
+  const handleAddToLightSelected = () => {
+    if (!onAddToLight || selected.size === 0) return;
+    onAddToLight(history.filter((r) => selected.has(r.id)));
   };
 
   const handleCompareSelected = () => {
@@ -810,6 +818,7 @@ export default function HistoryTab({
           <View style={styles.selectBarButtons}>
             {([
               ...(onCompareMany ? [{ icon: 'compare' as const, label: 'Compare', onPress: handleCompareSelected, color: colors.info, border: colors.info }] : []),
+              ...(onAddToLight ? [{ icon: 'bulb' as const, label: 'To light', onPress: handleAddToLightSelected, color: colors.text }] : []),
               ...(onCategorizeMany ? [{ icon: 'tag' as const, label: 'Categorize', onPress: handleCategorizeSelected, color: colors.text }] : []),
               { icon: 'share' as const, label: 'Share', onPress: handleShareSelected, color: colors.text },
               { icon: 'trash' as const, label: bulkDeleting ? 'Deleting…' : 'Delete', onPress: handleDeleteSelected, color: colors.danger, border: colors.danger },

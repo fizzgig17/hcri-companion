@@ -25,8 +25,8 @@ export const ANDROID_VERSION = '2026.11.9.1';
 // Keep equal to versionCode in android/app/build.gradle.
 export const ANDROID_BUILD_NUMBER = 79;
 export const ANDROID_BUILD_DATE = '2026-11-09';
-export const IOS_VERSION = '1.28';
-export const IOS_BUILD_DATE = '2026-11-01';
+export const IOS_VERSION = '2.0';
+export const IOS_BUILD_DATE = '2026-11-12';
 
 const ios = Platform.OS === 'ios';
 export const APP_VERSION = ios ? IOS_VERSION : ANDROID_VERSION;
