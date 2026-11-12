@@ -37,7 +37,7 @@ export default function PrimaryButton({ title, onPress, disabled, variant = 'acc
     buttonOutline: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: colors.accent },
     buttonLink: { backgroundColor: 'transparent', paddingVertical: 10 },
     buttonDisabled: { opacity: 0.5 },
-    buttonText: { color: colors.text, fontSize: 15, fontWeight: '600' },
+    buttonText: { color: colors.text, fontSize: 15, fontWeight: '600', textAlign: 'center' },
     buttonTextAccent: { color: colors.accent, fontWeight: '700' },
     buttonTextLink: { color: colors.muted, fontSize: 13, fontWeight: '500' },
     buttonTextDanger: { color: colors.danger },

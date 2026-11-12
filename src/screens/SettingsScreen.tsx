@@ -620,6 +620,8 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
     // PrimaryButton's own default marginTop so it doesn't stack on top of this.
     saveButtonWrap: { marginTop: 18 },
     noTopMargin: { marginTop: 0 },
+    // A second full-width button stacked under another one: a clear gap so the two outlines don't touch.
+    stackedButton: { marginTop: 12 },
     // Save + the "generate token" icon button sit side by side in this row
     // -- Save takes the remaining width, the icon button is a fixed-size
     // square next to it rather than a second full-width button, since it's
@@ -1111,7 +1113,7 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
       {hasSaved && (
         <View style={styles.saveButtonWrap}>
           <PrimaryButton title={restoring ? 'Restoring…' : 'Restore readings from backup'} onPress={restoreBackup} variant="outline" style={styles.noTopMargin} />
-          <PrimaryButton title={refreshing ?? 'Refresh history from server (overwrite)'} onPress={refreshHistory} variant="outline" style={styles.noTopMargin} />
+          <PrimaryButton title={refreshing ?? 'Refresh history from server (overwrite)'} onPress={refreshHistory} variant="outline" style={styles.stackedButton} />
         </View>
       )}
 
