@@ -136,6 +136,20 @@ export function notifyHistoryChanged(): void {
   try { historyChangeListener?.(); } catch { /* a backup problem must never break saving */ }
 }
 
+/**
+ * Every change to the history is a read-modify-write of the WHOLE list (load, change one thing, save it back). Two of them overlapping
+ * -- e.g. a new measurement being saved while the upload of the previous one records its report link/title -- both load the same list,
+ * and whichever saves last silently throws the other's change away (readings vanished from the app that way while their cloud backups
+ * were fine). So all changes go through this one queue and run strictly one after another. Reads stay unlocked: the storage layer
+ * already makes a read wait for any write in flight.
+ */
+let historyLock: Promise<unknown> = Promise.resolve();
+function withHistoryLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = historyLock.then(fn, fn);
+  historyLock = run.catch(() => {});
+  return run;
+}
+
 async function saveAll(readings: SavedReading[]): Promise<void> {
   await store.save(readings);
   notifyHistoryChanged();
@@ -146,37 +160,45 @@ async function saveAll(readings: SavedReading[]): Promise<void> {
  * limits. Returns how many ended up in the history.
  */
 export async function mergeRestoredReadings(restored: SavedReading[]): Promise<number> {
-  const existing = await loadHistory();
-  const have = new Set(existing.map((r) => r.id));
-  const fresh = restored.filter((r) => !have.has(r.id));
-  if (!fresh.length) return 0;
-  const merged = trimHistory([...existing, ...fresh].sort((a, b) => b.savedAt - a.savedAt));
-  await saveAll(merged);
-  const kept = new Set(merged.map((r) => r.id));
-  return fresh.filter((r) => kept.has(r.id)).length;
+  return withHistoryLock(async () => {
+    const existing = await loadHistory();
+    const have = new Set(existing.map((r) => r.id));
+    const fresh = restored.filter((r) => !have.has(r.id));
+    if (!fresh.length) return 0;
+    const merged = trimHistory([...existing, ...fresh].sort((a, b) => b.savedAt - a.savedAt));
+    await saveAll(merged);
+    const kept = new Set(merged.map((r) => r.id));
+    return fresh.filter((r) => kept.has(r.id)).length;
+  });
 }
 
 /** Overwrites the local history with exactly these readings (used by "Refresh history from server"). */
 export async function replaceHistory(readings: SavedReading[]): Promise<void> {
-  await ensureHistoryMode();
-  await saveAll(trimHistory([...readings].sort((a, b) => b.savedAt - a.savedAt)));
+  return withHistoryLock(async () => {
+    await ensureHistoryMode();
+    await saveAll(trimHistory([...readings].sort((a, b) => b.savedAt - a.savedAt)));
+  });
 }
 
 /** Call once per completed measurement -- adds it to the front of history (most recent first) and returns the saved entry (including its new id). Computes `analysis` here, once, from `result.spectrum` -- see SavedReading's own comment on that field for why. */
 export async function addReading(result: MeterResult, label: string): Promise<SavedReading> {
-  const analysis = analyzeSpectrum(result.spectrum);
-  const entry: SavedReading = { id: makeId(), label, savedAt: Date.now(), result, analysis };
-  const existing = await loadHistory();
-  const next = trimHistory([entry, ...existing]);
-  await saveAll(next);
-  return entry;
+  return withHistoryLock(async () => {
+    const analysis = analyzeSpectrum(result.spectrum);
+    const entry: SavedReading = { id: makeId(), label, savedAt: Date.now(), result, analysis };
+    const existing = await loadHistory();
+    const next = trimHistory([entry, ...existing]);
+    await saveAll(next);
+    return entry;
+  });
 }
 
 /** Renames a saved reading in place -- e.g. right before uploading it under a new title (see HistoryTab.tsx), so the edited label sticks around in history after the upload rather than only ever living in that one upload request. */
 export async function renameReading(id: string, label: string): Promise<void> {
-  const existing = await loadHistory();
-  const next = existing.map((r) => (r.id === id ? { ...r, label } : r));
-  await saveAll(next);
+  return withHistoryLock(async () => {
+    const existing = await loadHistory();
+    const next = existing.map((r) => (r.id === id ? { ...r, label } : r));
+    await saveAll(next);
+  });
 }
 
 /**
@@ -191,9 +213,11 @@ export async function renameReading(id: string, label: string): Promise<void> {
  * against beyond always overwriting rather than merging/ignoring.
  */
 export async function setReadingReportLink(id: string, reportId: number | string | string, isPublic: boolean): Promise<void> {
-  const existing = await loadHistory();
-  const next = existing.map((r) => (r.id === id ? { ...r, reportId, reportIsPublic: isPublic, ledSynced: false } : r));
-  await saveAll(next);
+  return withHistoryLock(async () => {
+    const existing = await loadHistory();
+    const next = existing.map((r) => (r.id === id ? { ...r, reportId, reportIsPublic: isPublic, ledSynced: false } : r));
+    await saveAll(next);
+  });
 }
 
 /**
@@ -218,47 +242,57 @@ export async function recordUpload(
   reportId?: number | string,
   isPublic?: boolean
 ): Promise<void> {
-  const existing = await loadHistory();
-  const next = existing.map((r) =>
-    r.id === id
-      ? { ...r, label, ...(reportId != null && typeof isPublic === 'boolean' ? { reportId, reportIsPublic: isPublic, ledSynced: false } : {}) }
-      : r
-  );
-  await saveAll(next);
+  return withHistoryLock(async () => {
+    const existing = await loadHistory();
+    const next = existing.map((r) =>
+      r.id === id
+        ? { ...r, label, ...(reportId != null && typeof isPublic === 'boolean' ? { reportId, reportIsPublic: isPublic, ledSynced: false } : {}) }
+        : r
+    );
+    await saveAll(next);
+  });
 }
 
 export async function deleteReading(id: string): Promise<void> {
-  const existing = await loadHistory();
-  await saveAll(existing.filter((r) => r.id !== id));
-  queueBackupDelete([id]);
+  return withHistoryLock(async () => {
+    const existing = await loadHistory();
+    await saveAll(existing.filter((r) => r.id !== id));
+    queueBackupDelete([id]);
+  });
 }
 
 /** Deletes several readings in one go (HistoryTab's bulk/"select all" delete) -- one read-modify-write of the whole list instead of calling deleteReading in a loop, which would otherwise race itself: each call's `loadHistory()` wouldn't yet see the previous call's not-yet-finished `saveAll()`, so only the last delete in the loop would actually stick. */
 export async function deleteManyReadings(ids: string[]): Promise<void> {
-  if (ids.length === 0) return;
-  const idSet = new Set(ids);
-  const existing = await loadHistory();
-  await saveAll(existing.filter((r) => !idSet.has(r.id)));
-  queueBackupDelete(ids);
+  return withHistoryLock(async () => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    const existing = await loadHistory();
+    await saveAll(existing.filter((r) => !idSet.has(r.id)));
+    queueBackupDelete(ids);
+  });
 }
 
 /** Replaces (or adds) the flicker capture stored with a saved reading -- used when the person redoes the flicker for the reading they just took. */
 export async function setReadingFlicker(id: string, flicker: NonNullable<MeterResult['flicker']>): Promise<void> {
-  const existing = await loadHistory();
-  const next = existing.map((r) => (r.id === id ? { ...r, result: { ...r.result, flicker } } : r));
-  await saveAll(next);
+  return withHistoryLock(async () => {
+    const existing = await loadHistory();
+    const next = existing.map((r) => (r.id === id ? { ...r, result: { ...r.result, flicker } } : r));
+    await saveAll(next);
+  });
 }
 
 /** Applies a patch to several readings in ONE storage write (bulk Categorize); `fn` returns the changes for each reading, or null to leave it alone. */
 export async function patchReadings(ids: string[], fn: (r: SavedReading) => Partial<SavedReading> | null): Promise<void> {
-  if (!ids.length) return;
-  const idSet = new Set(ids);
-  const existing = await loadHistory();
-  await saveAll(existing.map((r) => {
-    if (!idSet.has(r.id)) return r;
-    const ch = fn(r);
-    return ch ? { ...r, ...ch } : r;
-  }));
+  return withHistoryLock(async () => {
+    if (!ids.length) return;
+    const idSet = new Set(ids);
+    const existing = await loadHistory();
+    await saveAll(existing.map((r) => {
+      if (!idSet.has(r.id)) return r;
+      const ch = fn(r);
+      return ch ? { ...r, ...ch } : r;
+    }));
+  });
 }
 
 /** Patches LED-related fields of one reading (confirm / dismiss / cache a suggestion / mark synced). */
@@ -266,6 +300,8 @@ export async function updateReadingLed(
   id: string,
   patch: Partial<Pick<SavedReading, 'led' | 'leds' | 'ledDismissed' | 'ledSuggestion' | 'ledSynced' | 'ledCleared' | 'categories' | 'catSynced'>>
 ): Promise<void> {
-  const existing = await loadHistory();
-  await saveAll(existing.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  return withHistoryLock(async () => {
+    const existing = await loadHistory();
+    await saveAll(existing.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  });
 }
