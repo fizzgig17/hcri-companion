@@ -170,7 +170,9 @@ function ciecam02(XYZ: Vec3, XYZw: Vec3): [number, number, number] {
   const e_t = 0.25 * (Math.cos((h * Math.PI) / 180 + 2.0) + 3.8);
 
   const A = Nbb * (2.0 * Ra + Ga + 0.05 * Ba - 0.305);
-  const J = 100.0 * (A / A_w) ** (c * z);
+  // A saturated source (e.g. a deep-red LED) can push A below zero; a plain ** of a negative base is NaN and used to wipe out Rf/Rg for the
+  // whole reading. Such a sample is out of gamut, so treat it as black (matches spd.php's $cam02).
+  const J = 100.0 * Math.max(0, A / A_w) ** (c * z);
 
   const t_den = Ra + Ga + (21.0 / 20.0) * Ba;
   const t = t_den > 0
