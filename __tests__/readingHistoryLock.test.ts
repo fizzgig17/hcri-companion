@@ -5,8 +5,8 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   __esModule: true,
   default: {
     // A little latency so overlapping read-modify-writes really interleave.
-    getItem: async (k: string) => { await new Promise((r) => setTimeout(r, 2)); return mockMem.has(k) ? mockMem.get(k)! : null; },
-    setItem: async (k: string, v: string) => { await new Promise((r) => setTimeout(r, 2)); mockMem.set(k, v); },
+    getItem: async (k: string) => { await new Promise<void>((r) => setTimeout(r, 2)); return mockMem.has(k) ? mockMem.get(k)! : null; },
+    setItem: async (k: string, v: string) => { await new Promise<void>((r) => setTimeout(r, 2)); mockMem.set(k, v); },
     removeItem: async (k: string) => { mockMem.delete(k); },
     multiGet: async (ks: string[]) => ks.map((k) => [k, mockMem.has(k) ? mockMem.get(k)! : null]),
     multiSet: async (kv: [string, string][]) => { kv.forEach(([k, v]) => mockMem.set(k, v)); },
