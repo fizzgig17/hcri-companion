@@ -54,7 +54,7 @@ class MainActivity : ReactActivity() {
           imeShown = nowShown
           val controller = WindowCompat.getInsetsController(window, window.decorView)
           if (nowShown) controller.show(WindowInsetsCompat.Type.navigationBars())
-          else hideNavigationBar()
+          else applyNavBarMode()
         })
   }
 
@@ -63,10 +63,11 @@ class MainActivity : ReactActivity() {
   // transiently on an edge swipe and re-hides itself, and is re-applied
   // whenever the window regains focus -- dialogs, the keyboard's own
   // system UI and returning from another app all bring it back otherwise.
-  // Only the navigation bar is hidden; the status bar stays visible.
+  // Only the navigation bar is hidden; the status bar stays visible. Settings -> Display -> "Android navigation bar"
+  // can dock it instead (always shown).
   override fun onWindowFocusChanged(hasFocus: Boolean) {
     super.onWindowFocusChanged(hasFocus)
-    if (hasFocus) hideNavigationBar()
+    if (hasFocus) applyNavBarMode()
   }
 
   // True when the phone uses Android 10+ full-gesture navigation (the thin
@@ -79,9 +80,15 @@ class MainActivity : ReactActivity() {
     return id > 0 && resources.getInteger(id) == 2
   }
 
-  private fun hideNavigationBar() {
-    if (usesGestureNavigation()) return
+  // Applies the Settings choice (see NavBarModule): "docked" keeps the bar showing all the time; "auto" (the default)
+  // hides it and lets an edge swipe bring it back briefly.
+  fun applyNavBarMode() {
     val controller = WindowCompat.getInsetsController(window, window.decorView)
+    if (NavBarPrefs.get(this) == NavBarPrefs.DOCKED) {
+      controller.show(WindowInsetsCompat.Type.navigationBars())
+      return
+    }
+    if (usesGestureNavigation()) return
     controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
     controller.hide(WindowInsetsCompat.Type.navigationBars())
   }

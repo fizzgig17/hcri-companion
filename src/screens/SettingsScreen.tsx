@@ -8,6 +8,7 @@ import { BackHandler } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScrollView, View, Text, TextInput, TouchableOpacity, ActivityIndicator, RefreshControl, StyleSheet, Alert, Modal, Linking, Platform, Share, useWindowDimensions } from 'react-native';
 import AppSwitch from '../components/AppSwitch';
+import { navBarSupported, loadNavBarMode, saveNavBarMode, NavBarMode } from '../utils/navBar';
 import { Icon, ICON_SIZE } from '../components/icons';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { useLayoutMode, useContentWidth, isSquareWindow } from '../layout';
@@ -125,6 +126,10 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
   // bottom of this screen, a long scroll past every setting to reach.
   const update = useUpdate();
   const [settingsTab, setSettingsTab] = useState<'settings' | 'update' | 'about'>('settings');
+  // Android: bottom navigation bar auto-hides (default) or stays docked.
+  const [navBarMode, setNavBarMode] = useState<NavBarMode>('auto');
+  useEffect(() => { if (navBarSupported) loadNavBarMode().then(setNavBarMode); }, []);
+  const chooseNavBarMode = (m: NavBarMode) => { setNavBarMode(m); saveNavBarMode(m).catch(() => {}); };
   const [draggingStat, setDraggingStat] = useState(false);
   // Android Back: from Update/About return to the main Settings page first.
   useFocusEffect(
@@ -1142,6 +1147,25 @@ export default function SettingsScreen({ navigation, route, panel }: any) {
           })}
         </View>
       </View>
+
+      {navBarSupported && (
+      <View style={styles.settingBlock}>
+        <View style={styles.settingBlockLabelRow}>
+          <Text style={styles.settingLabel}>Android navigation bar</Text>
+          {helpButton('Android navigation bar', 'Auto-hide gives the app the full screen height; swipe up from the bottom edge to bring the bar back for a moment. Docked keeps the bar always visible, and the app\'s screen ends above it. Only applies to the 3-button bar; the thin gesture pill is never hidden.')}
+        </View>
+        <View style={styles.modeSegment}>
+          {([['auto', 'Auto-hide'], ['docked', 'Docked']] as [NavBarMode, string][]).map(([value, label]) => {
+            const active = navBarMode === value;
+            return (
+              <TouchableOpacity key={value} style={[styles.modeOption, active && styles.modeOptionActive]} onPress={() => chooseNavBarMode(value)}>
+                <Text style={[styles.modeOptionText, active && styles.modeOptionTextActive]}>{label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+      )}
 
       {isFoldable && (
       <View style={styles.settingBlock}>

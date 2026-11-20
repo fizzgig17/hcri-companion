@@ -20,6 +20,7 @@ class MainApplication : Application(), ReactApplication {
           add(InAppUpdatePackage())
           add(GalleryPickerPackage())
           add(ImageClipboardPackage())
+          add(NavBarPackage())
         },
     )
   }
