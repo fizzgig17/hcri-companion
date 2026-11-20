@@ -39,7 +39,7 @@ class NavBarModule(private val ctx: ReactApplicationContext) : ReactContextBaseJ
   @ReactMethod
   fun setMode(mode: String, promise: Promise) {
     NavBarPrefs.set(ctx, mode)
-    val activity = currentActivity as? MainActivity
+    val activity = ctx.currentActivity as? MainActivity
     if (activity != null) activity.runOnUiThread { activity.applyNavBarMode() }
     promise.resolve(null)
   }
